@@ -8,6 +8,14 @@ DOCKER_IMAGE=mono-service
 # Default target
 all: gen tidy security test build
 
+# Check if git hooks are configured
+GIT_HOOKS_PATH := $(shell git config core.hooksPath)
+EXPECTED_HOOKS_PATH := .githooks
+
+ifneq ($(GIT_HOOKS_PATH),$(EXPECTED_HOOKS_PATH))
+    $(warning "Git hooks are not configured to use $(EXPECTED_HOOKS_PATH). Run 'make setup-hooks' to configure them.")
+endif
+
 # Help target to document all commands
 help: ## Display this help message
 	@echo "Usage: make [target]"
@@ -48,6 +56,14 @@ test-gcs: ## Run GCS integration tests (requires TEST_GCS_BUCKET and GOOGLE_APPL
 build: ## Build the binary locally
 	@echo "Building binary..."
 	go build -o $(BINARY_NAME) cmd/server/main.go
+
+lint: ## Run linter
+	@echo "Running linter..."
+	go vet ./...
+
+setup-hooks: ## Configure git hooks to run automatically
+	@git config core.hooksPath .githooks
+	@echo "Git hooks configured! Hooks in .githooks/ will now run automatically."
 
 run: build ## Build and run the binary locally with default settings (FS storage, OTel disabled)
 	@echo "Running server..."

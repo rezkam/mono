@@ -1,0 +1,20 @@
+#!/bin/sh
+
+echo "Running pre-commit checks..."
+
+# Run lint
+echo "Running lint..."
+if ! make lint; then
+    echo "Linting failed. Commit aborted."
+    exit 1
+fi
+
+# Run tests
+echo "Running tests..."
+if ! make test; then
+    echo "Tests failed. Commit aborted."
+    exit 1
+fi
+
+echo "All checks passed!"
+exit 0
