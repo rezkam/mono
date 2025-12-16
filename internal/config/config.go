@@ -22,6 +22,12 @@ type Config struct {
 	PostgresURL string `env:"MONO_POSTGRES_URL"` // PostgreSQL connection string
 	SQLitePath  string `env:"MONO_SQLITE_PATH" default:"./mono-data/mono.db"`
 
+	// SQL Connection Pool Configuration
+	DBMaxOpenConns    int `env:"MONO_DB_MAX_OPEN_CONNS" default:"25"`     // Maximum open connections
+	DBMaxIdleConns    int `env:"MONO_DB_MAX_IDLE_CONNS" default:"5"`      // Maximum idle connections
+	DBConnMaxLifetime int `env:"MONO_DB_CONN_MAX_LIFETIME" default:"300"` // Connection max lifetime in seconds (default: 5min)
+	DBConnMaxIdleTime int `env:"MONO_DB_CONN_MAX_IDLE_TIME" default:"60"` // Connection max idle time in seconds (default: 1min)
+
 	// Observability Configuration
 	OTelEnabled   bool   `env:"MONO_OTEL_ENABLED" default:"true"`
 	OTelCollector string `env:"MONO_OTEL_COLLECTOR" default:"localhost:4317"`

@@ -82,6 +82,10 @@ The Mono service runs **two servers** simultaneously:
 | `MONO_GCS_BUCKET` | "" | GCS bucket name (Required if storage=gcs) |
 | `MONO_POSTGRES_URL` | "" | PostgreSQL connection string (Required if storage=postgres) |
 | `MONO_SQLITE_PATH` | ./mono-data/mono.db | SQLite database path (Required if storage=sqlite) |
+| `MONO_DB_MAX_OPEN_CONNS` | 25 | Maximum open database connections |
+| `MONO_DB_MAX_IDLE_CONNS` | 5 | Maximum idle database connections |
+| `MONO_DB_CONN_MAX_LIFETIME` | 300 | Connection max lifetime in seconds |
+| `MONO_DB_CONN_MAX_IDLE_TIME` | 60 | Connection max idle time in seconds |
 | `MONO_OTEL_ENABLED` | true | Enable OpenTelemetry |
 | `MONO_OTEL_COLLECTOR` | localhost:4317 | OTel collector endpoint |
 

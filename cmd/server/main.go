@@ -100,13 +100,25 @@ func run() error {
 			return fmt.Errorf("failed to create fs store: %w", err)
 		}
 	case "postgres":
-		store, err = sqlstorage.NewPostgresStore(ctx, cfg.PostgresURL)
+		poolConfig := sqlstorage.DBConfig{
+			MaxOpenConns:    cfg.DBMaxOpenConns,
+			MaxIdleConns:    cfg.DBMaxIdleConns,
+			ConnMaxLifetime: time.Duration(cfg.DBConnMaxLifetime) * time.Second,
+			ConnMaxIdleTime: time.Duration(cfg.DBConnMaxIdleTime) * time.Second,
+		}
+		store, err = sqlstorage.NewPostgresStoreWithConfig(ctx, cfg.PostgresURL, poolConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create postgres store: %w", err)
 		}
 		slog.Info("using postgres storage", "url", maskPassword(cfg.PostgresURL))
 	case "sqlite":
-		store, err = sqlstorage.NewSQLiteStore(ctx, cfg.SQLitePath)
+		poolConfig := sqlstorage.DBConfig{
+			MaxOpenConns:    cfg.DBMaxOpenConns,
+			MaxIdleConns:    cfg.DBMaxIdleConns,
+			ConnMaxLifetime: time.Duration(cfg.DBConnMaxLifetime) * time.Second,
+			ConnMaxIdleTime: time.Duration(cfg.DBConnMaxIdleTime) * time.Second,
+		}
+		store, err = sqlstorage.NewSQLiteStoreWithConfig(ctx, cfg.SQLitePath, poolConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create sqlite store: %w", err)
 		}

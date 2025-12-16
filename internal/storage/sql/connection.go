@@ -19,8 +19,12 @@ var embedMigrations embed.FS
 
 // DBConfig holds database connection configuration.
 type DBConfig struct {
-	Driver string // "pgx" for PostgreSQL, "sqlite" for SQLite
-	DSN    string // Data Source Name / connection string
+	Driver            string        // "pgx" for PostgreSQL, "sqlite" for SQLite
+	DSN               string        // Data Source Name / connection string
+	MaxOpenConns      int           // Maximum open connections (default: 25)
+	MaxIdleConns      int           // Maximum idle connections (default: 5)
+	ConnMaxLifetime   time.Duration // Connection max lifetime (default: 5min)
+	ConnMaxIdleTime   time.Duration // Connection max idle time (default: 1min)
 }
 
 // NewStore creates a new SQL store with the given configuration.
@@ -32,11 +36,28 @@ func NewStore(ctx context.Context, cfg DBConfig) (*repository.Store, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-	db.SetConnMaxIdleTime(1 * time.Minute)
+	// Configure connection pool with defaults if not set
+	maxOpenConns := cfg.MaxOpenConns
+	if maxOpenConns <= 0 {
+		maxOpenConns = 25
+	}
+	maxIdleConns := cfg.MaxIdleConns
+	if maxIdleConns <= 0 {
+		maxIdleConns = 5
+	}
+	connMaxLifetime := cfg.ConnMaxLifetime
+	if connMaxLifetime <= 0 {
+		connMaxLifetime = 5 * time.Minute
+	}
+	connMaxIdleTime := cfg.ConnMaxIdleTime
+	if connMaxIdleTime <= 0 {
+		connMaxIdleTime = 1 * time.Minute
+	}
+
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	// Verify connection
 	if err := db.PingContext(ctx); err != nil {
@@ -76,7 +97,7 @@ func runMigrations(db *sql.DB, driver string) error {
 	return nil
 }
 
-// NewPostgresStore creates a PostgreSQL-backed store.
+// NewPostgresStore creates a PostgreSQL-backed store with default connection pool settings.
 func NewPostgresStore(ctx context.Context, connString string) (*repository.Store, error) {
 	return NewStore(ctx, DBConfig{
 		Driver: "pgx",
@@ -84,7 +105,14 @@ func NewPostgresStore(ctx context.Context, connString string) (*repository.Store
 	})
 }
 
-// NewSQLiteStore creates a SQLite-backed store.
+// NewPostgresStoreWithConfig creates a PostgreSQL-backed store with custom connection pool settings.
+func NewPostgresStoreWithConfig(ctx context.Context, connString string, poolConfig DBConfig) (*repository.Store, error) {
+	poolConfig.Driver = "pgx"
+	poolConfig.DSN = connString
+	return NewStore(ctx, poolConfig)
+}
+
+// NewSQLiteStore creates a SQLite-backed store with default connection pool settings.
 func NewSQLiteStore(ctx context.Context, dbPath string) (*repository.Store, error) {
 	// SQLite DSN with recommended pragmas for better performance and reliability
 	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on", dbPath)
@@ -92,4 +120,13 @@ func NewSQLiteStore(ctx context.Context, dbPath string) (*repository.Store, erro
 		Driver: "sqlite",
 		DSN:    dsn,
 	})
+}
+
+// NewSQLiteStoreWithConfig creates a SQLite-backed store with custom connection pool settings.
+func NewSQLiteStoreWithConfig(ctx context.Context, dbPath string, poolConfig DBConfig) (*repository.Store, error) {
+	// SQLite DSN with recommended pragmas for better performance and reliability
+	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on", dbPath)
+	poolConfig.Driver = "sqlite"
+	poolConfig.DSN = dsn
+	return NewStore(ctx, poolConfig)
 }

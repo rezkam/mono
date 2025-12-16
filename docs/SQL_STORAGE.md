@@ -137,7 +137,7 @@ MONO_POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db" \
 
 ## Database Connection Pooling
 
-The implementation uses connection pooling with these defaults:
+The implementation uses connection pooling with configurable settings. Default values are optimized for typical web application workloads:
 
 ```go
 MaxOpenConns:     25  // Maximum open connections
@@ -146,10 +146,27 @@ ConnMaxLifetime:  5m  // Maximum connection lifetime
 ConnMaxIdleTime:  1m  // Maximum idle time for connections
 ```
 
-These settings are optimized for typical web application workloads and can handle:
-- ~25 concurrent requests
+### Configuring Connection Pool
+
+You can customize the connection pool settings using environment variables:
+
+```bash
+export MONO_DB_MAX_OPEN_CONNS=50      # Default: 25
+export MONO_DB_MAX_IDLE_CONNS=10      # Default: 5
+export MONO_DB_CONN_MAX_LIFETIME=600  # Seconds, Default: 300 (5 min)
+export MONO_DB_CONN_MAX_IDLE_TIME=120 # Seconds, Default: 60 (1 min)
+```
+
+These settings apply to both PostgreSQL and SQLite connections and can handle:
+- ~MaxOpenConns concurrent requests
 - Efficient connection reuse
 - Automatic cleanup of stale connections
+
+**When to adjust:**
+- **High traffic**: Increase `MaxOpenConns` (e.g., 50-100)
+- **Low traffic**: Decrease `MaxIdleConns` to save resources
+- **Long-running queries**: Increase `ConnMaxLifetime`
+- **Microservices**: Tune based on service call patterns
 
 ## Context Support
 
