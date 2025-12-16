@@ -32,3 +32,6 @@ dist/
 # Local data
 data/
 mono-data/
+*.db
+*.db-shm
+*.db-wal
