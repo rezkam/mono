@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "monov1/mono.proto",
+    "title": "mono/v1/mono.proto",
     "version": "version not set"
   },
   "tags": [

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/monov1"
+	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/core"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

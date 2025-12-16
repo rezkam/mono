@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	monov1 "github.com/rezkam/mono/api/proto/monov1"
+	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/service"
 	"github.com/rezkam/mono/internal/storage/fs"
 	"github.com/stretchr/testify/assert"

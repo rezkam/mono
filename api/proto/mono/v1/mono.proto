@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package mono.v1;
 
-option go_package = "github.com/rezkam/mono/api/proto/monov1;monov1";
+option go_package = "github.com/rezkam/mono/api/proto/mono/v1;monov1";
 
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             (unknown)
-// source: monov1/mono.proto
+// source: mono/v1/mono.proto
 
 package monov1
 
@@ -309,5 +309,5 @@ var MonoService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "monov1/mono.proto",
+	Metadata: "mono/v1/mono.proto",
 }

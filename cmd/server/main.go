@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	monov1 "github.com/rezkam/mono/api/proto/monov1"
+	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/config"
 	"github.com/rezkam/mono/internal/core"
 	"github.com/rezkam/mono/internal/service"

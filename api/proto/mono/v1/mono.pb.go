@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: monov1/mono.proto
+// source: mono/v1/mono.proto
 
 package monov1
 
@@ -39,7 +39,7 @@ type TodoItem struct {
 
 func (x *TodoItem) Reset() {
 	*x = TodoItem{}
-	mi := &file_monov1_mono_proto_msgTypes[0]
+	mi := &file_mono_v1_mono_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -51,7 +51,7 @@ func (x *TodoItem) String() string {
 func (*TodoItem) ProtoMessage() {}
 
 func (x *TodoItem) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[0]
+	mi := &file_mono_v1_mono_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -64,7 +64,7 @@ func (x *TodoItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TodoItem.ProtoReflect.Descriptor instead.
 func (*TodoItem) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{0}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *TodoItem) GetId() string {
@@ -121,7 +121,7 @@ type TodoList struct {
 
 func (x *TodoList) Reset() {
 	*x = TodoList{}
-	mi := &file_monov1_mono_proto_msgTypes[1]
+	mi := &file_mono_v1_mono_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -133,7 +133,7 @@ func (x *TodoList) String() string {
 func (*TodoList) ProtoMessage() {}
 
 func (x *TodoList) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[1]
+	mi := &file_mono_v1_mono_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -146,7 +146,7 @@ func (x *TodoList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TodoList.ProtoReflect.Descriptor instead.
 func (*TodoList) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{1}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TodoList) GetId() string {
@@ -186,7 +186,7 @@ type CreateListRequest struct {
 
 func (x *CreateListRequest) Reset() {
 	*x = CreateListRequest{}
-	mi := &file_monov1_mono_proto_msgTypes[2]
+	mi := &file_mono_v1_mono_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -198,7 +198,7 @@ func (x *CreateListRequest) String() string {
 func (*CreateListRequest) ProtoMessage() {}
 
 func (x *CreateListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[2]
+	mi := &file_mono_v1_mono_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -211,7 +211,7 @@ func (x *CreateListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateListRequest.ProtoReflect.Descriptor instead.
 func (*CreateListRequest) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{2}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateListRequest) GetTitle() string {
@@ -230,7 +230,7 @@ type CreateListResponse struct {
 
 func (x *CreateListResponse) Reset() {
 	*x = CreateListResponse{}
-	mi := &file_monov1_mono_proto_msgTypes[3]
+	mi := &file_mono_v1_mono_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -242,7 +242,7 @@ func (x *CreateListResponse) String() string {
 func (*CreateListResponse) ProtoMessage() {}
 
 func (x *CreateListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[3]
+	mi := &file_mono_v1_mono_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -255,7 +255,7 @@ func (x *CreateListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateListResponse.ProtoReflect.Descriptor instead.
 func (*CreateListResponse) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{3}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateListResponse) GetList() *TodoList {
@@ -274,7 +274,7 @@ type GetListRequest struct {
 
 func (x *GetListRequest) Reset() {
 	*x = GetListRequest{}
-	mi := &file_monov1_mono_proto_msgTypes[4]
+	mi := &file_mono_v1_mono_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +286,7 @@ func (x *GetListRequest) String() string {
 func (*GetListRequest) ProtoMessage() {}
 
 func (x *GetListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[4]
+	mi := &file_mono_v1_mono_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +299,7 @@ func (x *GetListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetListRequest.ProtoReflect.Descriptor instead.
 func (*GetListRequest) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{4}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetListRequest) GetId() string {
@@ -318,7 +318,7 @@ type GetListResponse struct {
 
 func (x *GetListResponse) Reset() {
 	*x = GetListResponse{}
-	mi := &file_monov1_mono_proto_msgTypes[5]
+	mi := &file_mono_v1_mono_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -330,7 +330,7 @@ func (x *GetListResponse) String() string {
 func (*GetListResponse) ProtoMessage() {}
 
 func (x *GetListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[5]
+	mi := &file_mono_v1_mono_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -343,7 +343,7 @@ func (x *GetListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetListResponse.ProtoReflect.Descriptor instead.
 func (*GetListResponse) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{5}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetListResponse) GetList() *TodoList {
@@ -365,7 +365,7 @@ type CreateItemRequest struct {
 
 func (x *CreateItemRequest) Reset() {
 	*x = CreateItemRequest{}
-	mi := &file_monov1_mono_proto_msgTypes[6]
+	mi := &file_mono_v1_mono_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -377,7 +377,7 @@ func (x *CreateItemRequest) String() string {
 func (*CreateItemRequest) ProtoMessage() {}
 
 func (x *CreateItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[6]
+	mi := &file_mono_v1_mono_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -390,7 +390,7 @@ func (x *CreateItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateItemRequest.ProtoReflect.Descriptor instead.
 func (*CreateItemRequest) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{6}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateItemRequest) GetListId() string {
@@ -430,7 +430,7 @@ type CreateItemResponse struct {
 
 func (x *CreateItemResponse) Reset() {
 	*x = CreateItemResponse{}
-	mi := &file_monov1_mono_proto_msgTypes[7]
+	mi := &file_mono_v1_mono_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +442,7 @@ func (x *CreateItemResponse) String() string {
 func (*CreateItemResponse) ProtoMessage() {}
 
 func (x *CreateItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[7]
+	mi := &file_mono_v1_mono_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +455,7 @@ func (x *CreateItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateItemResponse.ProtoReflect.Descriptor instead.
 func (*CreateItemResponse) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{7}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateItemResponse) GetItem() *TodoItem {
@@ -476,7 +476,7 @@ type UpdateItemRequest struct {
 
 func (x *UpdateItemRequest) Reset() {
 	*x = UpdateItemRequest{}
-	mi := &file_monov1_mono_proto_msgTypes[8]
+	mi := &file_mono_v1_mono_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -488,7 +488,7 @@ func (x *UpdateItemRequest) String() string {
 func (*UpdateItemRequest) ProtoMessage() {}
 
 func (x *UpdateItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[8]
+	mi := &file_mono_v1_mono_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -501,7 +501,7 @@ func (x *UpdateItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateItemRequest.ProtoReflect.Descriptor instead.
 func (*UpdateItemRequest) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{8}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UpdateItemRequest) GetListId() string {
@@ -534,7 +534,7 @@ type UpdateItemResponse struct {
 
 func (x *UpdateItemResponse) Reset() {
 	*x = UpdateItemResponse{}
-	mi := &file_monov1_mono_proto_msgTypes[9]
+	mi := &file_mono_v1_mono_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -546,7 +546,7 @@ func (x *UpdateItemResponse) String() string {
 func (*UpdateItemResponse) ProtoMessage() {}
 
 func (x *UpdateItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[9]
+	mi := &file_mono_v1_mono_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -559,7 +559,7 @@ func (x *UpdateItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateItemResponse.ProtoReflect.Descriptor instead.
 func (*UpdateItemResponse) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{9}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UpdateItemResponse) GetItem() *TodoItem {
@@ -577,7 +577,7 @@ type ListListsRequest struct {
 
 func (x *ListListsRequest) Reset() {
 	*x = ListListsRequest{}
-	mi := &file_monov1_mono_proto_msgTypes[10]
+	mi := &file_mono_v1_mono_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +589,7 @@ func (x *ListListsRequest) String() string {
 func (*ListListsRequest) ProtoMessage() {}
 
 func (x *ListListsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[10]
+	mi := &file_mono_v1_mono_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -602,7 +602,7 @@ func (x *ListListsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListListsRequest.ProtoReflect.Descriptor instead.
 func (*ListListsRequest) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{10}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{10}
 }
 
 type ListListsResponse struct {
@@ -614,7 +614,7 @@ type ListListsResponse struct {
 
 func (x *ListListsResponse) Reset() {
 	*x = ListListsResponse{}
-	mi := &file_monov1_mono_proto_msgTypes[11]
+	mi := &file_mono_v1_mono_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -626,7 +626,7 @@ func (x *ListListsResponse) String() string {
 func (*ListListsResponse) ProtoMessage() {}
 
 func (x *ListListsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[11]
+	mi := &file_mono_v1_mono_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -639,7 +639,7 @@ func (x *ListListsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListListsResponse.ProtoReflect.Descriptor instead.
 func (*ListListsResponse) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{11}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListListsResponse) GetLists() []*TodoList {
@@ -665,7 +665,7 @@ type ListTasksRequest struct {
 
 func (x *ListTasksRequest) Reset() {
 	*x = ListTasksRequest{}
-	mi := &file_monov1_mono_proto_msgTypes[12]
+	mi := &file_mono_v1_mono_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -677,7 +677,7 @@ func (x *ListTasksRequest) String() string {
 func (*ListTasksRequest) ProtoMessage() {}
 
 func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[12]
+	mi := &file_mono_v1_mono_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -690,7 +690,7 @@ func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
 func (*ListTasksRequest) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{12}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListTasksRequest) GetParent() string {
@@ -738,7 +738,7 @@ type ListTasksResponse struct {
 
 func (x *ListTasksResponse) Reset() {
 	*x = ListTasksResponse{}
-	mi := &file_monov1_mono_proto_msgTypes[13]
+	mi := &file_mono_v1_mono_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +750,7 @@ func (x *ListTasksResponse) String() string {
 func (*ListTasksResponse) ProtoMessage() {}
 
 func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_monov1_mono_proto_msgTypes[13]
+	mi := &file_mono_v1_mono_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +763,7 @@ func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
 func (*ListTasksResponse) Descriptor() ([]byte, []int) {
-	return file_monov1_mono_proto_rawDescGZIP(), []int{13}
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListTasksResponse) GetItems() []*TodoItem {
@@ -780,11 +780,11 @@ func (x *ListTasksResponse) GetNextPageToken() string {
 	return ""
 }
 
-var File_monov1_mono_proto protoreflect.FileDescriptor
+var File_mono_v1_mono_proto protoreflect.FileDescriptor
 
-const file_monov1_mono_proto_rawDesc = "" +
+const file_mono_v1_mono_proto_rawDesc = "" +
 	"\n" +
-	"\x11monov1/mono.proto\x12\amono.v1\x1a\x1cgoogle/api/annotations.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xdf\x01\n" +
+	"\x12mono/v1/mono.proto\x12\amono.v1\x1a\x1cgoogle/api/annotations.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xdf\x01\n" +
 	"\bTodoItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\x05title\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x12\x1c\n" +
@@ -843,22 +843,22 @@ const file_monov1_mono_proto_rawDesc = "" +
 	"\n" +
 	"UpdateItem\x12\x1a.mono.v1.UpdateItemRequest\x1a\x1b.mono.v1.UpdateItemResponse\".\x82\xd3\xe4\x93\x02(:\x01*2#/v1/lists/{list_id}/items/{item.id}\x12U\n" +
 	"\tListLists\x12\x19.mono.v1.ListListsRequest\x1a\x1a.mono.v1.ListListsResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/lists\x12U\n" +
-	"\tListTasks\x12\x19.mono.v1.ListTasksRequest\x1a\x1a.mono.v1.ListTasksResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/tasksB0Z.github.com/rezkam/mono/api/proto/monov1;monov1b\x06proto3"
+	"\tListTasks\x12\x19.mono.v1.ListTasksRequest\x1a\x1a.mono.v1.ListTasksResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/tasksB1Z/github.com/rezkam/mono/api/proto/mono/v1;monov1b\x06proto3"
 
 var (
-	file_monov1_mono_proto_rawDescOnce sync.Once
-	file_monov1_mono_proto_rawDescData []byte
+	file_mono_v1_mono_proto_rawDescOnce sync.Once
+	file_mono_v1_mono_proto_rawDescData []byte
 )
 
-func file_monov1_mono_proto_rawDescGZIP() []byte {
-	file_monov1_mono_proto_rawDescOnce.Do(func() {
-		file_monov1_mono_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_monov1_mono_proto_rawDesc), len(file_monov1_mono_proto_rawDesc)))
+func file_mono_v1_mono_proto_rawDescGZIP() []byte {
+	file_mono_v1_mono_proto_rawDescOnce.Do(func() {
+		file_mono_v1_mono_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_mono_v1_mono_proto_rawDesc), len(file_mono_v1_mono_proto_rawDesc)))
 	})
-	return file_monov1_mono_proto_rawDescData
+	return file_mono_v1_mono_proto_rawDescData
 }
 
-var file_monov1_mono_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
-var file_monov1_mono_proto_goTypes = []any{
+var file_mono_v1_mono_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_mono_v1_mono_proto_goTypes = []any{
 	(*TodoItem)(nil),              // 0: mono.v1.TodoItem
 	(*TodoList)(nil),              // 1: mono.v1.TodoList
 	(*CreateListRequest)(nil),     // 2: mono.v1.CreateListRequest
@@ -876,7 +876,7 @@ var file_monov1_mono_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
 	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
 }
-var file_monov1_mono_proto_depIdxs = []int32{
+var file_mono_v1_mono_proto_depIdxs = []int32{
 	14, // 0: mono.v1.TodoItem.create_time:type_name -> google.protobuf.Timestamp
 	14, // 1: mono.v1.TodoItem.due_time:type_name -> google.protobuf.Timestamp
 	0,  // 2: mono.v1.TodoList.items:type_name -> mono.v1.TodoItem
@@ -909,26 +909,26 @@ var file_monov1_mono_proto_depIdxs = []int32{
 	0,  // [0:13] is the sub-list for field type_name
 }
 
-func init() { file_monov1_mono_proto_init() }
-func file_monov1_mono_proto_init() {
-	if File_monov1_mono_proto != nil {
+func init() { file_mono_v1_mono_proto_init() }
+func file_mono_v1_mono_proto_init() {
+	if File_mono_v1_mono_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_monov1_mono_proto_rawDesc), len(file_monov1_mono_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mono_v1_mono_proto_rawDesc), len(file_mono_v1_mono_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_monov1_mono_proto_goTypes,
-		DependencyIndexes: file_monov1_mono_proto_depIdxs,
-		MessageInfos:      file_monov1_mono_proto_msgTypes,
+		GoTypes:           file_mono_v1_mono_proto_goTypes,
+		DependencyIndexes: file_mono_v1_mono_proto_depIdxs,
+		MessageInfos:      file_mono_v1_mono_proto_msgTypes,
 	}.Build()
-	File_monov1_mono_proto = out.File
-	file_monov1_mono_proto_goTypes = nil
-	file_monov1_mono_proto_depIdxs = nil
+	File_mono_v1_mono_proto = out.File
+	file_mono_v1_mono_proto_goTypes = nil
+	file_mono_v1_mono_proto_depIdxs = nil
 }
