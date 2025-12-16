@@ -20,3 +20,8 @@ WHERE id = $1 AND list_id = $2;
 -- name: DeleteTodoItemsByListId :exec
 DELETE FROM todo_items
 WHERE list_id = $1;
+
+-- name: GetAllTodoItems :many
+SELECT id, list_id, title, completed, create_time, due_time, tags
+FROM todo_items
+ORDER BY list_id, create_time ASC;

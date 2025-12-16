@@ -146,36 +146,47 @@ func (s *Store) UpdateList(ctx context.Context, list *core.TodoList) error {
 }
 
 // ListLists returns all TodoLists.
+// This method is optimized to avoid N+1 queries by fetching all items in a single batch query.
 func (s *Store) ListLists(ctx context.Context) ([]*core.TodoList, error) {
 	dbLists, err := s.queries.ListTodoLists(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list lists: %w", err)
 	}
 
-	lists := make([]*core.TodoList, 0, len(dbLists))
-	for _, dbList := range dbLists {
-		// Get items for each list
-		dbItems, err := s.queries.GetTodoItemsByListId(ctx, dbList.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get items for list %s: %w", dbList.ID, err)
-		}
+	if len(dbLists) == 0 {
+		return []*core.TodoList{}, nil
+	}
 
+	// Build a map of list IDs to lists for efficient lookup
+	listMap := make(map[string]*core.TodoList, len(dbLists))
+	lists := make([]*core.TodoList, 0, len(dbLists))
+	
+	for _, dbList := range dbLists {
 		list := &core.TodoList{
 			ID:         dbList.ID,
 			Title:      dbList.Title,
 			CreateTime: dbList.CreateTime,
-			Items:      make([]core.TodoItem, 0, len(dbItems)),
+			Items:      []core.TodoItem{}, // Initialize empty slice
 		}
+		listMap[dbList.ID] = list
+		lists = append(lists, list)
+	}
 
-		for _, dbItem := range dbItems {
+	// Fetch all items for all lists in a single query (avoids N+1)
+	allItems, err := s.queries.GetAllTodoItems(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all items: %w", err)
+	}
+
+	// Group items by list_id
+	for _, dbItem := range allItems {
+		if list, exists := listMap[dbItem.ListID]; exists {
 			item, err := dbItemToCore(dbItem)
 			if err != nil {
 				return nil, fmt.Errorf("failed to convert item: %w", err)
 			}
 			list.Items = append(list.Items, item)
 		}
-
-		lists = append(lists, list)
 	}
 
 	return lists, nil

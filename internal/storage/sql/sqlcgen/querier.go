@@ -14,6 +14,7 @@ type Querier interface {
 	DeleteTodoItem(ctx context.Context, arg DeleteTodoItemParams) error
 	DeleteTodoItemsByListId(ctx context.Context, listID string) error
 	DeleteTodoList(ctx context.Context, id string) error
+	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
 	GetTodoItemsByListId(ctx context.Context, listID string) ([]TodoItem, error)
 	GetTodoList(ctx context.Context, id string) (TodoList, error)
 	ListTodoLists(ctx context.Context) ([]TodoList, error)

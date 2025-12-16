@@ -64,6 +64,43 @@ func (q *Queries) DeleteTodoItemsByListId(ctx context.Context, listID string) er
 	return err
 }
 
+const getAllTodoItems = `-- name: GetAllTodoItems :many
+SELECT id, list_id, title, completed, create_time, due_time, tags
+FROM todo_items
+ORDER BY list_id, create_time ASC
+`
+
+func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
+	rows, err := q.db.QueryContext(ctx, getAllTodoItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TodoItem{}
+	for rows.Next() {
+		var i TodoItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.ListID,
+			&i.Title,
+			&i.Completed,
+			&i.CreateTime,
+			&i.DueTime,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTodoItemsByListId = `-- name: GetTodoItemsByListId :many
 SELECT id, list_id, title, completed, create_time, due_time, tags
 FROM todo_items
