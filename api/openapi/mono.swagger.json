@@ -1,0 +1,441 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "monov1/mono.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "MonoService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/lists": {
+      "get": {
+        "operationId": "MonoService_ListLists",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListListsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "MonoService"
+        ]
+      },
+      "post": {
+        "operationId": "MonoService_CreateList",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateListResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateListRequest"
+            }
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
+    "/v1/lists/{id}": {
+      "get": {
+        "operationId": "MonoService_GetList",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetListResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
+    "/v1/lists/{listId}/items": {
+      "post": {
+        "operationId": "MonoService_CreateItem",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateItemResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "listId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MonoServiceCreateItemBody"
+            }
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
+    "/v1/lists/{listId}/items/{item.id}": {
+      "patch": {
+        "operationId": "MonoService_UpdateItem",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1UpdateItemResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "listId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "item.id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MonoServiceUpdateItemBody"
+            }
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
+    "/v1/tasks": {
+      "get": {
+        "summary": "ListTasks retrieves tasks with filtering and sorting support.",
+        "operationId": "MonoService_ListTasks",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListTasksResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "parent",
+            "description": "Optional: Parent list to filter by. If empty, search globally.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "filter",
+            "description": "AIP-160 filtering (e.g. \"manual filter\").",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "orderBy",
+            "description": "AIP-132 sorting (e.g. \"create_time desc\").",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "MonoServiceCreateItemBody": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "dueTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "MonoServiceUpdateItemBody": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "completed": {
+              "type": "boolean"
+            },
+            "createTime": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "dueTime": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "updateMask": {
+          "type": "string"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1CreateItemResponse": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "$ref": "#/definitions/v1TodoItem"
+        }
+      }
+    },
+    "v1CreateListRequest": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "v1CreateListResponse": {
+      "type": "object",
+      "properties": {
+        "list": {
+          "$ref": "#/definitions/v1TodoList"
+        }
+      }
+    },
+    "v1GetListResponse": {
+      "type": "object",
+      "properties": {
+        "list": {
+          "$ref": "#/definitions/v1TodoList"
+        }
+      }
+    },
+    "v1ListListsResponse": {
+      "type": "object",
+      "properties": {
+        "lists": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TodoList"
+          }
+        }
+      }
+    },
+    "v1ListTasksResponse": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TodoItem"
+          }
+        },
+        "nextPageToken": {
+          "type": "string"
+        }
+      }
+    },
+    "v1TodoItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dueTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1TodoList": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1TodoItem"
+          }
+        },
+        "createTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1UpdateItemResponse": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "$ref": "#/definitions/v1TodoItem"
+        }
+      }
+    }
+  }
+}
