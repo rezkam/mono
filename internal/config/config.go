@@ -14,9 +14,13 @@ type Config struct {
 	Env      string `env:"MONO_ENV" default:"dev"` // dev, prod
 
 	// Storage Configuration
-	StorageType string `env:"MONO_STORAGE_TYPE" default:"fs"` // fs, gcs
+	StorageType string `env:"MONO_STORAGE_TYPE" default:"fs"` // fs, gcs, postgres, sqlite
 	GCSBucket   string `env:"MONO_GCS_BUCKET"`
 	FSDir       string `env:"MONO_FS_DIR" default:"./mono-data"`
+
+	// SQL Storage Configuration
+	PostgresURL string `env:"MONO_POSTGRES_URL"` // PostgreSQL connection string
+	SQLitePath  string `env:"MONO_SQLITE_PATH" default:"./mono-data/mono.db"`
 
 	// Observability Configuration
 	OTelEnabled   bool   `env:"MONO_OTEL_ENABLED" default:"true"`
@@ -49,8 +53,16 @@ func (c *Config) validate() error {
 		if c.GCSBucket == "" {
 			return fmt.Errorf("MONO_GCS_BUCKET is required when MONO_STORAGE_TYPE is 'gcs'")
 		}
+	case "postgres":
+		if c.PostgresURL == "" {
+			return fmt.Errorf("MONO_POSTGRES_URL is required when MONO_STORAGE_TYPE is 'postgres'")
+		}
+	case "sqlite":
+		if c.SQLitePath == "" {
+			return fmt.Errorf("MONO_SQLITE_PATH is required when MONO_STORAGE_TYPE is 'sqlite'")
+		}
 	default:
-		return fmt.Errorf("unknown MONO_STORAGE_TYPE: %s", c.StorageType)
+		return fmt.Errorf("unknown MONO_STORAGE_TYPE: %s (supported: fs, gcs, postgres, sqlite)", c.StorageType)
 	}
 	return nil
 }

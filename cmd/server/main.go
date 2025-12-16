@@ -24,6 +24,7 @@ import (
 	"github.com/rezkam/mono/internal/service"
 	"github.com/rezkam/mono/internal/storage/fs"
 	"github.com/rezkam/mono/internal/storage/gcs"
+	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
 	"github.com/rezkam/mono/pkg/observability"
 )
 
@@ -98,6 +99,18 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("failed to create fs store: %w", err)
 		}
+	case "postgres":
+		store, err = sqlstorage.NewPostgresStore(ctx, cfg.PostgresURL)
+		if err != nil {
+			return fmt.Errorf("failed to create postgres store: %w", err)
+		}
+		slog.Info("using postgres storage", "url", maskPassword(cfg.PostgresURL))
+	case "sqlite":
+		store, err = sqlstorage.NewSQLiteStore(ctx, cfg.SQLitePath)
+		if err != nil {
+			return fmt.Errorf("failed to create sqlite store: %w", err)
+		}
+		slog.Info("using sqlite storage", "path", cfg.SQLitePath)
 	default:
 		return fmt.Errorf("unknown storage type: %s", cfg.StorageType)
 	}
@@ -167,4 +180,12 @@ func run() error {
 	case err := <-errResult:
 		return err
 	}
+}
+
+// maskPassword masks the password in a connection string for logging.
+func maskPassword(connStr string) string {
+	// Simple masking for PostgreSQL connection strings
+	// Format: postgres://user:password@host:port/dbname
+	// We'll just return a generic message to avoid logging sensitive info
+	return "[REDACTED]"
 }

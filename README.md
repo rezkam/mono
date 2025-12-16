@@ -1,6 +1,6 @@
 # Mono Service
 
-Mono is a To-Do list application service providing both gRPC and REST APIs. It supports multiple storage backends (File System and Google Cloud Storage) and features OpenTelemetry integration for observability.
+Mono is a To-Do list application service providing both gRPC and REST APIs. It supports multiple storage backends (File System, Google Cloud Storage, PostgreSQL, and SQLite) and features OpenTelemetry integration for observability.
 
 ## Features
 
@@ -8,8 +8,12 @@ Mono is a To-Do list application service providing both gRPC and REST APIs. It s
 - **Storage Backends**:
     - `fs`: Local JSON file storage (default).
     - `gcs`: Google Cloud Storage.
+    - `postgres`: PostgreSQL database (ACID-compliant, scalable).
+    - `sqlite`: SQLite database (embedded, zero-config).
 - **Observability**: OpenTelemetry tracing and metrics support.
 - **API Documentation**: Auto-generated Swagger/OpenAPI documentation.
+- **Database Migrations**: Automatic schema management with goose.
+- **Type-Safe SQL**: sqlc-generated data access code.
 
 ## API Documentation
 
@@ -21,7 +25,7 @@ You can view this file using any Swagger UI viewer (e.g., [Swagger Editor](https
 
 ## Quick Start
 
-### Local Run (FileSystem)
+### Local Run (FileSystem - Default)
 
 ```bash
 # Build & Run via Make
@@ -37,6 +41,28 @@ go build -o mono-server cmd/server/main.go
 
 The server will store data in `./mono-data` by default.
 
+### Local Run (SQLite)
+
+```bash
+# Build the server
+make build
+
+# Run with SQLite storage
+MONO_STORAGE_TYPE=sqlite MONO_SQLITE_PATH=./mono-data/mono.db ./mono-server
+```
+
+### Local Run (PostgreSQL)
+
+```bash
+# Start PostgreSQL using Docker
+make db-up
+
+# Run the server
+MONO_STORAGE_TYPE=postgres \
+MONO_POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db" \
+./mono-server
+```
+
 ## Architecture
 
 The Mono service runs **two servers** simultaneously:
@@ -51,9 +77,11 @@ The Mono service runs **two servers** simultaneously:
 | `MONO_GRPC_PORT` | 8080 | gRPC server port (HTTP/2) |
 | `MONO_HTTP_PORT` | 8081 | HTTP gateway port (REST/JSON) |
 | `MONO_ENV` | dev | Environment (`dev`, `prod`) |
-| `MONO_STORAGE_TYPE` | fs | Storage backend (`fs`, `gcs`) |
+| `MONO_STORAGE_TYPE` | fs | Storage backend (`fs`, `gcs`, `postgres`, `sqlite`) |
 | `MONO_FS_DIR` | ./mono-data | Directory for fs storage (Required if storage=fs) |
 | `MONO_GCS_BUCKET` | "" | GCS bucket name (Required if storage=gcs) |
+| `MONO_POSTGRES_URL` | "" | PostgreSQL connection string (Required if storage=postgres) |
+| `MONO_SQLITE_PATH` | ./mono-data/mono.db | SQLite database path (Required if storage=sqlite) |
 | `MONO_OTEL_ENABLED` | true | Enable OpenTelemetry |
 | `MONO_OTEL_COLLECTOR` | localhost:4317 | OTel collector endpoint |
 
@@ -111,6 +139,35 @@ If `update_mask` is omitted, the behavior may vary (often full replace), so it i
 
 *   `make`: Generate, test, security check, and build.
 *   `make gen`: Generate Go code and Swagger docs from Protobuf.
+*   `make gen-sqlc`: Generate type-safe Go code from SQL queries.
 *   `make test`: Run unit, integration, and E2E tests.
+*   `make test-sql`: Run SQL storage integration tests.
 *   `make security`: Check for vulnerabilities.
 *   `make docker-build`: Build Docker image.
+*   `make db-up`: Start PostgreSQL database using Docker.
+*   `make db-down`: Stop database containers.
+
+### SQL Storage Development
+
+For detailed information about SQL storage, migrations, and database management, see:
+- [SQL Storage Documentation](docs/SQL_STORAGE.md)
+- [Database Migrations Guide](docs/MIGRATIONS.md)
+
+Quick reference for common SQL operations:
+
+```bash
+# Generate sqlc code after modifying queries
+make gen-sqlc
+
+# Create a new migration
+NAME=add_priority_field make db-migrate-create
+
+# Start PostgreSQL for testing
+make db-up
+
+# Run SQL storage tests
+make test-sql
+
+# Stop database
+make db-down
+```

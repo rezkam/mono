@@ -3,7 +3,7 @@ BINARY_NAME=mono-server
 # Docker image name
 DOCKER_IMAGE=mono-service
 
-.PHONY: all help gen tidy test build run clean docker-build docker-run
+.PHONY: all help gen gen-sqlc tidy test build run clean docker-build docker-run db-up db-down db-migrate-up db-migrate-down db-migrate-create test-sql
 
 # Default target
 all: gen tidy security test build
@@ -26,6 +26,10 @@ help: ## Display this help message
 gen: ## Generate Go code from Protobuf files using buf
 	@echo "Generating Protobuf files..."
 	export PATH=$(PATH):$(HOME)/go/bin && buf generate api/proto
+
+gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
+	@echo "Generating sqlc code..."
+	sqlc generate
 
 security: ## Run govulncheck to find vulnerabilities
 	@echo "Checking for vulnerabilities..."
@@ -81,3 +85,44 @@ docker-build: ## Build the Docker image
 docker-run: ## Run the Docker container
 	@echo "Running Docker container..."
 	docker run -p 8080:8080 -p 8081:8081 $(DOCKER_IMAGE)
+
+db-up: ## Start PostgreSQL database using Docker Compose
+	@echo "Starting PostgreSQL database..."
+	docker compose up -d postgres
+	@echo "Waiting for PostgreSQL to be ready..."
+	@sleep 3
+
+db-down: ## Stop and remove database containers
+	@echo "Stopping database containers..."
+	docker compose down
+
+db-migrate-up: ## Run database migrations up
+	@echo "Running migrations up..."
+	@if [ -z "$(DB_URL)" ]; then \
+		echo "Usage: DB_URL='postgres://user:pass@localhost:5432/dbname' make db-migrate-up"; \
+		echo "   or: DB_URL='./data.db' make db-migrate-up"; \
+		exit 1; \
+	fi
+	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations $(DB_DRIVER) "$(DB_URL)" up
+
+db-migrate-down: ## Rollback last database migration
+	@echo "Rolling back migration..."
+	@if [ -z "$(DB_URL)" ]; then \
+		echo "Usage: DB_URL='postgres://user:pass@localhost:5432/dbname' make db-migrate-down"; \
+		echo "   or: DB_URL='./data.db' make db-migrate-down"; \
+		exit 1; \
+	fi
+	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations $(DB_DRIVER) "$(DB_URL)" down
+
+db-migrate-create: ## Create a new migration file (usage: NAME=create_users make db-migrate-create)
+	@if [ -z "$(NAME)" ]; then \
+		echo "Error: NAME is required"; \
+		echo "Usage: NAME=create_users make db-migrate-create"; \
+		exit 1; \
+	fi
+	@echo "Creating new migration: $(NAME)"
+	go run github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations create $(NAME) sql
+
+test-sql: ## Run SQL storage integration tests (requires running database)
+	@echo "Running SQL integration tests..."
+	go test -v ./internal/storage/sql/...
