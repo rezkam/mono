@@ -1,6 +1,6 @@
 # Mono Service
 
-Mono is a robust To-Do list application service providing both gRPC and REST APIs. It supports multiple storage backends (File System and Google Cloud Storage) and features OpenTelemetry integration for observability.
+Mono is a To-Do list application service providing both gRPC and REST APIs. It supports multiple storage backends (File System and Google Cloud Storage) and features OpenTelemetry integration for observability.
 
 ## Features
 
@@ -9,7 +9,6 @@ Mono is a robust To-Do list application service providing both gRPC and REST API
     - `fs`: Local JSON file storage (default).
     - `gcs`: Google Cloud Storage.
 - **Observability**: OpenTelemetry tracing and metrics support.
-- **Dockerized**: Alpine-based Docker image.
 - **API Documentation**: Auto-generated Swagger/OpenAPI documentation.
 
 ## API Documentation
@@ -38,13 +37,6 @@ go build -o mono-server cmd/server/main.go
 
 The server will store data in `./mono-data` by default.
 
-### Docker Run
-
-```bash
-make docker-build
-make docker-run
-```
-
 ## Architecture
 
 The Mono service runs **two servers** simultaneously:
@@ -53,8 +45,6 @@ The Mono service runs **two servers** simultaneously:
 2.  **HTTP Gateway** (`MONO_HTTP_PORT`): A reverse-proxy that accepts standard JSON/REST requests (HTTP/1.1) and translates them into gRPC calls to the local gRPC server. This allows external clients to use the API easily.
 
 ## Configuration
-
-The service follows the **12-Factor App** methodology and is configured exclusively via Environment Variables. All variables are prefixed with `MONO_`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
