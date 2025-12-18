@@ -18,25 +18,29 @@ INSERT INTO recurring_generation_jobs (
     id, template_id, scheduled_for, status,
     generate_from, generate_until, created_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, COALESCE($3, now()), $4, $5, $6, $7
 )
 `
 
 type CreateGenerationJobParams struct {
-	ID            uuid.UUID `json:"id"`
-	TemplateID    uuid.UUID `json:"template_id"`
-	ScheduledFor  time.Time `json:"scheduled_for"`
-	Status        string    `json:"status"`
-	GenerateFrom  time.Time `json:"generate_from"`
-	GenerateUntil time.Time `json:"generate_until"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            uuid.UUID   `json:"id"`
+	TemplateID    uuid.UUID   `json:"template_id"`
+	Column3       interface{} `json:"column_3"`
+	Status        string      `json:"status"`
+	GenerateFrom  time.Time   `json:"generate_from"`
+	GenerateUntil time.Time   `json:"generate_until"`
+	CreatedAt     time.Time   `json:"created_at"`
 }
 
+// Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
+// to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
+// between the application and database from making jobs temporarily unclaimable.
+// For future scheduling, pass an explicit timestamp to override the default.
 func (q *Queries) CreateGenerationJob(ctx context.Context, arg CreateGenerationJobParams) error {
 	_, err := q.db.ExecContext(ctx, createGenerationJob,
 		arg.ID,
 		arg.TemplateID,
-		arg.ScheduledFor,
+		arg.Column3,
 		arg.Status,
 		arg.GenerateFrom,
 		arg.GenerateUntil,

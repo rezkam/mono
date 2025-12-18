@@ -221,8 +221,15 @@ type Storage interface {
 	GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*RecurringTaskTemplate, error)
 
 	// Generation job management
+	// CreateGenerationJob creates a new job to generate recurring tasks.
+	// For immediate scheduling, pass time.Time{} (zero value) for scheduledFor.
+	// For future scheduling, pass a specific timestamp.
 	CreateGenerationJob(ctx context.Context, templateID string, scheduledFor time.Time, generateFrom, generateUntil time.Time) (string, error)
+
+	// ClaimNextGenerationJob atomically claims the next available job for processing.
+	// Returns empty string if no jobs are available.
 	ClaimNextGenerationJob(ctx context.Context) (string, error)
+
 	GetGenerationJob(ctx context.Context, jobID string) (*GenerationJob, error)
 	UpdateGenerationJobStatus(ctx context.Context, jobID string, status string, errorMessage *string) error
 

@@ -286,6 +286,26 @@ func (s *Store) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*cor
 }
 
 // CreateGenerationJob creates a new generation job for a template.
+//
+// Clock Skew Prevention:
+// For immediate scheduling, pass time.Time{} (zero value) for scheduledFor. This triggers
+// the database's COALESCE($3, now()) to use PostgreSQL's transaction timestamp as the
+// single source of truth, eliminating clock skew race conditions.
+//
+// The Problem (without this approach):
+// When using time.Now() from Go, microsecond-level differences between the application's
+// clock and PostgreSQL's clock can cause jobs to be temporarily unclaimable. For example:
+//  1. Go: time.Now() = 12:00:00.123456
+//  2. Job inserted with scheduled_for = 12:00:00.123456
+//  3. Worker claims: WHERE scheduled_for <= now()
+//  4. PostgreSQL: now() = 12:00:00.123450 (6μs earlier due to clock skew)
+//  5. Condition fails: 12:00:00.123456 <= 12:00:00.123450 = false
+//  6. Job not claimed despite being intended for immediate processing
+//
+// The Solution:
+// Pass time.Time{} → COALESCE(NULL, now()) → PostgreSQL's now() → Always claimable
+//
+// For future scheduling, pass an explicit non-zero timestamp to override the default.
 func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, scheduledFor time.Time, generateFrom, generateUntil time.Time) (string, error) {
 	templateUUID, err := uuid.Parse(templateID)
 	if err != nil {
@@ -296,10 +316,21 @@ func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, sche
 	if err != nil {
 		return "", fmt.Errorf("failed to generate job id: %v", err)
 	}
+
+	// Convert scheduledFor to interface{} for COALESCE handling:
+	// - Zero time → nil → triggers COALESCE($3, now()) → uses database time
+	// - Non-zero time → timestamp → uses provided time
+	var scheduledForParam interface{}
+	if scheduledFor.IsZero() {
+		scheduledForParam = nil
+	} else {
+		scheduledForParam = scheduledFor
+	}
+
 	err = s.queries.CreateGenerationJob(ctx, sqlcgen.CreateGenerationJobParams{
 		ID:            jobID,
 		TemplateID:    templateUUID,
-		ScheduledFor:  scheduledFor,
+		Column3:       scheduledForParam, // scheduled_for with COALESCE
 		Status:        "PENDING",
 		GenerateFrom:  generateFrom,
 		GenerateUntil: generateUntil,

@@ -1,9 +1,13 @@
 -- name: CreateGenerationJob :exec
+-- Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
+-- to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
+-- between the application and database from making jobs temporarily unclaimable.
+-- For future scheduling, pass an explicit timestamp to override the default.
 INSERT INTO recurring_generation_jobs (
     id, template_id, scheduled_for, status,
     generate_from, generate_until, created_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, COALESCE($3, now()), $4, $5, $6, $7
 );
 
 -- name: GetGenerationJob :one

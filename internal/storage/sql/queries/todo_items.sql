@@ -68,6 +68,17 @@ WHERE list_id = $1;
 --   $10: limit      - Page size (max items to return)
 --   $11: offset     - Pagination offset (skip N items)
 --
+-- SQL Injection Protection:
+-- The ORDER BY clause uses parameterized queries ($9::text) with CASE expressions.
+-- PostgreSQL's parameterized query protocol treats $9 as DATA, never CODE, making SQL
+-- injection structurally impossible. Even if malicious input like "id; DROP TABLE--"
+-- flows through without validation, it's compared as a string literal in CASE expressions,
+-- never executed as SQL. This protection is guaranteed by PostgreSQL's wire protocol.
+-- See tests/integration/sql_injection_resistance_test.go for proof.
+--
+-- Input validation at the service layer improves UX (clear error messages) but does NOT
+-- provide security - parameterized queries are the security boundary.
+--
 -- Access pattern example:
 --   - "Show my overdue tasks": filter by due_before=now, order by due_time
 --   - "Tasks in List X": filter by list_id, default sort

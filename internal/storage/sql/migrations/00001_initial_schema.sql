@@ -177,7 +177,14 @@ CREATE TABLE recurring_generation_jobs (
     template_id uuid NOT NULL,
 
     -- Job scheduling
-    scheduled_for timestamptz NOT NULL,
+    -- DEFAULT now(): Prevents clock skew race condition between application and database.
+    -- When a job should be immediately available, the application passes NULL which triggers
+    -- this DEFAULT, ensuring the database's transaction timestamp is used as the single source
+    -- of truth. This eliminates the race condition where time.Now() in Go might be slightly
+    -- ahead of PostgreSQL's now(), causing jobs to be temporarily unclaimable despite being
+    -- intended for immediate processing. For future-scheduled jobs, an explicit timestamp
+    -- overrides this default.
+    scheduled_for timestamptz NOT NULL DEFAULT now(),
     started_at timestamptz,
     completed_at timestamptz,
     failed_at timestamptz,
