@@ -114,7 +114,7 @@ func run() error {
 	svc := service.NewMonoService(store, cfg.DefaultPageSize, cfg.MaxPageSize)
 
 	// Init Authentication
-	authenticator := auth.NewAuthenticator(store.DB(), store.Queries())
+	authenticator := auth.NewAuthenticator(ctx, store.DB(), store.Queries())
 	slog.Info("API key authentication enabled")
 
 	// Init gRPC Server
@@ -156,6 +156,13 @@ func run() error {
 		case <-shutdownCtx.Done():
 			slog.Warn("gRPC server shutdown timed out, forcing stop")
 			s.Stop()
+		}
+
+		// Shutdown authenticator worker (drains pending last_used_at updates)
+		if err := authenticator.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("authenticator shutdown timeout", "error", err)
+		} else {
+			slog.Info("authenticator shutdown complete")
 		}
 
 		return nil

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,18 +37,39 @@ func maskAPIKey(apiKey string) string {
 	return "***"
 }
 
-// Authenticator handles API key authentication.
-type Authenticator struct {
-	queries *sqlcgen.Queries
-	db      *sql.DB
+// lastUsedUpdate holds information for updating an API key's last_used_at timestamp.
+type lastUsedUpdate struct {
+	keyID     uuid.UUID
+	timestamp time.Time
 }
 
-// NewAuthenticator creates a new authenticator.
-func NewAuthenticator(db *sql.DB, queries *sqlcgen.Queries) *Authenticator {
-	return &Authenticator{
-		queries: queries,
-		db:      db,
+// Authenticator handles API key authentication.
+type Authenticator struct {
+	queries         *sqlcgen.Queries
+	db              *sql.DB
+	appCtx          context.Context // Application context, cancelled on shutdown
+	lastUsedUpdates chan lastUsedUpdate
+	shutdownChan    chan struct{}
+	wg              sync.WaitGroup
+}
+
+// NewAuthenticator creates a new authenticator and starts the background worker
+// for processing last_used_at updates.
+// The ctx parameter should be an application-level context that gets cancelled on shutdown.
+func NewAuthenticator(ctx context.Context, db *sql.DB, queries *sqlcgen.Queries) *Authenticator {
+	a := &Authenticator{
+		queries:         queries,
+		db:              db,
+		appCtx:          ctx,
+		lastUsedUpdates: make(chan lastUsedUpdate, 1000), // buffered to handle bursts
+		shutdownChan:    make(chan struct{}),
 	}
+
+	// Start background worker for processing last_used_at updates
+	a.wg.Add(1)
+	go a.processLastUsedUpdates()
+
+	return a
 }
 
 // UnaryInterceptor is a gRPC unary interceptor for API key authentication.
@@ -99,6 +121,70 @@ func (a *Authenticator) UnaryInterceptor(
 	return handler(ctx, req)
 }
 
+// processLastUsedUpdates is a background worker that processes last_used_at updates
+// from a buffered channel. This prevents goroutine explosion under high load.
+func (a *Authenticator) processLastUsedUpdates() {
+	defer a.wg.Done()
+
+	for {
+		select {
+		case update := <-a.lastUsedUpdates:
+			// Derive context from application context (respects shutdown)
+			ctx, cancel := context.WithTimeout(a.appCtx, 5*time.Second)
+
+			if err := a.queries.UpdateAPIKeyLastUsed(ctx, sqlcgen.UpdateAPIKeyLastUsedParams{
+				LastUsedAt: sql.NullTime{Time: update.timestamp, Valid: true},
+				ID:         update.keyID,
+			}); err != nil {
+				// Log failure but continue processing (last_used_at is non-critical)
+				slog.Warn("Failed to update API key last_used_at",
+					slog.String("key_id", update.keyID.String()),
+					slog.String("error", err.Error()))
+			}
+			cancel()
+
+		case <-a.shutdownChan:
+			// Drain remaining updates before shutdown
+			for {
+				select {
+				case update := <-a.lastUsedUpdates:
+					ctx, cancel := context.WithTimeout(a.appCtx, 5*time.Second)
+					_ = a.queries.UpdateAPIKeyLastUsed(ctx, sqlcgen.UpdateAPIKeyLastUsedParams{
+						LastUsedAt: sql.NullTime{Time: update.timestamp, Valid: true},
+						ID:         update.keyID,
+					})
+					cancel()
+				default:
+					// No more updates, exit cleanly
+					return
+				}
+			}
+		}
+	}
+}
+
+// Shutdown gracefully shuts down the authenticator by signaling the worker to stop
+// and waiting for it to finish processing remaining updates.
+// It respects the provided context's deadline for shutdown timeout.
+func (a *Authenticator) Shutdown(ctx context.Context) error {
+	// Signal worker to stop
+	close(a.shutdownChan)
+
+	// Wait for worker to finish, with timeout
+	done := make(chan struct{})
+	go func() {
+		a.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("shutdown timeout: %w", ctx.Err())
+	}
+}
+
 // validateAPIKey checks if the API key is valid and updates last_used_at.
 // Uses O(1) indexed lookup via short_token instead of O(n) iteration.
 func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error {
@@ -125,19 +211,19 @@ func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error
 		return fmt.Errorf("API key expired")
 	}
 
-	// Update last used time (async to not slow down requests)
-	go func() {
-		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := a.queries.UpdateAPIKeyLastUsed(updateCtx, sqlcgen.UpdateAPIKeyLastUsedParams{
-			LastUsedAt: sql.NullTime{Time: time.Now().UTC(), Valid: true},
-			ID:         key.ID,
-		}); err != nil {
-			// Log but don't fail authentication
-			fmt.Printf("Warning: Failed to update API key last_used_at: %v\n", err)
-		}
-	}()
+	// Queue last_used_at update (non-blocking, processed by background worker)
+	select {
+	case a.lastUsedUpdates <- lastUsedUpdate{
+		keyID:     key.ID,
+		timestamp: time.Now().UTC(),
+	}:
+		// Successfully queued for async processing
+	default:
+		// Channel full, drop update (last_used_at is non-critical)
+		// This provides backpressure - prevents unbounded goroutine spawning
+		slog.Warn("Dropped last_used_at update due to full queue",
+			slog.String("key_id", key.ID.String()))
+	}
 
 	return nil // Authentication successful
 }

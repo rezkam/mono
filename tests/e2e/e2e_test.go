@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Start gRPC server with auth interceptor
-	authenticator := auth.NewAuthenticator(store.DB(), store.Queries())
+	authenticator := auth.NewAuthenticator(ctx, store.DB(), store.Queries())
 	lis, err := net.Listen("tcp", "localhost:0") // Random port
 	if err != nil {
 		panic(err)
