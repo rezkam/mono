@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+	// Use signal.NotifyContext for automatic context cancellation on signals
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	// Get PostgreSQL connection string from environment
@@ -34,10 +35,6 @@ func main() {
 	// Create worker
 	w := worker.New(store)
 
-	// Setup graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
 	// Start worker in goroutine
 	errChan := make(chan error, 1)
 	go func() {
@@ -46,11 +43,10 @@ func main() {
 
 	slog.InfoContext(ctx, "Recurring task worker started")
 
-	// Wait for shutdown signal or error
+	// Wait for context cancellation (from signal) or worker error
 	select {
-	case <-sigChan:
+	case <-ctx.Done():
 		slog.InfoContext(ctx, "Received shutdown signal, stopping worker...")
-		cancel()
 		w.Stop()
 	case err := <-errChan:
 		if err != nil && err != context.Canceled {
