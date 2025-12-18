@@ -35,7 +35,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 	// Observability defaults
 	assert.Equal(t, true, cfg.OTelEnabled)
-	assert.Equal(t, "localhost:4317", cfg.OTelCollector)
+	assert.Equal(t, "mono-service", cfg.OTelServiceName)
 }
 
 func TestLoad_WithEnv(t *testing.T) {

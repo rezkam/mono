@@ -142,7 +142,7 @@ run: build ## Build and run the binary locally (requires MONO_POSTGRES_URL)
 		echo "Usage: MONO_POSTGRES_URL='postgres://user:pass@localhost:5432/dbname' make run"; \
 		exit 1; \
 	fi
-	MONO_STORAGE_TYPE=postgres MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
+	MONO_STORAGE_TYPE=postgres MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=true ./$(BINARY_NAME)
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."

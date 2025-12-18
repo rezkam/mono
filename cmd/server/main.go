@@ -51,37 +51,43 @@ func run() error {
 
 	// Init Observability (Logger, Tracer, Meter)
 	// We init logger first to use it for startup logs
-	lp, logger, err := observability.InitLogger(ctx, "mono-service", cfg.OTelCollector, cfg.OTelEnabled)
+	lp, logger, err := observability.InitLogger(ctx, cfg.OTelServiceName, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init logger: %w", err)
 	}
 	defer func() {
-		// Use Background() since main ctx may be cancelled, but we still need to flush logs
-		if err := lp.Shutdown(context.Background()); err != nil {
+		// Use a timeout to prevent hanging if collector is unreachable
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := lp.Shutdown(shutdownCtx); err != nil {
 			fmt.Printf("failed to shutdown logger provider: %v\n", err)
 		}
 	}()
 	// Set generic logger as default for now
 	slog.SetDefault(logger)
 
-	tp, err := observability.InitTracerProvider(ctx, "mono-service", cfg.OTelCollector, cfg.OTelEnabled)
+	tp, err := observability.InitTracerProvider(ctx, cfg.OTelServiceName, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init tracer provider: %w", err)
 	}
 	defer func() {
-		// Use Background() to ensure we flush traces even if main ctx is cancelled
-		if err := tp.Shutdown(context.Background()); err != nil {
+		// Use a timeout to prevent hanging if collector is unreachable
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tp.Shutdown(shutdownCtx); err != nil {
 			slog.Error("failed to shutdown tracer provider", "error", err)
 		}
 	}()
 
-	mp, err := observability.InitMeterProvider(ctx, "mono-service", cfg.OTelCollector, cfg.OTelEnabled)
+	mp, err := observability.InitMeterProvider(ctx, cfg.OTelServiceName, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init meter provider: %w", err)
 	}
 	defer func() {
-		// Use Background() to ensure we flush metrics even if main ctx is cancelled
-		if err := mp.Shutdown(context.Background()); err != nil {
+		// Use a timeout to prevent hanging if collector is unreachable
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := mp.Shutdown(shutdownCtx); err != nil {
 			slog.Error("failed to shutdown meter provider", "error", err)
 		}
 	}()
