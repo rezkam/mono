@@ -40,7 +40,7 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Create tickers for scheduling and processing
-	scheduleTicker := time.NewTicker(1 * time.Hour) // Schedule new jobs hourly
+	scheduleTicker := time.NewTicker(1 * time.Hour)   // Schedule new jobs hourly
 	processTicker := time.NewTicker(30 * time.Second) // Process jobs every 30 seconds
 	defer scheduleTicker.Stop()
 	defer processTicker.Stop()

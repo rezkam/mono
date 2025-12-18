@@ -8,9 +8,9 @@ bin/
 mono-server
 mono-worker
 mono-apikey
-main
-server
-worker
+/main
+/server
+/worker
 
 # Test binary
 *.test

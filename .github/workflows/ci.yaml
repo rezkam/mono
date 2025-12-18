@@ -55,8 +55,31 @@ jobs:
       - name: Security Scan
         run: make security
 
-      - name: Run Tests
+      - name: Install sqlc
+        uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: '1.30.0'
+
+      - name: Verify sqlc Generated Code
+        run: |
+          make gen-sqlc
+          git diff --exit-code internal/storage/sql/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
+
+      - name: Run Tests (without SQL integration)
         run: make test
+
+      - name: Start PostgreSQL for Integration Tests
+        run: |
+          docker compose up -d postgres
+          echo "Waiting for PostgreSQL to be ready..."
+          sleep 10
+
+      - name: Run PostgreSQL Integration Tests
+        run: |
+          TEST_POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" go test -v ./internal/storage/sql/repository/...
+
+      - name: Stop PostgreSQL
+        run: docker compose down
 
       - name: Build Binary
         run: make build
