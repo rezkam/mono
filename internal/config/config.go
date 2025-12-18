@@ -41,10 +41,11 @@ type Config struct {
 	DBConnMaxIdleTime int `env:"MONO_DB_CONN_MAX_IDLE_TIME" default:"60"` // Connection max idle time in seconds (default: 1min)
 
 	// Observability Configuration
-	// OTEL exporters use standard env vars: OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
-	// Additional resource attributes via: OTEL_RESOURCE_ATTRIBUTES (e.g., service.namespace=mono,deployment.environment=dev)
-	OTelEnabled     bool   `env:"MONO_OTEL_ENABLED" default:"true"`
-	OTelServiceName string `env:"MONO_OTEL_SERVICE_NAME" default:"mono-service"`
+	// All OTEL config uses standard env vars:
+	//   OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS
+	//   OTEL_RESOURCE_ATTRIBUTES (e.g., service.name=mono,service.version=1.0.0,deployment.environment=dev)
+	//   OTEL_SERVICE_NAME (alternative to service.name in OTEL_RESOURCE_ATTRIBUTES)
+	OTelEnabled bool `env:"MONO_OTEL_ENABLED" default:"true"`
 
 	// API Key Configuration
 	// Full key format: {KeyType}-{ServiceName}-{APIVersion}-{short}-{long}

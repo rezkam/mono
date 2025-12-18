@@ -2,21 +2,28 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
-	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-const bcryptCost = 14 // Modern security standard
+// hashSecret computes SHA-256 hash of the secret and returns hex-encoded string.
+// SHA-256 is appropriate for API keys because they have high entropy (32 bytes random).
+func hashSecret(secret string) string {
+	hash := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(hash[:])
+}
 
 // Authenticator handles API key authentication.
 type Authenticator struct {
@@ -85,8 +92,10 @@ func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error
 		return fmt.Errorf("API key not found")
 	}
 
-	// Verify the long secret using bcrypt (constant-time comparison)
-	if err := bcrypt.CompareHashAndPassword([]byte(key.LongSecretHash), []byte(keyParts.LongSecret)); err != nil {
+	// Verify the long secret using SHA-256 with constant-time comparison
+	// SHA-256 is appropriate for API keys because they have high entropy (32 bytes random)
+	providedHash := hashSecret(keyParts.LongSecret)
+	if subtle.ConstantTimeCompare([]byte(key.LongSecretHash), []byte(providedHash)) != 1 {
 		return fmt.Errorf("invalid API key")
 	}
 
@@ -120,11 +129,9 @@ func CreateAPIKey(ctx context.Context, queries *sqlcgen.Queries, keyType, servic
 		return "", fmt.Errorf("failed to generate API key: %w", err)
 	}
 
-	// Hash the LONG SECRET ONLY using bcrypt
-	longSecretHash, err := bcrypt.GenerateFromPassword([]byte(keyParts.LongSecret), bcryptCost)
-	if err != nil {
-		return "", fmt.Errorf("failed to hash API key: %w", err)
-	}
+	// Hash the long secret using SHA-256
+	// SHA-256 is appropriate for API keys because they have high entropy (32 bytes random)
+	longSecretHash := hashSecret(keyParts.LongSecret)
 
 	// Store in database
 	keyID, err := uuid.NewV7()
@@ -142,7 +149,7 @@ func CreateAPIKey(ctx context.Context, queries *sqlcgen.Queries, keyType, servic
 		Service:        keyParts.Service,
 		Version:        keyParts.Version,
 		ShortToken:     keyParts.ShortToken,
-		LongSecretHash: string(longSecretHash),
+		LongSecretHash: longSecretHash,
 		Name:           name,
 		IsActive:       true,
 		CreatedAt:      time.Now().UTC(),

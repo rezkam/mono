@@ -2,6 +2,9 @@ package auth_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"testing"
@@ -9,15 +12,20 @@ import (
 
 	"github.com/rezkam/mono/internal/auth"
 	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
-	"golang.org/x/crypto/bcrypt"
 )
+
+// hashSecret computes SHA-256 hash of the secret (matches auth package implementation)
+func hashSecret(secret string) string {
+	hash := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(hash[:])
+}
 
 // BenchmarkAuthO1Lookup demonstrates O(1) authentication performance.
 // This benchmark proves that authentication time is CONSTANT regardless of total API keys.
 //
 // Run: BENCHMARK_POSTGRES_URL="postgres://..." go test -bench=BenchmarkAuthO1Lookup -benchmem ./internal/auth/
 //
-// Expected: ~50-100ms per auth (bcrypt cost), consistent across 10/100/1000 keys
+// Expected: <1ms per auth (SHA-256), consistent across 10/100/1000 keys
 func BenchmarkAuthO1Lookup(b *testing.B) {
 	pgURL := os.Getenv("BENCHMARK_POSTGRES_URL")
 	if pgURL == "" {
@@ -94,9 +102,10 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 					b.Fatalf("Lookup failed: %v", err)
 				}
 
-				// Verify with bcrypt
-				if err := bcrypt.CompareHashAndPassword([]byte(apiKey.LongSecretHash), []byte(keyParts.LongSecret)); err != nil {
-					b.Fatalf("Verification failed: %v", err)
+				// Verify with SHA-256 constant-time comparison
+				providedHash := hashSecret(keyParts.LongSecret)
+				if subtle.ConstantTimeCompare([]byte(apiKey.LongSecretHash), []byte(providedHash)) != 1 {
+					b.Fatal("Verification failed")
 				}
 
 				// Check expiration
@@ -156,8 +165,9 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 				b.Fatalf("Lookup failed: %v", err)
 			}
 
-			if err := bcrypt.CompareHashAndPassword([]byte(apiKey.LongSecretHash), []byte(keyParts.LongSecret)); err != nil {
-				b.Fatalf("Verification failed: %v", err)
+			providedHash := hashSecret(keyParts.LongSecret)
+			if subtle.ConstantTimeCompare([]byte(apiKey.LongSecretHash), []byte(providedHash)) != 1 {
+				b.Fatal("Verification failed")
 			}
 		}
 
@@ -192,11 +202,12 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 		}
 
 		// Benchmark: O(n) linear scan through all keys
+		providedHash := hashSecret(keyParts.LongSecret)
 		for b.Loop() {
 			found := false
 			// Iterate through ALL keys checking each hash
 			for _, key := range allKeys {
-				if err := bcrypt.CompareHashAndPassword([]byte(key.LongSecretHash), []byte(keyParts.LongSecret)); err == nil {
+				if subtle.ConstantTimeCompare([]byte(key.LongSecretHash), []byte(providedHash)) == 1 {
 					found = true
 					break
 				}
@@ -232,29 +243,24 @@ func BenchmarkKeyParsing(b *testing.B) {
 	}
 }
 
-// BenchmarkBcryptCost shows the security/performance tradeoff of bcrypt.
-// This explains why authentication takes ~50-100ms regardless of implementation.
-func BenchmarkBcryptCost(b *testing.B) {
+// BenchmarkSHA256Hash benchmarks SHA-256 hashing performance.
+// This shows why SHA-256 is fast enough for high-entropy API keys.
+func BenchmarkSHA256Hash(b *testing.B) {
 	secret := "8h3k2jf9s7d6f5g4h3j2k1m0n9p8q7r6s5t4u3v2w1x"
 
-	b.Run("Hash_Cost14", func(b *testing.B) {
+	b.Run("Hash", func(b *testing.B) {
 		for b.Loop() {
-			_, err := bcrypt.GenerateFromPassword([]byte(secret), 14)
-			if err != nil {
-				b.Fatalf("Failed to hash: %v", err)
-			}
+			_ = hashSecret(secret)
 		}
 	})
 
-	b.Run("Compare_Cost14", func(b *testing.B) {
+	b.Run("HashAndCompare", func(b *testing.B) {
 		// Setup: Generate hash once
-		hash, _ := bcrypt.GenerateFromPassword([]byte(secret), 14)
+		storedHash := hashSecret(secret)
 
 		for b.Loop() {
-			err := bcrypt.CompareHashAndPassword(hash, []byte(secret))
-			if err != nil {
-				b.Fatalf("Failed to compare: %v", err)
-			}
+			providedHash := hashSecret(secret)
+			_ = subtle.ConstantTimeCompare([]byte(storedHash), []byte(providedHash))
 		}
 	})
 }

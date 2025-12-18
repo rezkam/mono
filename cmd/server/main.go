@@ -50,8 +50,8 @@ func run() error {
 	defer cancel()
 
 	// Init Observability (Logger, Tracer, Meter)
-	// We init logger first to use it for startup logs
-	lp, logger, err := observability.InitLogger(ctx, cfg.OTelServiceName, cfg.OTelEnabled)
+	// Configuration via OTEL_* env vars (endpoint, headers, resource attributes)
+	lp, logger, err := observability.InitLogger(ctx, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init logger: %w", err)
 	}
@@ -66,7 +66,7 @@ func run() error {
 	// Set generic logger as default for now
 	slog.SetDefault(logger)
 
-	tp, err := observability.InitTracerProvider(ctx, cfg.OTelServiceName, cfg.OTelEnabled)
+	tp, err := observability.InitTracerProvider(ctx, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init tracer provider: %w", err)
 	}
@@ -79,7 +79,7 @@ func run() error {
 		}
 	}()
 
-	mp, err := observability.InitMeterProvider(ctx, cfg.OTelServiceName, cfg.OTelEnabled)
+	mp, err := observability.InitMeterProvider(ctx, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init meter provider: %w", err)
 	}
