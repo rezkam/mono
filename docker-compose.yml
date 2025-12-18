@@ -16,5 +16,17 @@ services:
       timeout: 5s
       retries: 5
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: mono-worker
+    environment:
+      POSTGRES_URL: postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
