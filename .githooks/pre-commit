@@ -1,20 +1,16 @@
 #!/bin/sh
+set -e
 
 echo "Running pre-commit checks..."
 
-# Run lint
-echo "Running lint..."
-if ! make lint; then
-    echo "Linting failed. Commit aborted."
-    exit 1
-fi
+echo "Validating gofmt..."
+make fmt-check
 
-# Run tests
+echo "Running lint..."
+make lint
+
 echo "Running tests..."
-if ! make test; then
-    echo "Tests failed. Commit aborted."
-    exit 1
-fi
+make test
 
 echo "All checks passed!"
 exit 0
