@@ -5,8 +5,35 @@ WORKER_BINARY_NAME=mono-worker
 DOCKER_IMAGE=mono-service
 # Default DB Driver
 DB_DRIVER ?= postgres
+# Development database URL (used by db-up, run, gen-apikey, db-migrate-* targets)
+DEV_POSTGRES_URL ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-full test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security
+# =============================================================================
+# Database Architecture
+# =============================================================================
+# This project uses TWO separate PostgreSQL databases to isolate development
+# from testing:
+#
+# 1. DEVELOPMENT DATABASE (docker-compose.yml)
+#    - Port: 5432
+#    - Container: mono-postgres
+#    - Database: mono_db
+#    - User: mono
+#    - Commands: make db-up, make db-down
+#    - Purpose: Local development, manual testing, persistent data
+#
+# 2. TEST DATABASE (docker-compose.test.yml)
+#    - Port: 5433
+#    - Container: mono-postgres-test
+#    - Database: mono_test
+#    - User: postgres
+#    - Commands: make test-integration, make test-integration-up/down/clean
+#    - Purpose: Automated tests, CI/CD, wiped between test runs
+#
+# Both databases can run simultaneously on different ports.
+# =============================================================================
+
+.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security
 
 # Default target - show help when no target specified
 all: help
@@ -60,11 +87,11 @@ fmt-check: ## Ensure all Go files are gofmt'ed
 		exit 1; \
 	fi
 
-test: ## Run unit tests
+test: ## Run all unit tests (no database required)
 	@echo "Running tests..."
 	go test -v ./...
 
-bench: ## Run benchmarks with real database (requires BENCHMARK_POSTGRES_URL)
+bench: ## Run benchmarks (requires BENCHMARK_POSTGRES_URL env var)
 	@echo "Running benchmarks..."
 	@if [ -z "$(BENCHMARK_POSTGRES_URL)" ]; then \
 		echo "Warning: BENCHMARK_POSTGRES_URL not set. Set it to run benchmarks with real database."; \
@@ -74,7 +101,7 @@ bench: ## Run benchmarks with real database (requires BENCHMARK_POSTGRES_URL)
 		BENCHMARK_POSTGRES_URL=$(BENCHMARK_POSTGRES_URL) go test -bench=. -benchmem ./internal/service/...; \
 	fi
 
-bench-test: ## Run benchmarks using test database (cleans volumes before and after)
+bench-test: ## Run benchmarks using test database (port 5433, auto-cleanup)
 	@echo "=== Cleaning any existing test database ==="
 	@docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
 	@echo ""
@@ -97,15 +124,15 @@ bench-test: ## Run benchmarks using test database (cleans volumes before and aft
 	fi
 
 
-build: ## Build the binary locally
+build: ## Build the server binary
 	@echo "Building binary..."
 	go build -o $(BINARY_NAME) cmd/server/main.go
 
-build-worker: ## Build the recurring worker binary
+build-worker: ## Build the background worker binary
 	@echo "Building worker..."
 	go build -o $(WORKER_BINARY_NAME) cmd/worker/main.go
 
-build-apikey: ## Build the API key generator
+build-apikey: ## Build the API key generator tool
 	@echo "Building API key generator..."
 	go build -o mono-apikey cmd/apikey/main.go
 
@@ -116,15 +143,10 @@ gen-apikey: build-apikey ## Generate a new API key (usage: NAME="My Key" DAYS=30
 		echo "       NAME=\"My Key\" DAYS=30 make gen-apikey (with expiration)"; \
 		exit 1; \
 	fi
-	@if [ -z "$(POSTGRES_URL)" ] && [ ! -f .db.env ]; then \
-		echo "Error: POSTGRES_URL environment variable is required"; \
-		echo "Tip: Run 'make db-up' first to start the database and set POSTGRES_URL automatically"; \
-		exit 1; \
-	fi
 	@if [ -z "$(DAYS)" ]; then \
-		if [ -f .db.env ]; then . ./.db.env && ./mono-apikey -name "$(NAME)"; else ./mono-apikey -name "$(NAME)"; fi; \
+		POSTGRES_URL="$(DEV_POSTGRES_URL)" ./mono-apikey -name "$(NAME)"; \
 	else \
-		if [ -f .db.env ]; then . ./.db.env && ./mono-apikey -name "$(NAME)" -days $(DAYS); else ./mono-apikey -name "$(NAME)" -days $(DAYS); fi; \
+		POSTGRES_URL="$(DEV_POSTGRES_URL)" ./mono-apikey -name "$(NAME)" -days $(DAYS); \
 	fi
 
 lint: ## Run linter
@@ -135,14 +157,9 @@ setup-hooks: ## Configure git hooks to run automatically
 	@git config core.hooksPath .githooks
 	@echo "Git hooks configured! Hooks in .githooks/ will now run automatically."
 
-run: build ## Build and run the binary locally (requires MONO_POSTGRES_URL)
+run: build ## Build and run server using dev database
 	@echo "Running server..."
-	@if [ -z "$(MONO_POSTGRES_URL)" ]; then \
-		echo "Error: MONO_POSTGRES_URL environment variable is required"; \
-		echo "Usage: MONO_POSTGRES_URL='postgres://user:pass@localhost:5432/dbname' make run"; \
-		exit 1; \
-	fi
-	MONO_STORAGE_TYPE=postgres MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=true ./$(BINARY_NAME)
+	MONO_POSTGRES_URL="$(DEV_POSTGRES_URL)" MONO_STORAGE_TYPE=postgres MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."
@@ -157,21 +174,23 @@ docker-run: ## Run the Docker container
 	@echo "Running Docker container..."
 	docker run -p 8080:8080 -p 8081:8081 $(DOCKER_IMAGE)
 
-db-up: ## Start PostgreSQL database using Docker Compose
+db-up: ## [DEV DB] Start development database (port 5432)
 	@echo "Starting PostgreSQL database..."
 	docker compose up -d postgres
 	@echo "Waiting for PostgreSQL to be ready..."
 	@sleep 3
-	@echo 'export POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable"' > .db.env
-	@echo "✅ Database URL saved to .db.env"
+	@echo "✅ Database ready at $(DEV_POSTGRES_URL)"
 
-db-down: ## Stop and remove database containers
+db-down: ## [DEV DB] Stop development database
 	@echo "Stopping database containers..."
 	docker compose down
-	@rm -f .db.env
-	@echo "Database environment cleaned up"
 
-db-migrate-up: ## Run database migrations up
+db-clean: ## [DEV DB] Stop and remove development database with all data
+	@echo "Cleaning up development database and volumes..."
+	docker compose down -v
+	@echo "Development database cleaned!"
+
+db-migrate-up: ## Run migrations (usage: DB_URL=... make db-migrate-up)
 	@echo "Running migrations up..."
 	@if [ -z "$(DB_URL)" ]; then \
 		echo "Usage: DB_URL='postgres://user:pass@localhost:5432/dbname' make db-migrate-up"; \
@@ -180,7 +199,7 @@ db-migrate-up: ## Run database migrations up
 	fi
 	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations $(DB_DRIVER) "$(DB_URL)" up
 
-db-migrate-down: ## Rollback last database migration
+db-migrate-down: ## Rollback migration (usage: DB_URL=... make db-migrate-down)
 	@echo "Rolling back migration..."
 	@if [ -z "$(DB_URL)" ]; then \
 		echo "Usage: DB_URL='postgres://user:pass@localhost:5432/dbname' make db-migrate-down"; \
@@ -189,7 +208,7 @@ db-migrate-down: ## Rollback last database migration
 	fi
 	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations $(DB_DRIVER) "$(DB_URL)" down
 
-db-migrate-create: ## Create a new migration file (usage: NAME=create_users make db-migrate-create)
+db-migrate-create: ## Create migration (usage: NAME=create_users make db-migrate-create)
 	@if [ -z "$(NAME)" ]; then \
 		echo "Error: NAME is required"; \
 		echo "Usage: NAME=create_users make db-migrate-create"; \
@@ -198,14 +217,11 @@ db-migrate-create: ## Create a new migration file (usage: NAME=create_users make
 	@echo "Creating new migration: $(NAME)"
 	go run github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations create $(NAME) sql
 
-test-sql: ## Run SQL storage integration tests (requires running database)
+test-sql: ## Run SQL storage tests (requires running database)
 	@echo "Running SQL integration tests..."
 	go test -v ./internal/storage/sql/...
 
-# Integration test targets with database lifecycle
-.PHONY: test-integration test-integration-up test-integration-down test-integration-clean test-integration-full
-
-test-integration-up: ## Start PostgreSQL test database
+test-integration-up: ## [TEST DB] Start test database (port 5433)
 	@echo "Starting PostgreSQL test database..."
 	docker compose -f docker-compose.test.yml up -d
 	@echo "Waiting for PostgreSQL to be ready..."
@@ -225,16 +241,16 @@ test-integration-up: ## Start PostgreSQL test database
 		"postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
 		up
 
-test-integration-down: ## Stop PostgreSQL test database
+test-integration-down: ## [TEST DB] Stop test database
 	@echo "Stopping PostgreSQL test database..."
 	docker compose -f docker-compose.test.yml down
 
-test-integration-clean: ## Stop and remove PostgreSQL test database with volumes
-	@echo "Cleaning up PostgreSQL test database and volumes..."
-	docker compose -f docker-compose.test.yml down -v
-	@echo "Cleanup complete!"
+test-integration-clean: ## [TEST DB] Stop test database (data is ephemeral via tmpfs)
+	@echo "Stopping PostgreSQL test database..."
+	docker compose -f docker-compose.test.yml down
+	@echo "Test database stopped (data was in tmpfs, already gone)"
 
-test-integration: ## Run integration tests with clean database (removes volumes before and after)
+test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 	@echo "=== Cleaning any existing test database ==="
 	@docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
 	@echo ""
@@ -256,36 +272,17 @@ test-integration: ## Run integration tests with clean database (removes volumes 
 		exit $$TEST_RESULT; \
 	fi
 
-test-integration-full: ## Complete integration test cycle: start DB, run migrations, test, cleanup
-	@echo "=== Starting full integration test cycle ==="
-	@$(MAKE) test-integration-up
-	@echo ""
-	@echo "=== Running integration tests ==="
-	@TEST_POSTGRES_URL="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
-		go test -v ./tests/integration/... -count=1; \
-	TEST_RESULT=$$?; \
-	echo ""; \
-	echo "=== Cleaning up test database ==="; \
-	$(MAKE) test-integration-clean; \
-	echo ""; \
-	if [ $$TEST_RESULT -eq 0 ]; then \
-		echo "✅ Integration tests PASSED"; \
-	else \
-		echo "❌ Integration tests FAILED"; \
-		exit $$TEST_RESULT; \
-	fi
-
-test-all: ## Run all tests (unit + integration)
+test-all: ## Run all tests (unit tests + integration tests)
 	@echo "=== Running unit tests ==="
 	@go test -v ./internal/recurring/... ./internal/service/...
 	@echo ""
 	@echo "=== Running integration tests ==="
-	@$(MAKE) test-integration-full
+	@$(MAKE) test-integration
 
 # Helper targets
 .PHONY: test-db-status test-db-logs test-db-shell
 
-test-db-status: ## Check PostgreSQL test database status
+test-db-status: ## [TEST DB] Show test database container status
 	@docker compose -f docker-compose.test.yml ps
 
 test-db-logs: ## Show PostgreSQL test database logs

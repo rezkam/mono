@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/lib/pq"
 	"github.com/rezkam/mono/internal/core"
 	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
 	"github.com/sqlc-dev/pqtype"
@@ -24,15 +24,16 @@ var (
 
 // isForeignKeyViolation checks if an error is a PostgreSQL FK violation
 func isForeignKeyViolation(err error, column string) bool {
-	if pqErr, ok := err.(*pq.Error); ok {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
 		// 23503 is foreign_key_violation
-		if pqErr.Code == "23503" {
+		if pgErr.Code == "23503" {
 			if column == "" {
 				return true
 			}
 			// Check if the constraint name or message contains the column
-			return strings.Contains(pqErr.Constraint, column) ||
-				strings.Contains(pqErr.Message, column)
+			return strings.Contains(pgErr.ConstraintName, column) ||
+				strings.Contains(pgErr.Message, column)
 		}
 	}
 	return false

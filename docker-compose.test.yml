@@ -13,8 +13,5 @@ services:
       interval: 2s
       timeout: 5s
       retries: 10
-    volumes:
-      - postgres_test_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_test_data:
+    tmpfs:
+      - /var/lib/postgresql/data # Ephemeral storage - data lost on container stop

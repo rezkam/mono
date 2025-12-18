@@ -7,7 +7,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/lib/pq v1.10.9
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/sqlc-dev/pqtype v0.3.0
 	github.com/stretchr/testify v1.11.1
