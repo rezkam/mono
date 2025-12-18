@@ -2,7 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
@@ -12,11 +11,12 @@ import (
 
 	"github.com/rezkam/mono/internal/auth"
 	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
+	"golang.org/x/crypto/blake2b"
 )
 
-// hashSecret computes SHA-256 hash of the secret (matches auth package implementation)
+// hashSecret computes BLAKE2b-256 hash of the secret (matches auth package implementation)
 func hashSecret(secret string) string {
-	hash := sha256.Sum256([]byte(secret))
+	hash := blake2b.Sum256([]byte(secret))
 	return hex.EncodeToString(hash[:])
 }
 
@@ -25,7 +25,7 @@ func hashSecret(secret string) string {
 //
 // Run: BENCHMARK_POSTGRES_URL="postgres://..." go test -bench=BenchmarkAuthO1Lookup -benchmem ./internal/auth/
 //
-// Expected: <1ms per auth (SHA-256), consistent across 10/100/1000 keys
+// Expected: <1ms per auth (BLAKE2b-256), consistent across 10/100/1000 keys
 func BenchmarkAuthO1Lookup(b *testing.B) {
 	pgURL := os.Getenv("BENCHMARK_POSTGRES_URL")
 	if pgURL == "" {
@@ -102,7 +102,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 					b.Fatalf("Lookup failed: %v", err)
 				}
 
-				// Verify with SHA-256 constant-time comparison
+				// Verify with BLAKE2b-256 constant-time comparison
 				providedHash := hashSecret(keyParts.LongSecret)
 				if subtle.ConstantTimeCompare([]byte(apiKey.LongSecretHash), []byte(providedHash)) != 1 {
 					b.Fatal("Verification failed")
@@ -243,9 +243,9 @@ func BenchmarkKeyParsing(b *testing.B) {
 	}
 }
 
-// BenchmarkSHA256Hash benchmarks SHA-256 hashing performance.
-// This shows why SHA-256 is fast enough for high-entropy API keys.
-func BenchmarkSHA256Hash(b *testing.B) {
+// BenchmarkBLAKE2bHash benchmarks BLAKE2b-256 hashing performance.
+// This shows BLAKE2b is faster than SHA-256 for high-entropy API keys.
+func BenchmarkBLAKE2bHash(b *testing.B) {
 	secret := "8h3k2jf9s7d6f5g4h3j2k1m0n9p8q7r6s5t4u3v2w1x"
 
 	b.Run("Hash", func(b *testing.B) {
