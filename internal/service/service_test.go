@@ -846,6 +846,108 @@ func TestListTasks(t *testing.T) {
 			t.Errorf("expected 2 items in list1, got %d", len(resp.Items))
 		}
 	})
+
+	t.Run("OrderByValidation_ValidFields", func(t *testing.T) {
+		storage := NewMockStorage()
+		svc := service.NewMonoService(storage, 50, 100)
+		ctx := context.Background()
+
+		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+		svc.CreateItem(ctx, &monov1.CreateItemRequest{ListId: listResp.List.Id, Title: "Item 1"})
+
+		// Test all valid order_by fields
+		validFields := []string{"due_time", "priority", "created_at", "updated_at"}
+		for _, field := range validFields {
+			resp, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
+				OrderBy: field,
+			})
+
+			if err != nil {
+				t.Errorf("unexpected error for valid field %q: %v", field, err)
+			}
+
+			if resp == nil {
+				t.Errorf("expected response for valid field %q", field)
+			}
+		}
+	})
+
+	t.Run("OrderByValidation_InvalidField", func(t *testing.T) {
+		storage := NewMockStorage()
+		svc := service.NewMonoService(storage, 50, 100)
+		ctx := context.Background()
+
+		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+		svc.CreateItem(ctx, &monov1.CreateItemRequest{ListId: listResp.List.Id, Title: "Item 1"})
+
+		// Test invalid order_by field
+		_, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
+			OrderBy: "invalid_field",
+		})
+
+		if err == nil {
+			t.Fatal("expected error for invalid order_by field")
+		}
+
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatal("expected gRPC status error")
+		}
+
+		if st.Code() != codes.InvalidArgument {
+			t.Errorf("expected InvalidArgument, got %v", st.Code())
+		}
+
+		// Verify error message mentions the invalid field
+		if !strings.Contains(st.Message(), "invalid_field") {
+			t.Errorf("expected error message to contain 'invalid_field', got: %s", st.Message())
+		}
+
+		// Verify error message lists valid fields
+		expectedFields := []string{"due_time", "priority", "created_at", "updated_at"}
+		for _, field := range expectedFields {
+			if !strings.Contains(st.Message(), field) {
+				t.Errorf("expected error message to mention valid field %q, got: %s", field, st.Message())
+			}
+		}
+	})
+
+	t.Run("OrderByValidation_SQLInjectionAttempt", func(t *testing.T) {
+		storage := NewMockStorage()
+		svc := service.NewMonoService(storage, 50, 100)
+		ctx := context.Background()
+
+		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+		svc.CreateItem(ctx, &monov1.CreateItemRequest{ListId: listResp.List.Id, Title: "Item 1"})
+
+		// Test SQL injection attempt (should be rejected by validation for UX, not security)
+		maliciousInputs := []string{
+			"id; DROP TABLE todo_items--",
+			"id; DELETE FROM todo_items--",
+			"created_at DESC; UPDATE--",
+		}
+
+		for _, input := range maliciousInputs {
+			_, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
+				OrderBy: input,
+			})
+
+			if err == nil {
+				t.Errorf("expected error for malicious input %q", input)
+				continue
+			}
+
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("expected gRPC status error for input %q", input)
+				continue
+			}
+
+			if st.Code() != codes.InvalidArgument {
+				t.Errorf("expected InvalidArgument for input %q, got %v", input, st.Code())
+			}
+		}
+	})
 }
 
 // TestCreateRecurringTemplate tests the CreateRecurringTemplate gRPC handler.

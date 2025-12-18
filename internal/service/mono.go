@@ -363,7 +363,14 @@ func (s *MonoService) ListTasks(ctx context.Context, req *monov1.ListTasksReques
 	}
 
 	// Set ordering (default: created_at)
+	// Validation provides clear error messages (UX), not security.
+	// SQL injection protection comes from parameterized queries in the storage layer.
 	if req.OrderBy != "" {
+		if !isValidOrderByField(req.OrderBy) {
+			return nil, status.Errorf(codes.InvalidArgument,
+				"invalid order_by field: %q (supported: due_time, priority, created_at, updated_at)",
+				req.OrderBy)
+		}
 		params.OrderBy = req.OrderBy
 	}
 
@@ -558,6 +565,21 @@ func decodePageToken(token string) (int, error) {
 	}
 
 	return offset, nil
+}
+
+// isValidOrderByField validates that the order_by field is one of the supported values.
+// This validation provides clear error messages to API users (UX), not security.
+// Security against SQL injection is guaranteed by parameterized queries in the storage layer.
+// See tests/integration/sql_injection_resistance_test.go for proof that even with direct
+// assignment (params.OrderBy = req.OrderBy) and no validation, SQL injection is impossible.
+func isValidOrderByField(field string) bool {
+	validFields := map[string]bool{
+		"due_time":   true,
+		"priority":   true,
+		"created_at": true,
+		"updated_at": true,
+	}
+	return validFields[field]
 }
 
 // extractUserTimezone extracts the user's timezone from the X-User-Timezone header.

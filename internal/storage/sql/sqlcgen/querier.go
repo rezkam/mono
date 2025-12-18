@@ -13,6 +13,10 @@ import (
 
 type Querier interface {
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error
+	// Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
+	// to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
+	// between the application and database from making jobs temporarily unclaimable.
+	// For future scheduling, pass an explicit timestamp to override the default.
 	CreateGenerationJob(ctx context.Context, arg CreateGenerationJobParams) error
 	CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) error
 	CreateStatusHistoryEntry(ctx context.Context, arg CreateStatusHistoryEntryParams) error
