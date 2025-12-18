@@ -40,7 +40,10 @@ func (g *Generator) GenerateTasksForTemplate(ctx context.Context, template *core
 	// Generate task instances
 	var tasks []core.TodoItem
 	for _, occurrence := range occurrences {
-		task := g.createTaskInstance(template, occurrence)
+		task, err := g.createTaskInstance(template, occurrence)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create task instance for %s: %w", occurrence.Format(time.RFC3339), err)
+		}
 		tasks = append(tasks, task)
 	}
 
@@ -48,12 +51,10 @@ func (g *Generator) GenerateTasksForTemplate(ctx context.Context, template *core
 }
 
 // createTaskInstance creates a single task instance from a template for a specific date.
-func (g *Generator) createTaskInstance(template *core.RecurringTaskTemplate, instanceDate time.Time) core.TodoItem {
+func (g *Generator) createTaskInstance(template *core.RecurringTaskTemplate, instanceDate time.Time) (core.TodoItem, error) {
 	taskIDObj, err := uuid.NewV7()
 	if err != nil {
-		// Fallback to zero-value TodoItem in case of UUID generation failure
-		// This should be extremely rare, but we handle it gracefully
-		return core.TodoItem{}
+		return core.TodoItem{}, fmt.Errorf("failed to generate task ID: %w", err)
 	}
 	taskID := taskIDObj.String()
 
@@ -78,7 +79,7 @@ func (g *Generator) createTaskInstance(template *core.RecurringTaskTemplate, ins
 		InstanceDate:        &instanceDate,
 	}
 
-	return task
+	return task, nil
 }
 
 // GenerateUpcomingTasks generates tasks for all active templates that need generation.

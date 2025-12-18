@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -45,29 +46,29 @@ func main() {
 	defer scheduleTicker.Stop()
 	defer processTicker.Stop()
 
-	log.Println("Recurring task worker started")
-	log.Println("- Job scheduler runs every hour")
-	log.Println("- Job processor runs every 30 seconds")
+	slog.InfoContext(ctx, "Recurring task worker started")
+	slog.InfoContext(ctx, "Job scheduler runs every hour")
+	slog.InfoContext(ctx, "Job processor runs every 30 seconds")
 
 	// Schedule jobs immediately on startup
 	if err := scheduleJobs(ctx, store); err != nil {
-		log.Printf("Error scheduling jobs: %v", err)
+		slog.ErrorContext(ctx, "Error scheduling jobs on startup", "error", err)
 	}
 
 	for {
 		select {
 		case <-scheduleTicker.C:
-			log.Println("Scheduling generation jobs...")
+			slog.InfoContext(ctx, "Scheduling generation jobs")
 			if err := scheduleJobs(ctx, store); err != nil {
-				log.Printf("Error scheduling jobs: %v", err)
+				slog.ErrorContext(ctx, "Error scheduling jobs", "error", err)
 			}
 		case <-processTicker.C:
 			// Process jobs (non-blocking - just claims one job at a time)
 			if err := processNextJob(ctx, generator, store); err != nil {
-				log.Printf("Error processing job: %v", err)
+				slog.ErrorContext(ctx, "Error processing job", "error", err)
 			}
 		case <-sigChan:
-			log.Println("Received shutdown signal, exiting...")
+			slog.InfoContext(ctx, "Received shutdown signal, exiting")
 			return
 		}
 	}
@@ -80,7 +81,7 @@ func scheduleJobs(ctx context.Context, store core.Storage) error {
 		return fmt.Errorf("failed to get active templates: %w", err)
 	}
 
-	log.Printf("Found %d templates needing generation", len(templates))
+	slog.InfoContext(ctx, "Found templates needing generation", "count", len(templates))
 
 	for _, template := range templates {
 		// Calculate generation window
@@ -98,11 +99,17 @@ func scheduleJobs(ctx context.Context, store core.Storage) error {
 		// Create a job for this template
 		jobID, err := store.CreateGenerationJob(ctx, template.ID, time.Now(), start, target)
 		if err != nil {
-			log.Printf("Failed to create job for template %s: %v", template.ID, err)
+			slog.ErrorContext(ctx, "Failed to create job for template",
+				"template_id", template.ID,
+				"template_title", template.Title,
+				"error", err)
 			continue
 		}
 
-		log.Printf("Created job %s for template %s (%s)", jobID, template.ID, template.Title)
+		slog.InfoContext(ctx, "Created generation job",
+			"job_id", jobID,
+			"template_id", template.ID,
+			"template_title", template.Title)
 	}
 
 	return nil
@@ -121,7 +128,7 @@ func processNextJob(ctx context.Context, generator *recurring.Generator, store c
 		return nil
 	}
 
-	log.Printf("Claimed job %s", jobID)
+	slog.InfoContext(ctx, "Claimed generation job", "job_id", jobID)
 
 	// Get job details
 	job, err := store.GetGenerationJob(ctx, jobID)
@@ -137,7 +144,10 @@ func processNextJob(ctx context.Context, generator *recurring.Generator, store c
 		return fmt.Errorf("failed to get template: %w", err)
 	}
 
-	log.Printf("Processing job %s for template %s (%s)", jobID, template.ID, template.Title)
+	slog.InfoContext(ctx, "Processing generation job",
+		"job_id", jobID,
+		"template_id", template.ID,
+		"template_title", template.Title)
 
 	// Generate tasks
 	tasks, err := generator.GenerateTasksForTemplate(ctx, template, job.GenerateFrom, job.GenerateUntil)
@@ -166,20 +176,27 @@ func processNextJob(ctx context.Context, generator *recurring.Generator, store c
 			return fmt.Errorf("failed to update list: %w", err)
 		}
 
-		log.Printf("Generated %d tasks for template %s", len(tasks), template.ID)
+		slog.InfoContext(ctx, "Generated tasks from template",
+			"count", len(tasks),
+			"template_id", template.ID,
+			"template_title", template.Title)
 	}
 
 	// Update template's last_generated_until
 	if err := store.UpdateRecurringTemplateGenerationWindow(ctx, template.ID, job.GenerateUntil); err != nil {
-		log.Printf("Warning: Failed to update template %s generation window: %v", template.ID, err)
+		slog.WarnContext(ctx, "Failed to update template generation window",
+			"template_id", template.ID,
+			"error", err)
 		// Don't fail the job for this - tasks were created successfully
 	}
 
 	// Mark job as completed
 	if err := store.UpdateGenerationJobStatus(ctx, jobID, "COMPLETED", nil); err != nil {
-		log.Printf("Warning: Failed to mark job %s as completed: %v", jobID, err)
+		slog.WarnContext(ctx, "Failed to mark job as completed",
+			"job_id", jobID,
+			"error", err)
 	}
 
-	log.Printf("Completed job %s successfully", jobID)
+	slog.InfoContext(ctx, "Completed generation job successfully", "job_id", jobID)
 	return nil
 }

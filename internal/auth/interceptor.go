@@ -105,7 +105,7 @@ func (a *Authenticator) UnaryInterceptor(
 	if err := a.validateAPIKey(ctx, apiKey); err != nil {
 		// Log detailed error internally for debugging and security monitoring
 		// DO NOT expose detailed error to client - prevents information disclosure attacks
-		slog.Warn("Authentication failed",
+		slog.WarnContext(ctx, "Authentication failed",
 			slog.String("key_prefix", maskAPIKey(apiKey)),
 			slog.String("error", err.Error()))
 
@@ -137,7 +137,7 @@ func (a *Authenticator) processLastUsedUpdates() {
 				ID:         update.keyID,
 			}); err != nil {
 				// Log failure but continue processing (last_used_at is non-critical)
-				slog.Warn("Failed to update API key last_used_at",
+				slog.WarnContext(ctx, "Failed to update API key last_used_at",
 					slog.String("key_id", update.keyID.String()),
 					slog.String("error", err.Error()))
 			}
@@ -221,7 +221,7 @@ func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error
 	default:
 		// Channel full, drop update (last_used_at is non-critical)
 		// This provides backpressure - prevents unbounded goroutine spawning
-		slog.Warn("Dropped last_used_at update due to full queue",
+		slog.WarnContext(ctx, "Dropped last_used_at update due to full queue",
 			slog.String("key_id", key.ID.String()))
 	}
 

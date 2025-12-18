@@ -60,7 +60,7 @@ func run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := lp.Shutdown(shutdownCtx); err != nil {
-			fmt.Printf("failed to shutdown logger provider: %v\n", err)
+			slog.ErrorContext(shutdownCtx, "failed to shutdown logger provider", "error", err)
 		}
 	}()
 	// Set generic logger as default for now
@@ -75,7 +75,7 @@ func run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tp.Shutdown(shutdownCtx); err != nil {
-			slog.Error("failed to shutdown tracer provider", "error", err)
+			slog.ErrorContext(shutdownCtx, "failed to shutdown tracer provider", "error", err)
 		}
 	}()
 
@@ -88,11 +88,11 @@ func run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := mp.Shutdown(shutdownCtx); err != nil {
-			slog.Error("failed to shutdown meter provider", "error", err)
+			slog.ErrorContext(shutdownCtx, "failed to shutdown meter provider", "error", err)
 		}
 	}()
 
-	slog.Info("starting mono service", "env", cfg.Env)
+	slog.InfoContext(ctx, "starting mono service", "env", cfg.Env)
 
 	// Init Storage
 	poolConfig := sqlstorage.DBConfig{
@@ -108,17 +108,17 @@ func run() error {
 	}
 	defer store.Close()
 
-	slog.Info("storage initialized", "url", maskPassword(cfg.PostgresURL))
+	slog.InfoContext(ctx, "storage initialized", "url", maskPassword(cfg.PostgresURL))
 
 	// Init Service
 	svc := service.NewMonoService(store, cfg.DefaultPageSize, cfg.MaxPageSize)
 
 	// Init Authentication
 	authenticator := auth.NewAuthenticator(ctx, store.DB(), store.Queries())
-	slog.Info("API key authentication enabled")
+	slog.InfoContext(ctx, "API key authentication enabled")
 
 	// Init gRPC Server
-	s, lis, err := createGRPCServer(cfg, svc, authenticator)
+	s, lis, err := createGRPCServer(ctx, cfg, svc, authenticator)
 	if err != nil {
 		return fmt.Errorf("failed to create gRPC server: %w", err)
 	}
@@ -137,7 +137,7 @@ func run() error {
 	// This coordination logic stays in run() to maintain visibility of the shutdown sequence
 	select {
 	case <-ctx.Done():
-		slog.Info("shutting down")
+		slog.InfoContext(ctx, "shutting down")
 
 		// Shutdown gRPC server with timeout
 		// Note: REST gateway handles its own shutdown in startRESTGateway()
@@ -152,17 +152,17 @@ func run() error {
 
 		select {
 		case <-done:
-			slog.Info("gRPC server shutdown complete")
+			slog.InfoContext(shutdownCtx, "gRPC server shutdown complete")
 		case <-shutdownCtx.Done():
-			slog.Warn("gRPC server shutdown timed out, forcing stop")
+			slog.WarnContext(shutdownCtx, "gRPC server shutdown timed out, forcing stop")
 			s.Stop()
 		}
 
 		// Shutdown authenticator worker (drains pending last_used_at updates)
 		if err := authenticator.Shutdown(shutdownCtx); err != nil {
-			slog.Warn("authenticator shutdown timeout", "error", err)
+			slog.WarnContext(shutdownCtx, "authenticator shutdown timeout", "error", err)
 		} else {
-			slog.Info("authenticator shutdown complete")
+			slog.InfoContext(shutdownCtx, "authenticator shutdown complete")
 		}
 
 		return nil
@@ -173,7 +173,7 @@ func run() error {
 
 // createGRPCServer creates and configures the gRPC server with keepalive settings,
 // authentication, and observability. Returns the gRPC server, listener, and any error.
-func createGRPCServer(cfg *config.Config, svc *service.MonoService, authenticator *auth.Authenticator) (*grpc.Server, net.Listener, error) {
+func createGRPCServer(ctx context.Context, cfg *config.Config, svc *service.MonoService, authenticator *auth.Authenticator) (*grpc.Server, net.Listener, error) {
 	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to listen: %w", err)
@@ -213,7 +213,7 @@ func createGRPCServer(cfg *config.Config, svc *service.MonoService, authenticato
 	s := grpc.NewServer(serverOpts...)
 	monov1.RegisterMonoServiceServer(s, svc)
 
-	slog.Info("gRPC server listening", "address", lis.Addr())
+	slog.InfoContext(ctx, "gRPC server listening", "address", lis.Addr())
 
 	return s, lis, nil
 }
@@ -240,7 +240,7 @@ func startRESTGateway(ctx context.Context, cfg *config.Config) {
 	// Use main context so REST gateway registration respects graceful shutdown signals
 	grpcEndpoint := cfg.GRPCHost + ":" + cfg.GRPCPort
 	if err := monov1.RegisterMonoServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts); err != nil {
-		slog.Error("failed to register gateway", "error", err)
+		slog.ErrorContext(ctx, "failed to register gateway", "error", err)
 		return
 	}
 
@@ -249,7 +249,7 @@ func startRESTGateway(ctx context.Context, cfg *config.Config) {
 	// The "mono-gateway" name appears as the service name in traces
 	handler := otelhttp.NewHandler(mux, "mono-gateway")
 
-	slog.Info("REST gateway listening", "port", cfg.RESTPort)
+	slog.InfoContext(ctx, "REST gateway listening", "port", cfg.RESTPort)
 	server := &http.Server{
 		Addr:              ":" + cfg.RESTPort,
 		Handler:           handler,
@@ -266,12 +266,12 @@ func startRESTGateway(ctx context.Context, cfg *config.Config) {
 		shutdownCtx, cancel := newShutdownContext(cfg.ShutdownTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			slog.Error("failed to shutdown REST gateway", "error", err)
+			slog.ErrorContext(shutdownCtx, "failed to shutdown REST gateway", "error", err)
 		}
 	}()
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		slog.Error("failed to serve REST gateway", "error", err)
+		slog.ErrorContext(ctx, "failed to serve REST gateway", "error", err)
 	}
 }
 
