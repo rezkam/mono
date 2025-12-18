@@ -34,3 +34,6 @@ Thumbs.db
 # Build artifacts
 dist/
 
+# Git worktrees
+.worktrees/
+
