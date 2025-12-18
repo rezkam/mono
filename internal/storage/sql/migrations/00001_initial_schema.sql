@@ -219,8 +219,8 @@ CREATE TABLE api_keys (
     key_type TEXT NOT NULL,  -- Type of key (e.g., "sk" for secret key, "pk" for public key)
     service TEXT NOT NULL,  -- Service name (e.g., "mono")
     version TEXT NOT NULL,  -- API version (e.g., "v1", "v2")
-    short_token VARCHAR(16) NOT NULL,  -- Short token for O(1) lookup (e.g., "a7f3d8e2")
-    long_secret_hash TEXT NOT NULL,  -- bcrypt hash of the long secret part
+    short_token VARCHAR(16) NOT NULL,  -- Short token for O(1) lookup (12 hex chars derived from BLAKE2b hash)
+    long_secret_hash TEXT NOT NULL,  -- BLAKE2b-256 hash of the long secret part
 
     name TEXT NOT NULL,  -- Descriptive name (e.g., "Production API Key")
     is_active BOOLEAN NOT NULL DEFAULT true,
