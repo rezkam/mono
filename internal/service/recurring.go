@@ -80,7 +80,13 @@ func (s *MonoService) GetRecurringTemplate(ctx context.Context, req *monov1.GetR
 
 	template, err := s.storage.GetRecurringTemplate(ctx, req.Id)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "template not found: %v", err)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "template not found")
+		}
+		if errors.Is(err, repository.ErrInvalidID) {
+			return nil, status.Error(codes.InvalidArgument, "invalid template ID")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to retrieve template: %v", err)
 	}
 
 	return &monov1.GetRecurringTemplateResponse{
@@ -97,7 +103,13 @@ func (s *MonoService) UpdateRecurringTemplate(ctx context.Context, req *monov1.U
 	// Get existing template
 	existing, err := s.storage.GetRecurringTemplate(ctx, req.Template.Id)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "template not found: %v", err)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "template not found")
+		}
+		if errors.Is(err, repository.ErrInvalidID) {
+			return nil, status.Error(codes.InvalidArgument, "invalid template ID")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to retrieve template: %v", err)
 	}
 
 	// Apply updates based on field mask

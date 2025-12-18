@@ -89,12 +89,12 @@ func (s *Store) CreateRecurringTemplate(ctx context.Context, template *core.Recu
 func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*core.RecurringTaskTemplate, error) {
 	templateID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("invalid template id: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidID, err)
 	}
 
 	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, templateID)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("template not found: %s", id)
+		return nil, fmt.Errorf("%w: template %s", ErrNotFound, id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get template: %w", err)

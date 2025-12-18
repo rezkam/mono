@@ -115,13 +115,13 @@ func (s *Store) CreateList(ctx context.Context, list *core.TodoList) error {
 func (s *Store) GetList(ctx context.Context, id string) (*core.TodoList, error) {
 	listUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("invalid list id: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidID, err)
 	}
 
 	// Get the list
 	dbList, err := s.queries.GetTodoList(ctx, listUUID)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("list not found: %s", id)
+		return nil, fmt.Errorf("%w: list %s", ErrNotFound, id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get list: %w", err)

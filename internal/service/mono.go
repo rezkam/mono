@@ -151,7 +151,13 @@ func (s *MonoService) UpdateItem(ctx context.Context, req *monov1.UpdateItemRequ
 
 	list, err := s.storage.GetList(ctx, req.ListId)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "list not found: %v", err)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "list not found")
+		}
+		if errors.Is(err, repository.ErrInvalidID) {
+			return nil, status.Error(codes.InvalidArgument, "invalid list ID")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to retrieve list: %v", err)
 	}
 
 	// Find the item

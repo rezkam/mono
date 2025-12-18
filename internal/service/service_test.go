@@ -1621,12 +1621,12 @@ func (m *MockStorageWithTemplates) GetRecurringTemplate(ctx context.Context, id 
 	if tmpl, ok := m.templates[id]; ok {
 		return tmpl, nil
 	}
-	return nil, fmt.Errorf("not found")
+	return nil, fmt.Errorf("%w: template %s", repository.ErrNotFound, id)
 }
 
 func (m *MockStorageWithTemplates) UpdateRecurringTemplate(ctx context.Context, template *core.RecurringTaskTemplate) error {
 	if _, ok := m.templates[template.ID]; !ok {
-		return fmt.Errorf("not found")
+		return fmt.Errorf("%w: template %s", repository.ErrNotFound, template.ID)
 	}
 	m.templates[template.ID] = template
 	return nil
