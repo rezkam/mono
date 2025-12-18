@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,13 +18,13 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
+	"github.com/rezkam/mono/internal/auth"
 	"github.com/rezkam/mono/internal/config"
-	"github.com/rezkam/mono/internal/core"
 	"github.com/rezkam/mono/internal/service"
-	"github.com/rezkam/mono/internal/storage/fs"
-	"github.com/rezkam/mono/internal/storage/gcs"
+	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
 	"github.com/rezkam/mono/pkg/observability"
 )
 
@@ -37,22 +38,25 @@ func main() {
 }
 
 func run() error {
-	// 1. Load Configuration
+	// Load Configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Create main application context that cancels on SIGTERM/SIGINT
+	// This is the root context for all normal operations
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// 2. Init Observability (Logger, Tracer, Meter)
+	// Init Observability (Logger, Tracer, Meter)
 	// We init logger first to use it for startup logs
 	lp, logger, err := observability.InitLogger(ctx, "mono-service", cfg.OTelCollector, cfg.OTelEnabled)
 	if err != nil {
 		return fmt.Errorf("failed to init logger: %w", err)
 	}
 	defer func() {
+		// Use Background() since main ctx may be cancelled, but we still need to flush logs
 		if err := lp.Shutdown(context.Background()); err != nil {
 			fmt.Printf("failed to shutdown logger provider: %v\n", err)
 		}
@@ -65,6 +69,7 @@ func run() error {
 		return fmt.Errorf("failed to init tracer provider: %w", err)
 	}
 	defer func() {
+		// Use Background() to ensure we flush traces even if main ctx is cancelled
 		if err := tp.Shutdown(context.Background()); err != nil {
 			slog.Error("failed to shutdown tracer provider", "error", err)
 		}
@@ -75,48 +80,42 @@ func run() error {
 		return fmt.Errorf("failed to init meter provider: %w", err)
 	}
 	defer func() {
+		// Use Background() to ensure we flush metrics even if main ctx is cancelled
 		if err := mp.Shutdown(context.Background()); err != nil {
 			slog.Error("failed to shutdown meter provider", "error", err)
 		}
 	}()
 
-	slog.Info("starting mono service", "env", cfg.Env, "storage", cfg.StorageType)
+	slog.Info("starting mono service", "env", cfg.Env)
 
-	// 3. Init Storage
-	var store core.Storage
-	switch cfg.StorageType {
-	case "gcs":
-		if cfg.GCSBucket == "" {
-			return errors.New("bucket is required for gcs storage")
-		}
-		store, err = gcs.NewStore(ctx, cfg.GCSBucket)
-		if err != nil {
-			return fmt.Errorf("failed to create gcs store: %w", err)
-		}
-	case "fs":
-		store, err = fs.NewStore(cfg.FSDir)
-		if err != nil {
-			return fmt.Errorf("failed to create fs store: %w", err)
-		}
-	default:
-		return fmt.Errorf("unknown storage type: %s", cfg.StorageType)
+	// Init Storage
+	poolConfig := sqlstorage.DBConfig{
+		MaxOpenConns:    cfg.DBMaxOpenConns,
+		MaxIdleConns:    cfg.DBMaxIdleConns,
+		ConnMaxLifetime: time.Duration(cfg.DBConnMaxLifetime) * time.Second,
+		ConnMaxIdleTime: time.Duration(cfg.DBConnMaxIdleTime) * time.Second,
 	}
 
-	// 4. Init Service
-	svc := service.NewMonoService(store)
-
-	// 5. Init gRPC Server
-	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	store, err := sqlstorage.NewPostgresStoreWithConfig(ctx, cfg.PostgresURL, poolConfig)
 	if err != nil {
-		return fmt.Errorf("failed to listen: %w", err)
+		return fmt.Errorf("failed to create store: %w", err)
 	}
+	defer store.Close()
 
-	s := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	)
-	monov1.RegisterMonoServiceServer(s, svc)
+	slog.Info("storage initialized", "url", maskPassword(cfg.PostgresURL))
 
-	slog.Info("gRPC server listening", "address", lis.Addr())
+	// Init Service
+	svc := service.NewMonoService(store, cfg.DefaultPageSize, cfg.MaxPageSize)
+
+	// Init Authentication
+	authenticator := auth.NewAuthenticator(store.DB(), store.Queries())
+	slog.Info("API key authentication enabled")
+
+	// Init gRPC Server
+	s, lis, err := createGRPCServer(cfg, svc, authenticator)
+	if err != nil {
+		return fmt.Errorf("failed to create gRPC server: %w", err)
+	}
 
 	errResult := make(chan error, 1)
 	go func() {
@@ -125,46 +124,164 @@ func run() error {
 		}
 	}()
 
-	// 6. Init HTTP Gateway
-	go func() {
-		mux := runtime.NewServeMux()
-		opts := []grpc.DialOption{
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		}
+	// Init REST Gateway (provides REST/JSON API for clients that don't speak gRPC)
+	go startRESTGateway(ctx, cfg)
 
-		// Register the gateway to talk to the gRPC server
-		gwCtx := context.Background()
-		// Gateway talks to localhost:GRPC_PORT
-		if err := monov1.RegisterMonoServiceHandlerFromEndpoint(gwCtx, mux, "localhost:"+cfg.GRPCPort, opts); err != nil {
-			slog.Error("failed to register gateway", "error", err)
-			return
-		}
-
-		handler := otelhttp.NewHandler(mux, "mono-gateway")
-
-		slog.Info("HTTP gateway listening", "port", cfg.HTTPPort)
-		server := &http.Server{
-			Addr:              ":" + cfg.HTTPPort,
-			Handler:           handler,
-			ReadHeaderTimeout: 5 * time.Second, // Production readiness: set timeouts
-		}
-
-		go func() {
-			<-ctx.Done()
-			server.Shutdown(context.Background())
-		}()
-
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("failed to serve HTTP gateway", "error", err)
-		}
-	}()
-
+	// Orchestrate graceful shutdown or handle fatal errors
+	// This coordination logic stays in run() to maintain visibility of the shutdown sequence
 	select {
 	case <-ctx.Done():
 		slog.Info("shutting down")
-		s.GracefulStop()
+
+		// Shutdown gRPC server with timeout
+		// Note: REST gateway handles its own shutdown in startRESTGateway()
+		shutdownCtx, cancel := newShutdownContext(cfg.ShutdownTimeout)
+		defer cancel()
+
+		done := make(chan struct{})
+		go func() {
+			s.GracefulStop()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			slog.Info("gRPC server shutdown complete")
+		case <-shutdownCtx.Done():
+			slog.Warn("gRPC server shutdown timed out, forcing stop")
+			s.Stop()
+		}
+
 		return nil
 	case err := <-errResult:
 		return err
 	}
+}
+
+// createGRPCServer creates and configures the gRPC server with keepalive settings,
+// authentication, and observability. Returns the gRPC server, listener, and any error.
+func createGRPCServer(cfg *config.Config, svc *service.MonoService, authenticator *auth.Authenticator) (*grpc.Server, net.Listener, error) {
+	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to listen: %w", err)
+	}
+
+	// Configure gRPC keepalive parameters
+	keepaliveParams := keepalive.ServerParameters{
+		MaxConnectionIdle:     time.Duration(cfg.GRPCMaxConnectionIdle) * time.Second,
+		MaxConnectionAge:      time.Duration(cfg.GRPCMaxConnectionAge) * time.Second,
+		MaxConnectionAgeGrace: time.Duration(cfg.GRPCMaxConnectionAgeGrace) * time.Second,
+		Time:                  time.Duration(cfg.GRPCKeepaliveTime) * time.Second,
+		Timeout:               time.Duration(cfg.GRPCKeepaliveTimeout) * time.Second,
+	}
+
+	keepaliveEnforcementPolicy := keepalive.EnforcementPolicy{
+		MinTime:             time.Duration(cfg.GRPCKeepaliveEnforcementMinTime) * time.Second,
+		PermitWithoutStream: cfg.GRPCKeepaliveEnforcementPermitWithoutStream,
+	}
+
+	// Build server options with observability
+	// The StatsHandler instruments all incoming gRPC calls with:
+	// - Distributed tracing (creates spans for each RPC)
+	// - Metrics (request count, duration, status codes)
+	// - Automatic trace context extraction from client metadata
+	serverOpts := []grpc.ServerOption{
+		grpc.KeepaliveParams(keepaliveParams),
+		grpc.KeepaliveEnforcementPolicy(keepaliveEnforcementPolicy),
+		grpc.ConnectionTimeout(time.Duration(cfg.GRPCConnectionTimeout) * time.Second),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	}
+
+	// Add authentication interceptor if available
+	if authenticator != nil {
+		serverOpts = append(serverOpts, grpc.UnaryInterceptor(authenticator.UnaryInterceptor))
+	}
+
+	s := grpc.NewServer(serverOpts...)
+	monov1.RegisterMonoServiceServer(s, svc)
+
+	slog.Info("gRPC server listening", "address", lis.Addr())
+
+	return s, lis, nil
+}
+
+// startRESTGateway initializes and starts the REST gateway server.
+// It provides a REST/JSON API for clients that don't speak gRPC, proxying requests
+// to the gRPC server. The REST gateway handles its own graceful shutdown when ctx is cancelled.
+func startRESTGateway(ctx context.Context, cfg *config.Config) {
+	mux := runtime.NewServeMux()
+	// Configure gRPC client options for REST gateway → gRPC server communication
+	// The StatsHandler instruments outgoing gRPC calls from the gateway with:
+	// - Trace context propagation (injects trace ID/span ID into gRPC metadata)
+	// - Distributed tracing (creates client-side spans)
+	// - Metrics (request count, duration, status codes)
+	//
+	// Trace flow: REST client → otelhttp (HTTP span) → gateway → otelgrpc.Client (propagates) → gRPC server → otelgrpc.Server (extracts)
+	// Result: Single distributed trace with parent (REST) and child (gRPC) spans
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	}
+
+	// Register the REST gateway to communicate with the gRPC server
+	// Use main context so REST gateway registration respects graceful shutdown signals
+	grpcEndpoint := cfg.GRPCHost + ":" + cfg.GRPCPort
+	if err := monov1.RegisterMonoServiceHandlerFromEndpoint(ctx, mux, grpcEndpoint, opts); err != nil {
+		slog.Error("failed to register gateway", "error", err)
+		return
+	}
+
+	// Wrap the gateway mux with HTTP instrumentation
+	// This creates spans for incoming REST/JSON requests and propagates trace context
+	// The "mono-gateway" name appears as the service name in traces
+	handler := otelhttp.NewHandler(mux, "mono-gateway")
+
+	slog.Info("REST gateway listening", "port", cfg.RESTPort)
+	server := &http.Server{
+		Addr:              ":" + cfg.RESTPort,
+		Handler:           handler,
+		ReadHeaderTimeout: time.Duration(cfg.RESTReadTimeout) * time.Second,
+		WriteTimeout:      time.Duration(cfg.RESTWriteTimeout) * time.Second,
+		IdleTimeout:       time.Duration(cfg.RESTIdleTimeout) * time.Second,
+	}
+
+	// Handle graceful shutdown
+	go func() {
+		<-ctx.Done()
+		// Create fresh shutdown context (main ctx is already cancelled)
+		// This gives the REST gateway a timeout window to drain connections gracefully
+		shutdownCtx, cancel := newShutdownContext(cfg.ShutdownTimeout)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			slog.Error("failed to shutdown REST gateway", "error", err)
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("failed to serve REST gateway", "error", err)
+	}
+}
+
+// newShutdownContext creates a fresh context with timeout for graceful shutdown operations.
+// Uses Background() since the main context is already cancelled at shutdown time,
+// but we still need a timeout window to complete cleanup operations.
+func newShutdownContext(timeoutSeconds int) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+}
+
+// maskPassword masks the password in a connection string for logging.
+func maskPassword(connStr string) string {
+	u, err := url.Parse(connStr)
+	if err != nil {
+		// If parsing fails, fall back to full redaction to be safe
+		return "[REDACTED]"
+	}
+	// Check if there is a user info part
+	if u.User != nil {
+		if _, hasPassword := u.User.Password(); hasPassword {
+			username := u.User.Username()
+			u.User = url.UserPassword(username, "xxxxxx")
+		}
+	}
+	return u.String()
 }
