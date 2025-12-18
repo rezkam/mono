@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -23,6 +24,16 @@ import (
 func hashSecret(secret string) string {
 	hash := blake2b.Sum256([]byte(secret))
 	return hex.EncodeToString(hash[:])
+}
+
+// maskAPIKey returns a safe-to-log version of an API key showing only the prefix.
+// Example: "sk-mono-v1-a3f5d8c2b4e6-****" → "sk-***"
+func maskAPIKey(apiKey string) string {
+	parts := strings.Split(apiKey, "-")
+	if len(parts) >= 1 {
+		return parts[0] + "-***"
+	}
+	return "***"
 }
 
 // Authenticator handles API key authentication.
@@ -70,7 +81,18 @@ func (a *Authenticator) UnaryInterceptor(
 
 	// Validate API key
 	if err := a.validateAPIKey(ctx, apiKey); err != nil {
-		return nil, status.Error(codes.Unauthenticated, fmt.Sprintf("invalid API key: %v", err))
+		// Log detailed error internally for debugging and security monitoring
+		// DO NOT expose detailed error to client - prevents information disclosure attacks
+		slog.Warn("Authentication failed",
+			slog.String("key_prefix", maskAPIKey(apiKey)),
+			slog.String("error", err.Error()))
+
+		// Return generic error (same message for all failure types)
+		// This prevents attackers from:
+		// - Enumerating valid short tokens
+		// - Distinguishing between "not found" vs "wrong secret"
+		// - Identifying expired keys
+		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
 
 	// Call the handler
