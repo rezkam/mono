@@ -19,12 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MonoService_CreateList_FullMethodName = "/mono.v1.MonoService/CreateList"
-	MonoService_GetList_FullMethodName    = "/mono.v1.MonoService/GetList"
-	MonoService_CreateItem_FullMethodName = "/mono.v1.MonoService/CreateItem"
-	MonoService_UpdateItem_FullMethodName = "/mono.v1.MonoService/UpdateItem"
-	MonoService_ListLists_FullMethodName  = "/mono.v1.MonoService/ListLists"
-	MonoService_ListTasks_FullMethodName  = "/mono.v1.MonoService/ListTasks"
+	MonoService_CreateList_FullMethodName              = "/mono.v1.MonoService/CreateList"
+	MonoService_GetList_FullMethodName                 = "/mono.v1.MonoService/GetList"
+	MonoService_CreateItem_FullMethodName              = "/mono.v1.MonoService/CreateItem"
+	MonoService_UpdateItem_FullMethodName              = "/mono.v1.MonoService/UpdateItem"
+	MonoService_ListLists_FullMethodName               = "/mono.v1.MonoService/ListLists"
+	MonoService_ListTasks_FullMethodName               = "/mono.v1.MonoService/ListTasks"
+	MonoService_CreateRecurringTemplate_FullMethodName = "/mono.v1.MonoService/CreateRecurringTemplate"
+	MonoService_GetRecurringTemplate_FullMethodName    = "/mono.v1.MonoService/GetRecurringTemplate"
+	MonoService_UpdateRecurringTemplate_FullMethodName = "/mono.v1.MonoService/UpdateRecurringTemplate"
+	MonoService_DeleteRecurringTemplate_FullMethodName = "/mono.v1.MonoService/DeleteRecurringTemplate"
+	MonoService_ListRecurringTemplates_FullMethodName  = "/mono.v1.MonoService/ListRecurringTemplates"
 )
 
 // MonoServiceClient is the client API for MonoService service.
@@ -38,6 +43,12 @@ type MonoServiceClient interface {
 	ListLists(ctx context.Context, in *ListListsRequest, opts ...grpc.CallOption) (*ListListsResponse, error)
 	// ListTasks retrieves tasks with filtering and sorting support.
 	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
+	// Recurring task template management
+	CreateRecurringTemplate(ctx context.Context, in *CreateRecurringTemplateRequest, opts ...grpc.CallOption) (*CreateRecurringTemplateResponse, error)
+	GetRecurringTemplate(ctx context.Context, in *GetRecurringTemplateRequest, opts ...grpc.CallOption) (*GetRecurringTemplateResponse, error)
+	UpdateRecurringTemplate(ctx context.Context, in *UpdateRecurringTemplateRequest, opts ...grpc.CallOption) (*UpdateRecurringTemplateResponse, error)
+	DeleteRecurringTemplate(ctx context.Context, in *DeleteRecurringTemplateRequest, opts ...grpc.CallOption) (*DeleteRecurringTemplateResponse, error)
+	ListRecurringTemplates(ctx context.Context, in *ListRecurringTemplatesRequest, opts ...grpc.CallOption) (*ListRecurringTemplatesResponse, error)
 }
 
 type monoServiceClient struct {
@@ -108,6 +119,56 @@ func (c *monoServiceClient) ListTasks(ctx context.Context, in *ListTasksRequest,
 	return out, nil
 }
 
+func (c *monoServiceClient) CreateRecurringTemplate(ctx context.Context, in *CreateRecurringTemplateRequest, opts ...grpc.CallOption) (*CreateRecurringTemplateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateRecurringTemplateResponse)
+	err := c.cc.Invoke(ctx, MonoService_CreateRecurringTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *monoServiceClient) GetRecurringTemplate(ctx context.Context, in *GetRecurringTemplateRequest, opts ...grpc.CallOption) (*GetRecurringTemplateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRecurringTemplateResponse)
+	err := c.cc.Invoke(ctx, MonoService_GetRecurringTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *monoServiceClient) UpdateRecurringTemplate(ctx context.Context, in *UpdateRecurringTemplateRequest, opts ...grpc.CallOption) (*UpdateRecurringTemplateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateRecurringTemplateResponse)
+	err := c.cc.Invoke(ctx, MonoService_UpdateRecurringTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *monoServiceClient) DeleteRecurringTemplate(ctx context.Context, in *DeleteRecurringTemplateRequest, opts ...grpc.CallOption) (*DeleteRecurringTemplateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteRecurringTemplateResponse)
+	err := c.cc.Invoke(ctx, MonoService_DeleteRecurringTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *monoServiceClient) ListRecurringTemplates(ctx context.Context, in *ListRecurringTemplatesRequest, opts ...grpc.CallOption) (*ListRecurringTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRecurringTemplatesResponse)
+	err := c.cc.Invoke(ctx, MonoService_ListRecurringTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MonoServiceServer is the server API for MonoService service.
 // All implementations must embed UnimplementedMonoServiceServer
 // for forward compatibility.
@@ -119,6 +180,12 @@ type MonoServiceServer interface {
 	ListLists(context.Context, *ListListsRequest) (*ListListsResponse, error)
 	// ListTasks retrieves tasks with filtering and sorting support.
 	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
+	// Recurring task template management
+	CreateRecurringTemplate(context.Context, *CreateRecurringTemplateRequest) (*CreateRecurringTemplateResponse, error)
+	GetRecurringTemplate(context.Context, *GetRecurringTemplateRequest) (*GetRecurringTemplateResponse, error)
+	UpdateRecurringTemplate(context.Context, *UpdateRecurringTemplateRequest) (*UpdateRecurringTemplateResponse, error)
+	DeleteRecurringTemplate(context.Context, *DeleteRecurringTemplateRequest) (*DeleteRecurringTemplateResponse, error)
+	ListRecurringTemplates(context.Context, *ListRecurringTemplatesRequest) (*ListRecurringTemplatesResponse, error)
 	mustEmbedUnimplementedMonoServiceServer()
 }
 
@@ -146,6 +213,21 @@ func (UnimplementedMonoServiceServer) ListLists(context.Context, *ListListsReque
 }
 func (UnimplementedMonoServiceServer) ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListTasks not implemented")
+}
+func (UnimplementedMonoServiceServer) CreateRecurringTemplate(context.Context, *CreateRecurringTemplateRequest) (*CreateRecurringTemplateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateRecurringTemplate not implemented")
+}
+func (UnimplementedMonoServiceServer) GetRecurringTemplate(context.Context, *GetRecurringTemplateRequest) (*GetRecurringTemplateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetRecurringTemplate not implemented")
+}
+func (UnimplementedMonoServiceServer) UpdateRecurringTemplate(context.Context, *UpdateRecurringTemplateRequest) (*UpdateRecurringTemplateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateRecurringTemplate not implemented")
+}
+func (UnimplementedMonoServiceServer) DeleteRecurringTemplate(context.Context, *DeleteRecurringTemplateRequest) (*DeleteRecurringTemplateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteRecurringTemplate not implemented")
+}
+func (UnimplementedMonoServiceServer) ListRecurringTemplates(context.Context, *ListRecurringTemplatesRequest) (*ListRecurringTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRecurringTemplates not implemented")
 }
 func (UnimplementedMonoServiceServer) mustEmbedUnimplementedMonoServiceServer() {}
 func (UnimplementedMonoServiceServer) testEmbeddedByValue()                     {}
@@ -276,6 +358,96 @@ func _MonoService_ListTasks_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MonoService_CreateRecurringTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateRecurringTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonoServiceServer).CreateRecurringTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonoService_CreateRecurringTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonoServiceServer).CreateRecurringTemplate(ctx, req.(*CreateRecurringTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MonoService_GetRecurringTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRecurringTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonoServiceServer).GetRecurringTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonoService_GetRecurringTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonoServiceServer).GetRecurringTemplate(ctx, req.(*GetRecurringTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MonoService_UpdateRecurringTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRecurringTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonoServiceServer).UpdateRecurringTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonoService_UpdateRecurringTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonoServiceServer).UpdateRecurringTemplate(ctx, req.(*UpdateRecurringTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MonoService_DeleteRecurringTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRecurringTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonoServiceServer).DeleteRecurringTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonoService_DeleteRecurringTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonoServiceServer).DeleteRecurringTemplate(ctx, req.(*DeleteRecurringTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MonoService_ListRecurringTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRecurringTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MonoServiceServer).ListRecurringTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MonoService_ListRecurringTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MonoServiceServer).ListRecurringTemplates(ctx, req.(*ListRecurringTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MonoService_ServiceDesc is the grpc.ServiceDesc for MonoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -306,6 +478,26 @@ var MonoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTasks",
 			Handler:    _MonoService_ListTasks_Handler,
+		},
+		{
+			MethodName: "CreateRecurringTemplate",
+			Handler:    _MonoService_CreateRecurringTemplate_Handler,
+		},
+		{
+			MethodName: "GetRecurringTemplate",
+			Handler:    _MonoService_GetRecurringTemplate_Handler,
+		},
+		{
+			MethodName: "UpdateRecurringTemplate",
+			Handler:    _MonoService_UpdateRecurringTemplate_Handler,
+		},
+		{
+			MethodName: "DeleteRecurringTemplate",
+			Handler:    _MonoService_DeleteRecurringTemplate_Handler,
+		},
+		{
+			MethodName: "ListRecurringTemplates",
+			Handler:    _MonoService_ListRecurringTemplates_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

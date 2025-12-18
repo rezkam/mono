@@ -11,6 +11,7 @@ import (
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
@@ -25,14 +26,228 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// TaskStatus represents the current state of a task.
+// Valid values:
+//   - TASK_STATUS_TODO: Task is ready to be worked on
+//   - TASK_STATUS_IN_PROGRESS: Task is actively being worked on
+//   - TASK_STATUS_BLOCKED: Task is blocked by external dependencies
+//   - TASK_STATUS_DONE: Task is completed
+//   - TASK_STATUS_ARCHIVED: Task is archived for record keeping
+//   - TASK_STATUS_CANCELLED: Task was cancelled and won't be completed
+type TaskStatus int32
+
+const (
+	TaskStatus_TASK_STATUS_UNSPECIFIED TaskStatus = 0 // Default value, not set
+	TaskStatus_TASK_STATUS_TODO        TaskStatus = 1 // Ready to start
+	TaskStatus_TASK_STATUS_IN_PROGRESS TaskStatus = 2 // Currently being worked on
+	TaskStatus_TASK_STATUS_BLOCKED     TaskStatus = 3 // Blocked by dependencies
+	TaskStatus_TASK_STATUS_DONE        TaskStatus = 4 // Completed successfully
+	TaskStatus_TASK_STATUS_ARCHIVED    TaskStatus = 5 // Archived for records
+	TaskStatus_TASK_STATUS_CANCELLED   TaskStatus = 6 // Cancelled, won't complete
+)
+
+// Enum value maps for TaskStatus.
+var (
+	TaskStatus_name = map[int32]string{
+		0: "TASK_STATUS_UNSPECIFIED",
+		1: "TASK_STATUS_TODO",
+		2: "TASK_STATUS_IN_PROGRESS",
+		3: "TASK_STATUS_BLOCKED",
+		4: "TASK_STATUS_DONE",
+		5: "TASK_STATUS_ARCHIVED",
+		6: "TASK_STATUS_CANCELLED",
+	}
+	TaskStatus_value = map[string]int32{
+		"TASK_STATUS_UNSPECIFIED": 0,
+		"TASK_STATUS_TODO":        1,
+		"TASK_STATUS_IN_PROGRESS": 2,
+		"TASK_STATUS_BLOCKED":     3,
+		"TASK_STATUS_DONE":        4,
+		"TASK_STATUS_ARCHIVED":    5,
+		"TASK_STATUS_CANCELLED":   6,
+	}
+)
+
+func (x TaskStatus) Enum() *TaskStatus {
+	p := new(TaskStatus)
+	*p = x
+	return p
+}
+
+func (x TaskStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TaskStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_mono_v1_mono_proto_enumTypes[0].Descriptor()
+}
+
+func (TaskStatus) Type() protoreflect.EnumType {
+	return &file_mono_v1_mono_proto_enumTypes[0]
+}
+
+func (x TaskStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaskStatus.Descriptor instead.
+func (TaskStatus) EnumDescriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{0}
+}
+
+// TaskPriority indicates the importance and urgency of a task.
+// Valid values:
+//   - TASK_PRIORITY_LOW: Nice to have, low urgency
+//   - TASK_PRIORITY_MEDIUM: Standard priority, default for most tasks
+//   - TASK_PRIORITY_HIGH: Important, should be done soon
+//   - TASK_PRIORITY_URGENT: Critical, requires immediate attention
+type TaskPriority int32
+
+const (
+	TaskPriority_TASK_PRIORITY_UNSPECIFIED TaskPriority = 0 // Default value, not set
+	TaskPriority_TASK_PRIORITY_LOW         TaskPriority = 1 // Low priority
+	TaskPriority_TASK_PRIORITY_MEDIUM      TaskPriority = 2 // Medium priority (recommended default)
+	TaskPriority_TASK_PRIORITY_HIGH        TaskPriority = 3 // High priority
+	TaskPriority_TASK_PRIORITY_URGENT      TaskPriority = 4 // Urgent, needs immediate attention
+)
+
+// Enum value maps for TaskPriority.
+var (
+	TaskPriority_name = map[int32]string{
+		0: "TASK_PRIORITY_UNSPECIFIED",
+		1: "TASK_PRIORITY_LOW",
+		2: "TASK_PRIORITY_MEDIUM",
+		3: "TASK_PRIORITY_HIGH",
+		4: "TASK_PRIORITY_URGENT",
+	}
+	TaskPriority_value = map[string]int32{
+		"TASK_PRIORITY_UNSPECIFIED": 0,
+		"TASK_PRIORITY_LOW":         1,
+		"TASK_PRIORITY_MEDIUM":      2,
+		"TASK_PRIORITY_HIGH":        3,
+		"TASK_PRIORITY_URGENT":      4,
+	}
+)
+
+func (x TaskPriority) Enum() *TaskPriority {
+	p := new(TaskPriority)
+	*p = x
+	return p
+}
+
+func (x TaskPriority) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TaskPriority) Descriptor() protoreflect.EnumDescriptor {
+	return file_mono_v1_mono_proto_enumTypes[1].Descriptor()
+}
+
+func (TaskPriority) Type() protoreflect.EnumType {
+	return &file_mono_v1_mono_proto_enumTypes[1]
+}
+
+func (x TaskPriority) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaskPriority.Descriptor instead.
+func (TaskPriority) EnumDescriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{1}
+}
+
+// RecurrencePattern defines how often a recurring task should repeat.
+// Valid values:
+//   - RECURRENCE_PATTERN_DAILY: Repeats every day
+//   - RECURRENCE_PATTERN_WEEKLY: Repeats every week on the same day
+//   - RECURRENCE_PATTERN_BIWEEKLY: Repeats every two weeks
+//   - RECURRENCE_PATTERN_MONTHLY: Repeats on the same day each month
+//   - RECURRENCE_PATTERN_YEARLY: Repeats once per year
+//   - RECURRENCE_PATTERN_QUARTERLY: Repeats every 3 months
+//   - RECURRENCE_PATTERN_WEEKDAYS: Repeats on weekdays only (Monday-Friday)
+type RecurrencePattern int32
+
+const (
+	RecurrencePattern_RECURRENCE_PATTERN_UNSPECIFIED RecurrencePattern = 0 // Default value, not set
+	RecurrencePattern_RECURRENCE_PATTERN_DAILY       RecurrencePattern = 1 // Every day
+	RecurrencePattern_RECURRENCE_PATTERN_WEEKLY      RecurrencePattern = 2 // Every week
+	RecurrencePattern_RECURRENCE_PATTERN_BIWEEKLY    RecurrencePattern = 3 // Every 2 weeks
+	RecurrencePattern_RECURRENCE_PATTERN_MONTHLY     RecurrencePattern = 4 // Every month
+	RecurrencePattern_RECURRENCE_PATTERN_YEARLY      RecurrencePattern = 5 // Every year
+	RecurrencePattern_RECURRENCE_PATTERN_QUARTERLY   RecurrencePattern = 6 // Every 3 months
+	RecurrencePattern_RECURRENCE_PATTERN_WEEKDAYS    RecurrencePattern = 7 // Monday through Friday
+)
+
+// Enum value maps for RecurrencePattern.
+var (
+	RecurrencePattern_name = map[int32]string{
+		0: "RECURRENCE_PATTERN_UNSPECIFIED",
+		1: "RECURRENCE_PATTERN_DAILY",
+		2: "RECURRENCE_PATTERN_WEEKLY",
+		3: "RECURRENCE_PATTERN_BIWEEKLY",
+		4: "RECURRENCE_PATTERN_MONTHLY",
+		5: "RECURRENCE_PATTERN_YEARLY",
+		6: "RECURRENCE_PATTERN_QUARTERLY",
+		7: "RECURRENCE_PATTERN_WEEKDAYS",
+	}
+	RecurrencePattern_value = map[string]int32{
+		"RECURRENCE_PATTERN_UNSPECIFIED": 0,
+		"RECURRENCE_PATTERN_DAILY":       1,
+		"RECURRENCE_PATTERN_WEEKLY":      2,
+		"RECURRENCE_PATTERN_BIWEEKLY":    3,
+		"RECURRENCE_PATTERN_MONTHLY":     4,
+		"RECURRENCE_PATTERN_YEARLY":      5,
+		"RECURRENCE_PATTERN_QUARTERLY":   6,
+		"RECURRENCE_PATTERN_WEEKDAYS":    7,
+	}
+)
+
+func (x RecurrencePattern) Enum() *RecurrencePattern {
+	p := new(RecurrencePattern)
+	*p = x
+	return p
+}
+
+func (x RecurrencePattern) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RecurrencePattern) Descriptor() protoreflect.EnumDescriptor {
+	return file_mono_v1_mono_proto_enumTypes[2].Descriptor()
+}
+
+func (RecurrencePattern) Type() protoreflect.EnumType {
+	return &file_mono_v1_mono_proto_enumTypes[2]
+}
+
+func (x RecurrencePattern) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RecurrencePattern.Descriptor instead.
+func (RecurrencePattern) EnumDescriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{2}
+}
+
 type TodoItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Completed     bool                   `protobuf:"varint,3,opt,name=completed,proto3" json:"completed,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	DueTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
-	Tags          []string               `protobuf:"bytes,6,rep,name=tags,proto3" json:"tags,omitempty"`
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title             string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Status            TaskStatus             `protobuf:"varint,3,opt,name=status,proto3,enum=mono.v1.TaskStatus" json:"status,omitempty"`
+	Priority          TaskPriority           `protobuf:"varint,7,opt,name=priority,proto3,enum=mono.v1.TaskPriority" json:"priority,omitempty"`
+	CreateTime        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	DueTime           *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
+	Tags              []string               `protobuf:"bytes,6,rep,name=tags,proto3" json:"tags,omitempty"`
+	EstimatedDuration *durationpb.Duration   `protobuf:"bytes,9,opt,name=estimated_duration,json=estimatedDuration,proto3" json:"estimated_duration,omitempty"`
+	ActualDuration    *durationpb.Duration   `protobuf:"bytes,10,opt,name=actual_duration,json=actualDuration,proto3" json:"actual_duration,omitempty"`
+	// Recurring task metadata
+	RecurringTemplateId string                 `protobuf:"bytes,11,opt,name=recurring_template_id,json=recurringTemplateId,proto3" json:"recurring_template_id,omitempty"` // ID of the template this task was generated from (empty if not recurring)
+	InstanceDate        *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=instance_date,json=instanceDate,proto3" json:"instance_date,omitempty"`                        // Anchor date for this recurring instance
+	// Timezone for due_time interpretation
+	// Empty/null = floating time (9am stays 9am in user's current timezone)
+	// Non-empty = fixed timezone (absolute moment in specified IANA timezone like 'Europe/Stockholm')
+	Timezone      string `protobuf:"bytes,13,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,16 +296,30 @@ func (x *TodoItem) GetTitle() string {
 	return ""
 }
 
-func (x *TodoItem) GetCompleted() bool {
+func (x *TodoItem) GetStatus() TaskStatus {
 	if x != nil {
-		return x.Completed
+		return x.Status
 	}
-	return false
+	return TaskStatus_TASK_STATUS_UNSPECIFIED
+}
+
+func (x *TodoItem) GetPriority() TaskPriority {
+	if x != nil {
+		return x.Priority
+	}
+	return TaskPriority_TASK_PRIORITY_UNSPECIFIED
 }
 
 func (x *TodoItem) GetCreateTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *TodoItem) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
 	}
 	return nil
 }
@@ -109,12 +338,50 @@ func (x *TodoItem) GetTags() []string {
 	return nil
 }
 
+func (x *TodoItem) GetEstimatedDuration() *durationpb.Duration {
+	if x != nil {
+		return x.EstimatedDuration
+	}
+	return nil
+}
+
+func (x *TodoItem) GetActualDuration() *durationpb.Duration {
+	if x != nil {
+		return x.ActualDuration
+	}
+	return nil
+}
+
+func (x *TodoItem) GetRecurringTemplateId() string {
+	if x != nil {
+		return x.RecurringTemplateId
+	}
+	return ""
+}
+
+func (x *TodoItem) GetInstanceDate() *timestamppb.Timestamp {
+	if x != nil {
+		return x.InstanceDate
+	}
+	return nil
+}
+
+func (x *TodoItem) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
 type TodoList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Items         []*TodoItem            `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title      string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Items      []*TodoItem            `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Item count statistics (populated when listing, empty when getting single list)
+	TotalItems    int32 `protobuf:"varint,5,opt,name=total_items,json=totalItems,proto3" json:"total_items,omitempty"`    // Total items in this list
+	UndoneItems   int32 `protobuf:"varint,6,opt,name=undone_items,json=undoneItems,proto3" json:"undone_items,omitempty"` // Items with status TODO, IN_PROGRESS, or BLOCKED
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -175,6 +442,20 @@ func (x *TodoList) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *TodoList) GetTotalItems() int32 {
+	if x != nil {
+		return x.TotalItems
+	}
+	return 0
+}
+
+func (x *TodoList) GetUndoneItems() int32 {
+	if x != nil {
+		return x.UndoneItems
+	}
+	return 0
 }
 
 type CreateListRequest struct {
@@ -354,13 +635,18 @@ func (x *GetListResponse) GetList() *TodoList {
 }
 
 type CreateItemRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ListId        string                 `protobuf:"bytes,1,opt,name=list_id,json=listId,proto3" json:"list_id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	DueTime       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
-	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ListId              string                 `protobuf:"bytes,1,opt,name=list_id,json=listId,proto3" json:"list_id,omitempty"`
+	Title               string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	DueTime             *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
+	Tags                []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	Priority            TaskPriority           `protobuf:"varint,5,opt,name=priority,proto3,enum=mono.v1.TaskPriority" json:"priority,omitempty"`
+	EstimatedDuration   *durationpb.Duration   `protobuf:"bytes,6,opt,name=estimated_duration,json=estimatedDuration,proto3" json:"estimated_duration,omitempty"`
+	RecurringTemplateId string                 `protobuf:"bytes,7,opt,name=recurring_template_id,json=recurringTemplateId,proto3" json:"recurring_template_id,omitempty"` // Optional: ID of the template this task is generated from
+	InstanceDate        *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=instance_date,json=instanceDate,proto3" json:"instance_date,omitempty"`                        // Optional: Anchor date for this recurring instance
+	Timezone            string                 `protobuf:"bytes,9,opt,name=timezone,proto3" json:"timezone,omitempty"`                                                    // Optional: IANA timezone (e.g., 'Europe/Stockholm'). Empty = floating time
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CreateItemRequest) Reset() {
@@ -419,6 +705,41 @@ func (x *CreateItemRequest) GetTags() []string {
 		return x.Tags
 	}
 	return nil
+}
+
+func (x *CreateItemRequest) GetPriority() TaskPriority {
+	if x != nil {
+		return x.Priority
+	}
+	return TaskPriority_TASK_PRIORITY_UNSPECIFIED
+}
+
+func (x *CreateItemRequest) GetEstimatedDuration() *durationpb.Duration {
+	if x != nil {
+		return x.EstimatedDuration
+	}
+	return nil
+}
+
+func (x *CreateItemRequest) GetRecurringTemplateId() string {
+	if x != nil {
+		return x.RecurringTemplateId
+	}
+	return ""
+}
+
+func (x *CreateItemRequest) GetInstanceDate() *timestamppb.Timestamp {
+	if x != nil {
+		return x.InstanceDate
+	}
+	return nil
+}
+
+func (x *CreateItemRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
 }
 
 type CreateItemResponse struct {
@@ -780,25 +1101,697 @@ func (x *ListTasksResponse) GetNextPageToken() string {
 	return ""
 }
 
+type RecurringTaskTemplate struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ListId               string                 `protobuf:"bytes,2,opt,name=list_id,json=listId,proto3" json:"list_id,omitempty"`
+	Title                string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Tags                 []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	Priority             TaskPriority           `protobuf:"varint,5,opt,name=priority,proto3,enum=mono.v1.TaskPriority" json:"priority,omitempty"`
+	EstimatedDuration    *durationpb.Duration   `protobuf:"bytes,6,opt,name=estimated_duration,json=estimatedDuration,proto3" json:"estimated_duration,omitempty"`
+	RecurrencePattern    RecurrencePattern      `protobuf:"varint,7,opt,name=recurrence_pattern,json=recurrencePattern,proto3,enum=mono.v1.RecurrencePattern" json:"recurrence_pattern,omitempty"`
+	RecurrenceConfig     string                 `protobuf:"bytes,8,opt,name=recurrence_config,json=recurrenceConfig,proto3" json:"recurrence_config,omitempty"` // JSON config for pattern-specific settings
+	DueOffset            *durationpb.Duration   `protobuf:"bytes,9,opt,name=due_offset,json=dueOffset,proto3" json:"due_offset,omitempty"`
+	IsActive             bool                   `protobuf:"varint,10,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt            *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	LastGeneratedUntil   *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_generated_until,json=lastGeneratedUntil,proto3" json:"last_generated_until,omitempty"`
+	GenerationWindowDays int32                  `protobuf:"varint,14,opt,name=generation_window_days,json=generationWindowDays,proto3" json:"generation_window_days,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *RecurringTaskTemplate) Reset() {
+	*x = RecurringTaskTemplate{}
+	mi := &file_mono_v1_mono_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecurringTaskTemplate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecurringTaskTemplate) ProtoMessage() {}
+
+func (x *RecurringTaskTemplate) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecurringTaskTemplate.ProtoReflect.Descriptor instead.
+func (*RecurringTaskTemplate) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RecurringTaskTemplate) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RecurringTaskTemplate) GetListId() string {
+	if x != nil {
+		return x.ListId
+	}
+	return ""
+}
+
+func (x *RecurringTaskTemplate) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *RecurringTaskTemplate) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *RecurringTaskTemplate) GetPriority() TaskPriority {
+	if x != nil {
+		return x.Priority
+	}
+	return TaskPriority_TASK_PRIORITY_UNSPECIFIED
+}
+
+func (x *RecurringTaskTemplate) GetEstimatedDuration() *durationpb.Duration {
+	if x != nil {
+		return x.EstimatedDuration
+	}
+	return nil
+}
+
+func (x *RecurringTaskTemplate) GetRecurrencePattern() RecurrencePattern {
+	if x != nil {
+		return x.RecurrencePattern
+	}
+	return RecurrencePattern_RECURRENCE_PATTERN_UNSPECIFIED
+}
+
+func (x *RecurringTaskTemplate) GetRecurrenceConfig() string {
+	if x != nil {
+		return x.RecurrenceConfig
+	}
+	return ""
+}
+
+func (x *RecurringTaskTemplate) GetDueOffset() *durationpb.Duration {
+	if x != nil {
+		return x.DueOffset
+	}
+	return nil
+}
+
+func (x *RecurringTaskTemplate) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *RecurringTaskTemplate) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *RecurringTaskTemplate) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *RecurringTaskTemplate) GetLastGeneratedUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastGeneratedUntil
+	}
+	return nil
+}
+
+func (x *RecurringTaskTemplate) GetGenerationWindowDays() int32 {
+	if x != nil {
+		return x.GenerationWindowDays
+	}
+	return 0
+}
+
+type CreateRecurringTemplateRequest struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	ListId               string                 `protobuf:"bytes,1,opt,name=list_id,json=listId,proto3" json:"list_id,omitempty"`
+	Title                string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Tags                 []string               `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`
+	Priority             TaskPriority           `protobuf:"varint,4,opt,name=priority,proto3,enum=mono.v1.TaskPriority" json:"priority,omitempty"`
+	EstimatedDuration    *durationpb.Duration   `protobuf:"bytes,5,opt,name=estimated_duration,json=estimatedDuration,proto3" json:"estimated_duration,omitempty"`
+	RecurrencePattern    RecurrencePattern      `protobuf:"varint,6,opt,name=recurrence_pattern,json=recurrencePattern,proto3,enum=mono.v1.RecurrencePattern" json:"recurrence_pattern,omitempty"`
+	RecurrenceConfig     string                 `protobuf:"bytes,7,opt,name=recurrence_config,json=recurrenceConfig,proto3" json:"recurrence_config,omitempty"` // JSON config
+	DueOffset            *durationpb.Duration   `protobuf:"bytes,8,opt,name=due_offset,json=dueOffset,proto3" json:"due_offset,omitempty"`
+	GenerationWindowDays int32                  `protobuf:"varint,9,opt,name=generation_window_days,json=generationWindowDays,proto3" json:"generation_window_days,omitempty"` // Default 30 days
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *CreateRecurringTemplateRequest) Reset() {
+	*x = CreateRecurringTemplateRequest{}
+	mi := &file_mono_v1_mono_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateRecurringTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateRecurringTemplateRequest) ProtoMessage() {}
+
+func (x *CreateRecurringTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateRecurringTemplateRequest.ProtoReflect.Descriptor instead.
+func (*CreateRecurringTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CreateRecurringTemplateRequest) GetListId() string {
+	if x != nil {
+		return x.ListId
+	}
+	return ""
+}
+
+func (x *CreateRecurringTemplateRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateRecurringTemplateRequest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *CreateRecurringTemplateRequest) GetPriority() TaskPriority {
+	if x != nil {
+		return x.Priority
+	}
+	return TaskPriority_TASK_PRIORITY_UNSPECIFIED
+}
+
+func (x *CreateRecurringTemplateRequest) GetEstimatedDuration() *durationpb.Duration {
+	if x != nil {
+		return x.EstimatedDuration
+	}
+	return nil
+}
+
+func (x *CreateRecurringTemplateRequest) GetRecurrencePattern() RecurrencePattern {
+	if x != nil {
+		return x.RecurrencePattern
+	}
+	return RecurrencePattern_RECURRENCE_PATTERN_UNSPECIFIED
+}
+
+func (x *CreateRecurringTemplateRequest) GetRecurrenceConfig() string {
+	if x != nil {
+		return x.RecurrenceConfig
+	}
+	return ""
+}
+
+func (x *CreateRecurringTemplateRequest) GetDueOffset() *durationpb.Duration {
+	if x != nil {
+		return x.DueOffset
+	}
+	return nil
+}
+
+func (x *CreateRecurringTemplateRequest) GetGenerationWindowDays() int32 {
+	if x != nil {
+		return x.GenerationWindowDays
+	}
+	return 0
+}
+
+type CreateRecurringTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *RecurringTaskTemplate `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateRecurringTemplateResponse) Reset() {
+	*x = CreateRecurringTemplateResponse{}
+	mi := &file_mono_v1_mono_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateRecurringTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateRecurringTemplateResponse) ProtoMessage() {}
+
+func (x *CreateRecurringTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateRecurringTemplateResponse.ProtoReflect.Descriptor instead.
+func (*CreateRecurringTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CreateRecurringTemplateResponse) GetTemplate() *RecurringTaskTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type GetRecurringTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRecurringTemplateRequest) Reset() {
+	*x = GetRecurringTemplateRequest{}
+	mi := &file_mono_v1_mono_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRecurringTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRecurringTemplateRequest) ProtoMessage() {}
+
+func (x *GetRecurringTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRecurringTemplateRequest.ProtoReflect.Descriptor instead.
+func (*GetRecurringTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetRecurringTemplateRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetRecurringTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *RecurringTaskTemplate `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRecurringTemplateResponse) Reset() {
+	*x = GetRecurringTemplateResponse{}
+	mi := &file_mono_v1_mono_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRecurringTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRecurringTemplateResponse) ProtoMessage() {}
+
+func (x *GetRecurringTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRecurringTemplateResponse.ProtoReflect.Descriptor instead.
+func (*GetRecurringTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetRecurringTemplateResponse) GetTemplate() *RecurringTaskTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type UpdateRecurringTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *RecurringTaskTemplate `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRecurringTemplateRequest) Reset() {
+	*x = UpdateRecurringTemplateRequest{}
+	mi := &file_mono_v1_mono_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRecurringTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRecurringTemplateRequest) ProtoMessage() {}
+
+func (x *UpdateRecurringTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRecurringTemplateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRecurringTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UpdateRecurringTemplateRequest) GetTemplate() *RecurringTaskTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+func (x *UpdateRecurringTemplateRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+type UpdateRecurringTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *RecurringTaskTemplate `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRecurringTemplateResponse) Reset() {
+	*x = UpdateRecurringTemplateResponse{}
+	mi := &file_mono_v1_mono_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRecurringTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRecurringTemplateResponse) ProtoMessage() {}
+
+func (x *UpdateRecurringTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRecurringTemplateResponse.ProtoReflect.Descriptor instead.
+func (*UpdateRecurringTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UpdateRecurringTemplateResponse) GetTemplate() *RecurringTaskTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type DeleteRecurringTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRecurringTemplateRequest) Reset() {
+	*x = DeleteRecurringTemplateRequest{}
+	mi := &file_mono_v1_mono_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRecurringTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRecurringTemplateRequest) ProtoMessage() {}
+
+func (x *DeleteRecurringTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRecurringTemplateRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRecurringTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DeleteRecurringTemplateRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteRecurringTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRecurringTemplateResponse) Reset() {
+	*x = DeleteRecurringTemplateResponse{}
+	mi := &file_mono_v1_mono_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRecurringTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRecurringTemplateResponse) ProtoMessage() {}
+
+func (x *DeleteRecurringTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRecurringTemplateResponse.ProtoReflect.Descriptor instead.
+func (*DeleteRecurringTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{22}
+}
+
+type ListRecurringTemplatesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ListId        string                 `protobuf:"bytes,1,opt,name=list_id,json=listId,proto3" json:"list_id,omitempty"`
+	ActiveOnly    bool                   `protobuf:"varint,2,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"` // Filter for active templates
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecurringTemplatesRequest) Reset() {
+	*x = ListRecurringTemplatesRequest{}
+	mi := &file_mono_v1_mono_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecurringTemplatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecurringTemplatesRequest) ProtoMessage() {}
+
+func (x *ListRecurringTemplatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecurringTemplatesRequest.ProtoReflect.Descriptor instead.
+func (*ListRecurringTemplatesRequest) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListRecurringTemplatesRequest) GetListId() string {
+	if x != nil {
+		return x.ListId
+	}
+	return ""
+}
+
+func (x *ListRecurringTemplatesRequest) GetActiveOnly() bool {
+	if x != nil {
+		return x.ActiveOnly
+	}
+	return false
+}
+
+type ListRecurringTemplatesResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Templates     []*RecurringTaskTemplate `protobuf:"bytes,1,rep,name=templates,proto3" json:"templates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecurringTemplatesResponse) Reset() {
+	*x = ListRecurringTemplatesResponse{}
+	mi := &file_mono_v1_mono_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecurringTemplatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecurringTemplatesResponse) ProtoMessage() {}
+
+func (x *ListRecurringTemplatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mono_v1_mono_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecurringTemplatesResponse.ProtoReflect.Descriptor instead.
+func (*ListRecurringTemplatesResponse) Descriptor() ([]byte, []int) {
+	return file_mono_v1_mono_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListRecurringTemplatesResponse) GetTemplates() []*RecurringTaskTemplate {
+	if x != nil {
+		return x.Templates
+	}
+	return nil
+}
+
 var File_mono_v1_mono_proto protoreflect.FileDescriptor
 
 const file_mono_v1_mono_proto_rawDesc = "" +
 	"\n" +
-	"\x12mono/v1/mono.proto\x12\amono.v1\x1a\x1cgoogle/api/annotations.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xdf\x01\n" +
+	"\x12mono/v1/mono.proto\x12\amono.v1\x1a\x1cgoogle/api/annotations.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bbuf/validate/validate.proto\"\xfb\x04\n" +
 	"\bTodoItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
-	"\x05title\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x12\x1c\n" +
-	"\tcompleted\x18\x03 \x01(\bR\tcompleted\x12;\n" +
+	"\x05title\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x12+\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x13.mono.v1.TaskStatusR\x06status\x121\n" +
+	"\bpriority\x18\a \x01(\x0e2\x15.mono.v1.TaskPriorityR\bpriority\x12;\n" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\x125\n" +
+	"createTime\x129\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x125\n" +
 	"\bdue_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\adueTime\x12\x12\n" +
-	"\x04tags\x18\x06 \x03(\tR\x04tags\"\x9f\x01\n" +
+	"\x04tags\x18\x06 \x03(\tR\x04tags\x12H\n" +
+	"\x12estimated_duration\x18\t \x01(\v2\x19.google.protobuf.DurationR\x11estimatedDuration\x12B\n" +
+	"\x0factual_duration\x18\n" +
+	" \x01(\v2\x19.google.protobuf.DurationR\x0eactualDuration\x122\n" +
+	"\x15recurring_template_id\x18\v \x01(\tR\x13recurringTemplateId\x12?\n" +
+	"\rinstance_date\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\finstanceDate\x12\x1a\n" +
+	"\btimezone\x18\r \x01(\tR\btimezone\"\xe3\x01\n" +
 	"\bTodoList\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\x05title\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x12'\n" +
 	"\x05items\x18\x03 \x03(\v2\x11.mono.v1.TodoItemR\x05items\x12;\n" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"2\n" +
+	"createTime\x12\x1f\n" +
+	"\vtotal_items\x18\x05 \x01(\x05R\n" +
+	"totalItems\x12!\n" +
+	"\fundone_items\x18\x06 \x01(\x05R\vundoneItems\"2\n" +
 	"\x11CreateListRequest\x12\x1d\n" +
 	"\x05title\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\";\n" +
 	"\x12CreateListResponse\x12%\n" +
@@ -806,12 +1799,17 @@ const file_mono_v1_mono_proto_rawDesc = "" +
 	"\x0eGetListRequest\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\"8\n" +
 	"\x0fGetListResponse\x12%\n" +
-	"\x04list\x18\x01 \x01(\v2\x11.mono.v1.TodoListR\x04list\"\x9f\x01\n" +
+	"\x04list\x18\x01 \x01(\v2\x11.mono.v1.TodoListR\x04list\"\xad\x03\n" +
 	"\x11CreateItemRequest\x12 \n" +
 	"\alist_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06listId\x12\x1d\n" +
 	"\x05title\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x125\n" +
 	"\bdue_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\adueTime\x12\x12\n" +
-	"\x04tags\x18\x04 \x03(\tR\x04tags\";\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\x121\n" +
+	"\bpriority\x18\x05 \x01(\x0e2\x15.mono.v1.TaskPriorityR\bpriority\x12H\n" +
+	"\x12estimated_duration\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x11estimatedDuration\x122\n" +
+	"\x15recurring_template_id\x18\a \x01(\tR\x13recurringTemplateId\x12?\n" +
+	"\rinstance_date\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\finstanceDate\x12\x1a\n" +
+	"\btimezone\x18\t \x01(\tR\btimezone\";\n" +
 	"\x12CreateItemResponse\x12%\n" +
 	"\x04item\x18\x01 \x01(\v2\x11.mono.v1.TodoItemR\x04item\"\xa1\x01\n" +
 	"\x11UpdateItemRequest\x12 \n" +
@@ -833,7 +1831,83 @@ const file_mono_v1_mono_proto_rawDesc = "" +
 	"\border_by\x18\x05 \x01(\tR\aorderBy\"d\n" +
 	"\x11ListTasksResponse\x12'\n" +
 	"\x05items\x18\x01 \x03(\v2\x11.mono.v1.TodoItemR\x05items\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xd2\x04\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb9\x05\n" +
+	"\x15RecurringTaskTemplate\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\alist_id\x18\x02 \x01(\tR\x06listId\x12\x1d\n" +
+	"\x05title\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x12\x12\n" +
+	"\x04tags\x18\x04 \x03(\tR\x04tags\x121\n" +
+	"\bpriority\x18\x05 \x01(\x0e2\x15.mono.v1.TaskPriorityR\bpriority\x12H\n" +
+	"\x12estimated_duration\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x11estimatedDuration\x12I\n" +
+	"\x12recurrence_pattern\x18\a \x01(\x0e2\x1a.mono.v1.RecurrencePatternR\x11recurrencePattern\x12+\n" +
+	"\x11recurrence_config\x18\b \x01(\tR\x10recurrenceConfig\x128\n" +
+	"\n" +
+	"due_offset\x18\t \x01(\v2\x19.google.protobuf.DurationR\tdueOffset\x12\x1b\n" +
+	"\tis_active\x18\n" +
+	" \x01(\bR\bisActive\x129\n" +
+	"\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12L\n" +
+	"\x14last_generated_until\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x12lastGeneratedUntil\x124\n" +
+	"\x16generation_window_days\x18\x0e \x01(\x05R\x14generationWindowDays\"\xda\x03\n" +
+	"\x1eCreateRecurringTemplateRequest\x12 \n" +
+	"\alist_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06listId\x12\x1d\n" +
+	"\x05title\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05title\x12\x12\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\x121\n" +
+	"\bpriority\x18\x04 \x01(\x0e2\x15.mono.v1.TaskPriorityR\bpriority\x12H\n" +
+	"\x12estimated_duration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x11estimatedDuration\x12I\n" +
+	"\x12recurrence_pattern\x18\x06 \x01(\x0e2\x1a.mono.v1.RecurrencePatternR\x11recurrencePattern\x12+\n" +
+	"\x11recurrence_config\x18\a \x01(\tR\x10recurrenceConfig\x128\n" +
+	"\n" +
+	"due_offset\x18\b \x01(\v2\x19.google.protobuf.DurationR\tdueOffset\x124\n" +
+	"\x16generation_window_days\x18\t \x01(\x05R\x14generationWindowDays\"]\n" +
+	"\x1fCreateRecurringTemplateResponse\x12:\n" +
+	"\btemplate\x18\x01 \x01(\v2\x1e.mono.v1.RecurringTaskTemplateR\btemplate\"6\n" +
+	"\x1bGetRecurringTemplateRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\"Z\n" +
+	"\x1cGetRecurringTemplateResponse\x12:\n" +
+	"\btemplate\x18\x01 \x01(\v2\x1e.mono.v1.RecurringTaskTemplateR\btemplate\"\xa1\x01\n" +
+	"\x1eUpdateRecurringTemplateRequest\x12B\n" +
+	"\btemplate\x18\x01 \x01(\v2\x1e.mono.v1.RecurringTaskTemplateB\x06\xbaH\x03\xc8\x01\x01R\btemplate\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\"]\n" +
+	"\x1fUpdateRecurringTemplateResponse\x12:\n" +
+	"\btemplate\x18\x01 \x01(\v2\x1e.mono.v1.RecurringTaskTemplateR\btemplate\"9\n" +
+	"\x1eDeleteRecurringTemplateRequest\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\"!\n" +
+	"\x1fDeleteRecurringTemplateResponse\"b\n" +
+	"\x1dListRecurringTemplatesRequest\x12 \n" +
+	"\alist_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06listId\x12\x1f\n" +
+	"\vactive_only\x18\x02 \x01(\bR\n" +
+	"activeOnly\"^\n" +
+	"\x1eListRecurringTemplatesResponse\x12<\n" +
+	"\ttemplates\x18\x01 \x03(\v2\x1e.mono.v1.RecurringTaskTemplateR\ttemplates*\xc0\x01\n" +
+	"\n" +
+	"TaskStatus\x12\x1b\n" +
+	"\x17TASK_STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10TASK_STATUS_TODO\x10\x01\x12\x1b\n" +
+	"\x17TASK_STATUS_IN_PROGRESS\x10\x02\x12\x17\n" +
+	"\x13TASK_STATUS_BLOCKED\x10\x03\x12\x14\n" +
+	"\x10TASK_STATUS_DONE\x10\x04\x12\x18\n" +
+	"\x14TASK_STATUS_ARCHIVED\x10\x05\x12\x19\n" +
+	"\x15TASK_STATUS_CANCELLED\x10\x06*\x90\x01\n" +
+	"\fTaskPriority\x12\x1d\n" +
+	"\x19TASK_PRIORITY_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11TASK_PRIORITY_LOW\x10\x01\x12\x18\n" +
+	"\x14TASK_PRIORITY_MEDIUM\x10\x02\x12\x16\n" +
+	"\x12TASK_PRIORITY_HIGH\x10\x03\x12\x18\n" +
+	"\x14TASK_PRIORITY_URGENT\x10\x04*\x97\x02\n" +
+	"\x11RecurrencePattern\x12\"\n" +
+	"\x1eRECURRENCE_PATTERN_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18RECURRENCE_PATTERN_DAILY\x10\x01\x12\x1d\n" +
+	"\x19RECURRENCE_PATTERN_WEEKLY\x10\x02\x12\x1f\n" +
+	"\x1bRECURRENCE_PATTERN_BIWEEKLY\x10\x03\x12\x1e\n" +
+	"\x1aRECURRENCE_PATTERN_MONTHLY\x10\x04\x12\x1d\n" +
+	"\x19RECURRENCE_PATTERN_YEARLY\x10\x05\x12 \n" +
+	"\x1cRECURRENCE_PATTERN_QUARTERLY\x10\x06\x12\x1f\n" +
+	"\x1bRECURRENCE_PATTERN_WEEKDAYS\x10\a2\xd4\n" +
+	"\n" +
 	"\vMonoService\x12[\n" +
 	"\n" +
 	"CreateList\x12\x1a.mono.v1.CreateListRequest\x1a\x1b.mono.v1.CreateListResponse\"\x14\x82\xd3\xe4\x93\x02\x0e:\x01*\"\t/v1/lists\x12T\n" +
@@ -843,7 +1917,12 @@ const file_mono_v1_mono_proto_rawDesc = "" +
 	"\n" +
 	"UpdateItem\x12\x1a.mono.v1.UpdateItemRequest\x1a\x1b.mono.v1.UpdateItemResponse\".\x82\xd3\xe4\x93\x02(:\x01*2#/v1/lists/{list_id}/items/{item.id}\x12U\n" +
 	"\tListLists\x12\x19.mono.v1.ListListsRequest\x1a\x1a.mono.v1.ListListsResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/lists\x12U\n" +
-	"\tListTasks\x12\x19.mono.v1.ListTasksRequest\x1a\x1a.mono.v1.ListTasksResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/tasksB1Z/github.com/rezkam/mono/api/proto/mono/v1;monov1b\x06proto3"
+	"\tListTasks\x12\x19.mono.v1.ListTasksRequest\x1a\x1a.mono.v1.ListTasksResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/tasks\x12\xa0\x01\n" +
+	"\x17CreateRecurringTemplate\x12'.mono.v1.CreateRecurringTemplateRequest\x1a(.mono.v1.CreateRecurringTemplateResponse\"2\x82\xd3\xe4\x93\x02,:\x01*\"'/v1/lists/{list_id}/recurring-templates\x12\x89\x01\n" +
+	"\x14GetRecurringTemplate\x12$.mono.v1.GetRecurringTemplateRequest\x1a%.mono.v1.GetRecurringTemplateResponse\"$\x82\xd3\xe4\x93\x02\x1e\x12\x1c/v1/recurring-templates/{id}\x12\x9e\x01\n" +
+	"\x17UpdateRecurringTemplate\x12'.mono.v1.UpdateRecurringTemplateRequest\x1a(.mono.v1.UpdateRecurringTemplateResponse\"0\x82\xd3\xe4\x93\x02*:\x01*2%/v1/recurring-templates/{template.id}\x12\x92\x01\n" +
+	"\x17DeleteRecurringTemplate\x12'.mono.v1.DeleteRecurringTemplateRequest\x1a(.mono.v1.DeleteRecurringTemplateResponse\"$\x82\xd3\xe4\x93\x02\x1e*\x1c/v1/recurring-templates/{id}\x12\x9a\x01\n" +
+	"\x16ListRecurringTemplates\x12&.mono.v1.ListRecurringTemplatesRequest\x1a'.mono.v1.ListRecurringTemplatesResponse\"/\x82\xd3\xe4\x93\x02)\x12'/v1/lists/{list_id}/recurring-templatesB1Z/github.com/rezkam/mono/api/proto/mono/v1;monov1b\x06proto3"
 
 var (
 	file_mono_v1_mono_proto_rawDescOnce sync.Once
@@ -857,56 +1936,108 @@ func file_mono_v1_mono_proto_rawDescGZIP() []byte {
 	return file_mono_v1_mono_proto_rawDescData
 }
 
-var file_mono_v1_mono_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_mono_v1_mono_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_mono_v1_mono_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_mono_v1_mono_proto_goTypes = []any{
-	(*TodoItem)(nil),              // 0: mono.v1.TodoItem
-	(*TodoList)(nil),              // 1: mono.v1.TodoList
-	(*CreateListRequest)(nil),     // 2: mono.v1.CreateListRequest
-	(*CreateListResponse)(nil),    // 3: mono.v1.CreateListResponse
-	(*GetListRequest)(nil),        // 4: mono.v1.GetListRequest
-	(*GetListResponse)(nil),       // 5: mono.v1.GetListResponse
-	(*CreateItemRequest)(nil),     // 6: mono.v1.CreateItemRequest
-	(*CreateItemResponse)(nil),    // 7: mono.v1.CreateItemResponse
-	(*UpdateItemRequest)(nil),     // 8: mono.v1.UpdateItemRequest
-	(*UpdateItemResponse)(nil),    // 9: mono.v1.UpdateItemResponse
-	(*ListListsRequest)(nil),      // 10: mono.v1.ListListsRequest
-	(*ListListsResponse)(nil),     // 11: mono.v1.ListListsResponse
-	(*ListTasksRequest)(nil),      // 12: mono.v1.ListTasksRequest
-	(*ListTasksResponse)(nil),     // 13: mono.v1.ListTasksResponse
-	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
+	(TaskStatus)(0),                         // 0: mono.v1.TaskStatus
+	(TaskPriority)(0),                       // 1: mono.v1.TaskPriority
+	(RecurrencePattern)(0),                  // 2: mono.v1.RecurrencePattern
+	(*TodoItem)(nil),                        // 3: mono.v1.TodoItem
+	(*TodoList)(nil),                        // 4: mono.v1.TodoList
+	(*CreateListRequest)(nil),               // 5: mono.v1.CreateListRequest
+	(*CreateListResponse)(nil),              // 6: mono.v1.CreateListResponse
+	(*GetListRequest)(nil),                  // 7: mono.v1.GetListRequest
+	(*GetListResponse)(nil),                 // 8: mono.v1.GetListResponse
+	(*CreateItemRequest)(nil),               // 9: mono.v1.CreateItemRequest
+	(*CreateItemResponse)(nil),              // 10: mono.v1.CreateItemResponse
+	(*UpdateItemRequest)(nil),               // 11: mono.v1.UpdateItemRequest
+	(*UpdateItemResponse)(nil),              // 12: mono.v1.UpdateItemResponse
+	(*ListListsRequest)(nil),                // 13: mono.v1.ListListsRequest
+	(*ListListsResponse)(nil),               // 14: mono.v1.ListListsResponse
+	(*ListTasksRequest)(nil),                // 15: mono.v1.ListTasksRequest
+	(*ListTasksResponse)(nil),               // 16: mono.v1.ListTasksResponse
+	(*RecurringTaskTemplate)(nil),           // 17: mono.v1.RecurringTaskTemplate
+	(*CreateRecurringTemplateRequest)(nil),  // 18: mono.v1.CreateRecurringTemplateRequest
+	(*CreateRecurringTemplateResponse)(nil), // 19: mono.v1.CreateRecurringTemplateResponse
+	(*GetRecurringTemplateRequest)(nil),     // 20: mono.v1.GetRecurringTemplateRequest
+	(*GetRecurringTemplateResponse)(nil),    // 21: mono.v1.GetRecurringTemplateResponse
+	(*UpdateRecurringTemplateRequest)(nil),  // 22: mono.v1.UpdateRecurringTemplateRequest
+	(*UpdateRecurringTemplateResponse)(nil), // 23: mono.v1.UpdateRecurringTemplateResponse
+	(*DeleteRecurringTemplateRequest)(nil),  // 24: mono.v1.DeleteRecurringTemplateRequest
+	(*DeleteRecurringTemplateResponse)(nil), // 25: mono.v1.DeleteRecurringTemplateResponse
+	(*ListRecurringTemplatesRequest)(nil),   // 26: mono.v1.ListRecurringTemplatesRequest
+	(*ListRecurringTemplatesResponse)(nil),  // 27: mono.v1.ListRecurringTemplatesResponse
+	(*timestamppb.Timestamp)(nil),           // 28: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),             // 29: google.protobuf.Duration
+	(*fieldmaskpb.FieldMask)(nil),           // 30: google.protobuf.FieldMask
 }
 var file_mono_v1_mono_proto_depIdxs = []int32{
-	14, // 0: mono.v1.TodoItem.create_time:type_name -> google.protobuf.Timestamp
-	14, // 1: mono.v1.TodoItem.due_time:type_name -> google.protobuf.Timestamp
-	0,  // 2: mono.v1.TodoList.items:type_name -> mono.v1.TodoItem
-	14, // 3: mono.v1.TodoList.create_time:type_name -> google.protobuf.Timestamp
-	1,  // 4: mono.v1.CreateListResponse.list:type_name -> mono.v1.TodoList
-	1,  // 5: mono.v1.GetListResponse.list:type_name -> mono.v1.TodoList
-	14, // 6: mono.v1.CreateItemRequest.due_time:type_name -> google.protobuf.Timestamp
-	0,  // 7: mono.v1.CreateItemResponse.item:type_name -> mono.v1.TodoItem
-	0,  // 8: mono.v1.UpdateItemRequest.item:type_name -> mono.v1.TodoItem
-	15, // 9: mono.v1.UpdateItemRequest.update_mask:type_name -> google.protobuf.FieldMask
-	0,  // 10: mono.v1.UpdateItemResponse.item:type_name -> mono.v1.TodoItem
-	1,  // 11: mono.v1.ListListsResponse.lists:type_name -> mono.v1.TodoList
-	0,  // 12: mono.v1.ListTasksResponse.items:type_name -> mono.v1.TodoItem
-	2,  // 13: mono.v1.MonoService.CreateList:input_type -> mono.v1.CreateListRequest
-	4,  // 14: mono.v1.MonoService.GetList:input_type -> mono.v1.GetListRequest
-	6,  // 15: mono.v1.MonoService.CreateItem:input_type -> mono.v1.CreateItemRequest
-	8,  // 16: mono.v1.MonoService.UpdateItem:input_type -> mono.v1.UpdateItemRequest
-	10, // 17: mono.v1.MonoService.ListLists:input_type -> mono.v1.ListListsRequest
-	12, // 18: mono.v1.MonoService.ListTasks:input_type -> mono.v1.ListTasksRequest
-	3,  // 19: mono.v1.MonoService.CreateList:output_type -> mono.v1.CreateListResponse
-	5,  // 20: mono.v1.MonoService.GetList:output_type -> mono.v1.GetListResponse
-	7,  // 21: mono.v1.MonoService.CreateItem:output_type -> mono.v1.CreateItemResponse
-	9,  // 22: mono.v1.MonoService.UpdateItem:output_type -> mono.v1.UpdateItemResponse
-	11, // 23: mono.v1.MonoService.ListLists:output_type -> mono.v1.ListListsResponse
-	13, // 24: mono.v1.MonoService.ListTasks:output_type -> mono.v1.ListTasksResponse
-	19, // [19:25] is the sub-list for method output_type
-	13, // [13:19] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	0,  // 0: mono.v1.TodoItem.status:type_name -> mono.v1.TaskStatus
+	1,  // 1: mono.v1.TodoItem.priority:type_name -> mono.v1.TaskPriority
+	28, // 2: mono.v1.TodoItem.create_time:type_name -> google.protobuf.Timestamp
+	28, // 3: mono.v1.TodoItem.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 4: mono.v1.TodoItem.due_time:type_name -> google.protobuf.Timestamp
+	29, // 5: mono.v1.TodoItem.estimated_duration:type_name -> google.protobuf.Duration
+	29, // 6: mono.v1.TodoItem.actual_duration:type_name -> google.protobuf.Duration
+	28, // 7: mono.v1.TodoItem.instance_date:type_name -> google.protobuf.Timestamp
+	3,  // 8: mono.v1.TodoList.items:type_name -> mono.v1.TodoItem
+	28, // 9: mono.v1.TodoList.create_time:type_name -> google.protobuf.Timestamp
+	4,  // 10: mono.v1.CreateListResponse.list:type_name -> mono.v1.TodoList
+	4,  // 11: mono.v1.GetListResponse.list:type_name -> mono.v1.TodoList
+	28, // 12: mono.v1.CreateItemRequest.due_time:type_name -> google.protobuf.Timestamp
+	1,  // 13: mono.v1.CreateItemRequest.priority:type_name -> mono.v1.TaskPriority
+	29, // 14: mono.v1.CreateItemRequest.estimated_duration:type_name -> google.protobuf.Duration
+	28, // 15: mono.v1.CreateItemRequest.instance_date:type_name -> google.protobuf.Timestamp
+	3,  // 16: mono.v1.CreateItemResponse.item:type_name -> mono.v1.TodoItem
+	3,  // 17: mono.v1.UpdateItemRequest.item:type_name -> mono.v1.TodoItem
+	30, // 18: mono.v1.UpdateItemRequest.update_mask:type_name -> google.protobuf.FieldMask
+	3,  // 19: mono.v1.UpdateItemResponse.item:type_name -> mono.v1.TodoItem
+	4,  // 20: mono.v1.ListListsResponse.lists:type_name -> mono.v1.TodoList
+	3,  // 21: mono.v1.ListTasksResponse.items:type_name -> mono.v1.TodoItem
+	1,  // 22: mono.v1.RecurringTaskTemplate.priority:type_name -> mono.v1.TaskPriority
+	29, // 23: mono.v1.RecurringTaskTemplate.estimated_duration:type_name -> google.protobuf.Duration
+	2,  // 24: mono.v1.RecurringTaskTemplate.recurrence_pattern:type_name -> mono.v1.RecurrencePattern
+	29, // 25: mono.v1.RecurringTaskTemplate.due_offset:type_name -> google.protobuf.Duration
+	28, // 26: mono.v1.RecurringTaskTemplate.created_at:type_name -> google.protobuf.Timestamp
+	28, // 27: mono.v1.RecurringTaskTemplate.updated_at:type_name -> google.protobuf.Timestamp
+	28, // 28: mono.v1.RecurringTaskTemplate.last_generated_until:type_name -> google.protobuf.Timestamp
+	1,  // 29: mono.v1.CreateRecurringTemplateRequest.priority:type_name -> mono.v1.TaskPriority
+	29, // 30: mono.v1.CreateRecurringTemplateRequest.estimated_duration:type_name -> google.protobuf.Duration
+	2,  // 31: mono.v1.CreateRecurringTemplateRequest.recurrence_pattern:type_name -> mono.v1.RecurrencePattern
+	29, // 32: mono.v1.CreateRecurringTemplateRequest.due_offset:type_name -> google.protobuf.Duration
+	17, // 33: mono.v1.CreateRecurringTemplateResponse.template:type_name -> mono.v1.RecurringTaskTemplate
+	17, // 34: mono.v1.GetRecurringTemplateResponse.template:type_name -> mono.v1.RecurringTaskTemplate
+	17, // 35: mono.v1.UpdateRecurringTemplateRequest.template:type_name -> mono.v1.RecurringTaskTemplate
+	30, // 36: mono.v1.UpdateRecurringTemplateRequest.update_mask:type_name -> google.protobuf.FieldMask
+	17, // 37: mono.v1.UpdateRecurringTemplateResponse.template:type_name -> mono.v1.RecurringTaskTemplate
+	17, // 38: mono.v1.ListRecurringTemplatesResponse.templates:type_name -> mono.v1.RecurringTaskTemplate
+	5,  // 39: mono.v1.MonoService.CreateList:input_type -> mono.v1.CreateListRequest
+	7,  // 40: mono.v1.MonoService.GetList:input_type -> mono.v1.GetListRequest
+	9,  // 41: mono.v1.MonoService.CreateItem:input_type -> mono.v1.CreateItemRequest
+	11, // 42: mono.v1.MonoService.UpdateItem:input_type -> mono.v1.UpdateItemRequest
+	13, // 43: mono.v1.MonoService.ListLists:input_type -> mono.v1.ListListsRequest
+	15, // 44: mono.v1.MonoService.ListTasks:input_type -> mono.v1.ListTasksRequest
+	18, // 45: mono.v1.MonoService.CreateRecurringTemplate:input_type -> mono.v1.CreateRecurringTemplateRequest
+	20, // 46: mono.v1.MonoService.GetRecurringTemplate:input_type -> mono.v1.GetRecurringTemplateRequest
+	22, // 47: mono.v1.MonoService.UpdateRecurringTemplate:input_type -> mono.v1.UpdateRecurringTemplateRequest
+	24, // 48: mono.v1.MonoService.DeleteRecurringTemplate:input_type -> mono.v1.DeleteRecurringTemplateRequest
+	26, // 49: mono.v1.MonoService.ListRecurringTemplates:input_type -> mono.v1.ListRecurringTemplatesRequest
+	6,  // 50: mono.v1.MonoService.CreateList:output_type -> mono.v1.CreateListResponse
+	8,  // 51: mono.v1.MonoService.GetList:output_type -> mono.v1.GetListResponse
+	10, // 52: mono.v1.MonoService.CreateItem:output_type -> mono.v1.CreateItemResponse
+	12, // 53: mono.v1.MonoService.UpdateItem:output_type -> mono.v1.UpdateItemResponse
+	14, // 54: mono.v1.MonoService.ListLists:output_type -> mono.v1.ListListsResponse
+	16, // 55: mono.v1.MonoService.ListTasks:output_type -> mono.v1.ListTasksResponse
+	19, // 56: mono.v1.MonoService.CreateRecurringTemplate:output_type -> mono.v1.CreateRecurringTemplateResponse
+	21, // 57: mono.v1.MonoService.GetRecurringTemplate:output_type -> mono.v1.GetRecurringTemplateResponse
+	23, // 58: mono.v1.MonoService.UpdateRecurringTemplate:output_type -> mono.v1.UpdateRecurringTemplateResponse
+	25, // 59: mono.v1.MonoService.DeleteRecurringTemplate:output_type -> mono.v1.DeleteRecurringTemplateResponse
+	27, // 60: mono.v1.MonoService.ListRecurringTemplates:output_type -> mono.v1.ListRecurringTemplatesResponse
+	50, // [50:61] is the sub-list for method output_type
+	39, // [39:50] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_mono_v1_mono_proto_init() }
@@ -919,13 +2050,14 @@ func file_mono_v1_mono_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mono_v1_mono_proto_rawDesc), len(file_mono_v1_mono_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   14,
+			NumEnums:      3,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_mono_v1_mono_proto_goTypes,
 		DependencyIndexes: file_mono_v1_mono_proto_depIdxs,
+		EnumInfos:         file_mono_v1_mono_proto_enumTypes,
 		MessageInfos:      file_mono_v1_mono_proto_msgTypes,
 	}.Build()
 	File_mono_v1_mono_proto = out.File

@@ -180,6 +180,176 @@
         ]
       }
     },
+    "/v1/lists/{listId}/recurring-templates": {
+      "get": {
+        "operationId": "MonoService_ListRecurringTemplates",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListRecurringTemplatesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "listId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "activeOnly",
+            "description": "Filter for active templates",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      },
+      "post": {
+        "summary": "Recurring task template management",
+        "operationId": "MonoService_CreateRecurringTemplate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateRecurringTemplateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "listId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MonoServiceCreateRecurringTemplateBody"
+            }
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
+    "/v1/recurring-templates/{id}": {
+      "get": {
+        "operationId": "MonoService_GetRecurringTemplate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetRecurringTemplateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      },
+      "delete": {
+        "operationId": "MonoService_DeleteRecurringTemplate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteRecurringTemplateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
+    "/v1/recurring-templates/{template.id}": {
+      "patch": {
+        "operationId": "MonoService_UpdateRecurringTemplate",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1UpdateRecurringTemplateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "template.id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MonoServiceUpdateRecurringTemplateBody"
+            }
+          }
+        ],
+        "tags": [
+          "MonoService"
+        ]
+      }
+    },
     "/v1/tasks": {
       "get": {
         "summary": "ListTasks retrieves tasks with filtering and sorting support.",
@@ -256,6 +426,60 @@
           "items": {
             "type": "string"
           }
+        },
+        "priority": {
+          "$ref": "#/definitions/v1TaskPriority"
+        },
+        "estimatedDuration": {
+          "type": "string"
+        },
+        "recurringTemplateId": {
+          "type": "string",
+          "title": "Optional: ID of the template this task is generated from"
+        },
+        "instanceDate": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Optional: Anchor date for this recurring instance"
+        },
+        "timezone": {
+          "type": "string",
+          "title": "Optional: IANA timezone (e.g., 'Europe/Stockholm'). Empty = floating time"
+        }
+      }
+    },
+    "MonoServiceCreateRecurringTemplateBody": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "priority": {
+          "$ref": "#/definitions/v1TaskPriority"
+        },
+        "estimatedDuration": {
+          "type": "string"
+        },
+        "recurrencePattern": {
+          "$ref": "#/definitions/v1RecurrencePattern"
+        },
+        "recurrenceConfig": {
+          "type": "string",
+          "title": "JSON config"
+        },
+        "dueOffset": {
+          "type": "string"
+        },
+        "generationWindowDays": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Default 30 days"
         }
       }
     },
@@ -268,10 +492,17 @@
             "title": {
               "type": "string"
             },
-            "completed": {
-              "type": "boolean"
+            "status": {
+              "$ref": "#/definitions/v1TaskStatus"
+            },
+            "priority": {
+              "$ref": "#/definitions/v1TaskPriority"
             },
             "createTime": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
               "type": "string",
               "format": "date-time"
             },
@@ -284,6 +515,86 @@
               "items": {
                 "type": "string"
               }
+            },
+            "estimatedDuration": {
+              "type": "string"
+            },
+            "actualDuration": {
+              "type": "string"
+            },
+            "recurringTemplateId": {
+              "type": "string",
+              "description": "ID of the template this task was generated from (empty if not recurring)",
+              "title": "Recurring task metadata"
+            },
+            "instanceDate": {
+              "type": "string",
+              "format": "date-time",
+              "title": "Anchor date for this recurring instance"
+            },
+            "timezone": {
+              "type": "string",
+              "title": "Timezone for due_time interpretation\nEmpty/null = floating time (9am stays 9am in user's current timezone)\nNon-empty = fixed timezone (absolute moment in specified IANA timezone like 'Europe/Stockholm')"
+            }
+          }
+        },
+        "updateMask": {
+          "type": "string"
+        }
+      }
+    },
+    "MonoServiceUpdateRecurringTemplateBody": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "object",
+          "properties": {
+            "listId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "priority": {
+              "$ref": "#/definitions/v1TaskPriority"
+            },
+            "estimatedDuration": {
+              "type": "string"
+            },
+            "recurrencePattern": {
+              "$ref": "#/definitions/v1RecurrencePattern"
+            },
+            "recurrenceConfig": {
+              "type": "string",
+              "title": "JSON config for pattern-specific settings"
+            },
+            "dueOffset": {
+              "type": "string"
+            },
+            "isActive": {
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "lastGeneratedUntil": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "generationWindowDays": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         },
@@ -344,11 +655,30 @@
         }
       }
     },
+    "v1CreateRecurringTemplateResponse": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "$ref": "#/definitions/v1RecurringTaskTemplate"
+        }
+      }
+    },
+    "v1DeleteRecurringTemplateResponse": {
+      "type": "object"
+    },
     "v1GetListResponse": {
       "type": "object",
       "properties": {
         "list": {
           "$ref": "#/definitions/v1TodoList"
+        }
+      }
+    },
+    "v1GetRecurringTemplateResponse": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "$ref": "#/definitions/v1RecurringTaskTemplate"
         }
       }
     },
@@ -360,6 +690,18 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1TodoList"
+          }
+        }
+      }
+    },
+    "v1ListRecurringTemplatesResponse": {
+      "type": "object",
+      "properties": {
+        "templates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RecurringTaskTemplate"
           }
         }
       }
@@ -379,6 +721,105 @@
         }
       }
     },
+    "v1RecurrencePattern": {
+      "type": "string",
+      "enum": [
+        "RECURRENCE_PATTERN_UNSPECIFIED",
+        "RECURRENCE_PATTERN_DAILY",
+        "RECURRENCE_PATTERN_WEEKLY",
+        "RECURRENCE_PATTERN_BIWEEKLY",
+        "RECURRENCE_PATTERN_MONTHLY",
+        "RECURRENCE_PATTERN_YEARLY",
+        "RECURRENCE_PATTERN_QUARTERLY",
+        "RECURRENCE_PATTERN_WEEKDAYS"
+      ],
+      "default": "RECURRENCE_PATTERN_UNSPECIFIED",
+      "description": "- RECURRENCE_PATTERN_UNSPECIFIED: Default value, not set\n - RECURRENCE_PATTERN_DAILY: Every day\n - RECURRENCE_PATTERN_WEEKLY: Every week\n - RECURRENCE_PATTERN_BIWEEKLY: Every 2 weeks\n - RECURRENCE_PATTERN_MONTHLY: Every month\n - RECURRENCE_PATTERN_YEARLY: Every year\n - RECURRENCE_PATTERN_QUARTERLY: Every 3 months\n - RECURRENCE_PATTERN_WEEKDAYS: Monday through Friday",
+      "title": "RecurrencePattern defines how often a recurring task should repeat.\nValid values:\n - RECURRENCE_PATTERN_DAILY: Repeats every day\n - RECURRENCE_PATTERN_WEEKLY: Repeats every week on the same day\n - RECURRENCE_PATTERN_BIWEEKLY: Repeats every two weeks\n - RECURRENCE_PATTERN_MONTHLY: Repeats on the same day each month\n - RECURRENCE_PATTERN_YEARLY: Repeats once per year\n - RECURRENCE_PATTERN_QUARTERLY: Repeats every 3 months\n - RECURRENCE_PATTERN_WEEKDAYS: Repeats on weekdays only (Monday-Friday)"
+    },
+    "v1RecurringTaskTemplate": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "listId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "priority": {
+          "$ref": "#/definitions/v1TaskPriority"
+        },
+        "estimatedDuration": {
+          "type": "string"
+        },
+        "recurrencePattern": {
+          "$ref": "#/definitions/v1RecurrencePattern"
+        },
+        "recurrenceConfig": {
+          "type": "string",
+          "title": "JSON config for pattern-specific settings"
+        },
+        "dueOffset": {
+          "type": "string"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastGeneratedUntil": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "generationWindowDays": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1TaskPriority": {
+      "type": "string",
+      "enum": [
+        "TASK_PRIORITY_UNSPECIFIED",
+        "TASK_PRIORITY_LOW",
+        "TASK_PRIORITY_MEDIUM",
+        "TASK_PRIORITY_HIGH",
+        "TASK_PRIORITY_URGENT"
+      ],
+      "default": "TASK_PRIORITY_UNSPECIFIED",
+      "description": "- TASK_PRIORITY_UNSPECIFIED: Default value, not set\n - TASK_PRIORITY_LOW: Low priority\n - TASK_PRIORITY_MEDIUM: Medium priority (recommended default)\n - TASK_PRIORITY_HIGH: High priority\n - TASK_PRIORITY_URGENT: Urgent, needs immediate attention",
+      "title": "TaskPriority indicates the importance and urgency of a task.\nValid values:\n - TASK_PRIORITY_LOW: Nice to have, low urgency\n - TASK_PRIORITY_MEDIUM: Standard priority, default for most tasks\n - TASK_PRIORITY_HIGH: Important, should be done soon\n - TASK_PRIORITY_URGENT: Critical, requires immediate attention"
+    },
+    "v1TaskStatus": {
+      "type": "string",
+      "enum": [
+        "TASK_STATUS_UNSPECIFIED",
+        "TASK_STATUS_TODO",
+        "TASK_STATUS_IN_PROGRESS",
+        "TASK_STATUS_BLOCKED",
+        "TASK_STATUS_DONE",
+        "TASK_STATUS_ARCHIVED",
+        "TASK_STATUS_CANCELLED"
+      ],
+      "default": "TASK_STATUS_UNSPECIFIED",
+      "description": "- TASK_STATUS_UNSPECIFIED: Default value, not set\n - TASK_STATUS_TODO: Ready to start\n - TASK_STATUS_IN_PROGRESS: Currently being worked on\n - TASK_STATUS_BLOCKED: Blocked by dependencies\n - TASK_STATUS_DONE: Completed successfully\n - TASK_STATUS_ARCHIVED: Archived for records\n - TASK_STATUS_CANCELLED: Cancelled, won't complete",
+      "title": "TaskStatus represents the current state of a task.\nValid values:\n - TASK_STATUS_TODO: Task is ready to be worked on\n - TASK_STATUS_IN_PROGRESS: Task is actively being worked on\n - TASK_STATUS_BLOCKED: Task is blocked by external dependencies\n - TASK_STATUS_DONE: Task is completed\n - TASK_STATUS_ARCHIVED: Task is archived for record keeping\n - TASK_STATUS_CANCELLED: Task was cancelled and won't be completed"
+    },
     "v1TodoItem": {
       "type": "object",
       "properties": {
@@ -388,10 +829,17 @@
         "title": {
           "type": "string"
         },
-        "completed": {
-          "type": "boolean"
+        "status": {
+          "$ref": "#/definitions/v1TaskStatus"
+        },
+        "priority": {
+          "$ref": "#/definitions/v1TaskPriority"
         },
         "createTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
           "type": "string",
           "format": "date-time"
         },
@@ -404,6 +852,26 @@
           "items": {
             "type": "string"
           }
+        },
+        "estimatedDuration": {
+          "type": "string"
+        },
+        "actualDuration": {
+          "type": "string"
+        },
+        "recurringTemplateId": {
+          "type": "string",
+          "description": "ID of the template this task was generated from (empty if not recurring)",
+          "title": "Recurring task metadata"
+        },
+        "instanceDate": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Anchor date for this recurring instance"
+        },
+        "timezone": {
+          "type": "string",
+          "title": "Timezone for due_time interpretation\nEmpty/null = floating time (9am stays 9am in user's current timezone)\nNon-empty = fixed timezone (absolute moment in specified IANA timezone like 'Europe/Stockholm')"
         }
       }
     },
@@ -426,6 +894,17 @@
         "createTime": {
           "type": "string",
           "format": "date-time"
+        },
+        "totalItems": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Total items in this list",
+          "title": "Item count statistics (populated when listing, empty when getting single list)"
+        },
+        "undoneItems": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Items with status TODO, IN_PROGRESS, or BLOCKED"
         }
       }
     },
@@ -434,6 +913,14 @@
       "properties": {
         "item": {
           "$ref": "#/definitions/v1TodoItem"
+        }
+      }
+    },
+    "v1UpdateRecurringTemplateResponse": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "$ref": "#/definitions/v1RecurringTaskTemplate"
         }
       }
     }
