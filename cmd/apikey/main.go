@@ -8,10 +8,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/rezkam/mono/internal/auth"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
+	"github.com/rezkam/mono/internal/application/auth"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
 
+// Command-line tool to create a new API key in the database with customizable parameters.
+// THIS is not a production-grade tool, just a simple utility for development/testing purposes.
 func main() {
 	// Define flags
 	name := flag.String("name", "", "Name/description for the API key (required)")
@@ -35,7 +37,7 @@ func main() {
 	ctx := context.Background()
 
 	// Connect to database
-	store, err := sqlstorage.NewPostgresStore(ctx, *pgURL)
+	store, err := postgres.NewPostgresStore(ctx, *pgURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -54,7 +56,7 @@ func main() {
 	version := getEnv("MONO_API_VERSION", "v1")
 
 	// Generate API key with configurable prefix
-	apiKey, err := auth.CreateAPIKey(ctx, store.Queries(), keyType, service, version, *name, expiresAt)
+	apiKey, err := auth.CreateAPIKey(ctx, store, keyType, service, version, *name, expiresAt)
 	if err != nil {
 		log.Fatalf("Failed to create API key: %v", err)
 	}

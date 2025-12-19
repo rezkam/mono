@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
-	"github.com/rezkam/mono/internal/worker"
+	"github.com/rezkam/mono/internal/application/worker"
+	"github.com/rezkam/mono/internal/config"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
 
 func main() {
@@ -17,23 +19,25 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Get PostgreSQL connection string from environment
-	pgURL := os.Getenv("POSTGRES_URL")
-	if pgURL == "" {
-		log.Fatal("POSTGRES_URL environment variable is required")
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// Connect to database
-	store, err := sqlstorage.NewStore(ctx, sqlstorage.DBConfig{
-		DSN: pgURL,
+	store, err := postgres.NewStoreWithConfig(ctx, postgres.DBConfig{
+		DSN: cfg.PostgresURL,
 	})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer store.Close()
 
-	// Create worker
-	w := worker.New(store)
+	// Create worker with configurable operation timeout
+	w := worker.New(store,
+		worker.WithOperationTimeout(time.Duration(cfg.WorkerOperationTimeout)*time.Second),
+	)
 
 	// Start worker in goroutine
 	errChan := make(chan error, 1)

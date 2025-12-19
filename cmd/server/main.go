@@ -21,10 +21,11 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
-	"github.com/rezkam/mono/internal/auth"
+	"github.com/rezkam/mono/internal/application/auth"
+	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/config"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/service"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
 	"github.com/rezkam/mono/pkg/observability"
 )
 
@@ -95,14 +96,14 @@ func run() error {
 	slog.InfoContext(ctx, "starting mono service", "env", cfg.Env)
 
 	// Init Storage
-	poolConfig := sqlstorage.DBConfig{
+	poolConfig := postgres.DBConfig{
 		MaxOpenConns:    cfg.DBMaxOpenConns,
 		MaxIdleConns:    cfg.DBMaxIdleConns,
 		ConnMaxLifetime: time.Duration(cfg.DBConnMaxLifetime) * time.Second,
 		ConnMaxIdleTime: time.Duration(cfg.DBConnMaxIdleTime) * time.Second,
 	}
 
-	store, err := sqlstorage.NewPostgresStoreWithConfig(ctx, cfg.PostgresURL, poolConfig)
+	store, err := postgres.NewPostgresStoreWithPoolConfig(ctx, cfg.PostgresURL, poolConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create store: %w", err)
 	}
@@ -110,11 +111,14 @@ func run() error {
 
 	slog.InfoContext(ctx, "storage initialized", "url", maskPassword(cfg.PostgresURL))
 
-	// Init Service
-	svc := service.NewMonoService(store, cfg.DefaultPageSize, cfg.MaxPageSize)
+	// Init Application Service
+	todoService := todo.NewService(store)
+
+	// Init gRPC Service with application service
+	svc := service.NewMonoService(todoService, cfg.DefaultPageSize, cfg.MaxPageSize)
 
 	// Init Authentication
-	authenticator := auth.NewAuthenticator(ctx, store.DB(), store.Queries())
+	authenticator := auth.NewAuthenticator(ctx, store, time.Duration(cfg.AuthOperationTimeout)*time.Second)
 	slog.InfoContext(ctx, "API key authentication enabled")
 
 	// Init gRPC Server
