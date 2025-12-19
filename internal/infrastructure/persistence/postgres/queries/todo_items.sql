@@ -28,6 +28,7 @@ ORDER BY list_id, create_time ASC;
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 -- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 -- Single database round-trip prevents race conditions and reduces latency
+-- SECURITY: Validates item belongs to the specified list to prevent cross-list updates
 UPDATE todo_items
 SET title = sqlc.arg(title),
     status = sqlc.arg(status),
@@ -38,7 +39,7 @@ SET title = sqlc.arg(title),
     due_time = sqlc.narg(due_time),
     tags = sqlc.arg(tags),
     timezone = sqlc.narg(timezone)
-WHERE id = sqlc.arg(id);
+WHERE id = sqlc.arg(id) AND list_id = sqlc.arg(list_id);
 
 -- name: UpdateTodoItemStatus :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
@@ -59,6 +60,20 @@ WHERE id = $1;
 DELETE FROM todo_items
 WHERE list_id = $1;
 
+-- name: CountTasksWithFilters :one
+-- Counts total matching items for pagination (used when main query returns empty page).
+-- Uses same WHERE clause as ListTasksWithFilters for consistency.
+SELECT COUNT(*) FROM todo_items
+WHERE
+    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
+    ($2::text = '' OR status = $2) AND
+    ($3::text = '' OR priority = $3) AND
+    ($4::text = '' OR tags ? $4::text) AND
+    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
+    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
+    ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
+    ($8::timestamptz = '0001-01-01 00:00:00+00' OR create_time >= $8);
+
 -- name: ListTasksWithFilters :many
 -- Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
 -- Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
@@ -73,9 +88,16 @@ WHERE list_id = $1;
 --   $6: due_after   - Filter tasks due after timestamp (zero time to skip)
 --   $7: updated_at  - Filter by last update time (zero time to skip)
 --   $8: created_at  - Filter by creation time (zero time to skip)
---   $9: order_by    - Sort field: 'due_time', 'priority', 'created_at', 'updated_at'
+--   $9: order_by    - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
+--                     Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
+--                     For bare field names, defaults are: due_time=asc, priority=asc,
+--                     created_at=desc, updated_at=desc
 --   $10: limit      - Page size (max items to return)
 --   $11: offset     - Pagination offset (skip N items)
+--
+-- Returns: All todo_items columns plus total_count (total matching rows across all pages)
+-- The COUNT(*) OVER() window function computes total matching rows in a single query pass,
+-- enabling accurate pagination UI without a separate count query.
 --
 -- SQL Injection Protection:
 -- The ORDER BY clause uses parameterized queries ($9::text) with CASE expressions.
@@ -89,11 +111,11 @@ WHERE list_id = $1;
 -- provide security - parameterized queries are the security boundary.
 --
 -- Access pattern example:
---   - "Show my overdue tasks": filter by due_before=now, order by due_time
+--   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
 --   - "Tasks in List X": filter by list_id, default sort
---   - "High priority items": filter by priority=HIGH, order by due_time
+--   - "High priority items": filter by priority=HIGH, order by due_time_asc
 --   - "Tasks tagged 'urgent'": filter by tag=urgent (uses GIN index)
-SELECT * FROM todo_items
+SELECT *, COUNT(*) OVER() AS total_count FROM todo_items
 WHERE
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
     ($2::text = '' OR status = $2) AND
@@ -104,10 +126,34 @@ WHERE
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
     ($8::timestamptz = '0001-01-01 00:00:00+00' OR create_time >= $8)
 ORDER BY
-    CASE WHEN $9::text = 'due_time' THEN due_time END ASC NULLS LAST,
-    CASE WHEN $9::text = 'priority' THEN priority END ASC NULLS LAST,
-    CASE WHEN $9::text = 'created_at' THEN create_time END DESC,
-    CASE WHEN $9::text = 'updated_at' THEN updated_at END DESC,
+    -- due_time: default ASC
+    CASE WHEN $9::text IN ('due_time', 'due_time_asc') THEN due_time END ASC NULLS LAST,
+    CASE WHEN $9::text = 'due_time_desc' THEN due_time END DESC NULLS LAST,
+    -- priority: default ASC (semantic order: LOW=1 < MEDIUM=2 < HIGH=3 < URGENT=4)
+    -- Uses numeric weights instead of lexical ordering to match proto enum semantics
+    CASE WHEN $9::text IN ('priority', 'priority_asc') THEN
+        CASE priority
+            WHEN 'LOW' THEN 1
+            WHEN 'MEDIUM' THEN 2
+            WHEN 'HIGH' THEN 3
+            WHEN 'URGENT' THEN 4
+        END
+    END ASC NULLS LAST,
+    CASE WHEN $9::text = 'priority_desc' THEN
+        CASE priority
+            WHEN 'LOW' THEN 1
+            WHEN 'MEDIUM' THEN 2
+            WHEN 'HIGH' THEN 3
+            WHEN 'URGENT' THEN 4
+        END
+    END DESC NULLS LAST,
+    -- created_at: default DESC
+    CASE WHEN $9::text = 'created_at_asc' THEN create_time END ASC,
+    CASE WHEN $9::text IN ('created_at', 'created_at_desc') THEN create_time END DESC,
+    -- updated_at: default DESC
+    CASE WHEN $9::text = 'updated_at_asc' THEN updated_at END ASC,
+    CASE WHEN $9::text IN ('updated_at', 'updated_at_desc') THEN updated_at END DESC,
+    -- Fallback: created_at DESC (when no valid order_by specified)
     create_time DESC
 LIMIT $10
 OFFSET $11;

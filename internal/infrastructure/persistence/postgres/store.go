@@ -6,7 +6,7 @@ import (
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/application/worker"
-	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
 
 // Store provides PostgreSQL implementation of all repository interfaces.

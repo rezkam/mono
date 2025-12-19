@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
 
 // === Auth Repository Implementation ===

@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -62,6 +62,68 @@ func domainTodoListToDB(list *domain.TodoList) (uuid.UUID, string, time.Time, er
 // === Todo Item Conversions ===
 
 func dbTodoItemToDomain(dbItem sqlcgen.TodoItem) domain.TodoItem {
+	item := domain.TodoItem{
+		ID:         dbItem.ID.String(),
+		ListID:     dbItem.ListID.String(),
+		Title:      dbItem.Title,
+		Status:     domain.TaskStatus(dbItem.Status),
+		CreateTime: dbItem.CreateTime,
+		UpdatedAt:  dbItem.UpdatedAt,
+	}
+
+	// Priority
+	if dbItem.Priority.Valid {
+		priority := domain.TaskPriority(dbItem.Priority.String)
+		item.Priority = &priority
+	}
+
+	// Estimated Duration
+	if dbItem.EstimatedDuration.Valid {
+		duration := intervalToDuration(dbItem.EstimatedDuration)
+		item.EstimatedDuration = &duration
+	}
+
+	// Actual Duration
+	if dbItem.ActualDuration.Valid {
+		duration := intervalToDuration(dbItem.ActualDuration)
+		item.ActualDuration = &duration
+	}
+
+	// Due Time
+	if dbItem.DueTime.Valid {
+		item.DueTime = &dbItem.DueTime.Time
+	}
+
+	// Tags
+	if dbItem.Tags.Valid {
+		var tags []string
+		if err := json.Unmarshal(dbItem.Tags.RawMessage, &tags); err == nil {
+			item.Tags = tags
+		}
+	}
+
+	// Recurring Template ID
+	if dbItem.RecurringTemplateID.Valid {
+		templateID := dbItem.RecurringTemplateID.UUID.String()
+		item.RecurringTemplateID = &templateID
+	}
+
+	// Instance Date
+	if dbItem.InstanceDate.Valid {
+		item.InstanceDate = &dbItem.InstanceDate.Time
+	}
+
+	// Timezone
+	if dbItem.Timezone.Valid {
+		item.Timezone = &dbItem.Timezone.String
+	}
+
+	return item
+}
+
+// dbListTasksRowToDomain converts a ListTasksWithFiltersRow to a domain TodoItem.
+// This is needed because the query includes COUNT(*) OVER() which creates a different struct.
+func dbListTasksRowToDomain(dbItem sqlcgen.ListTasksWithFiltersRow) domain.TodoItem {
 	item := domain.TodoItem{
 		ID:         dbItem.ID.String(),
 		ListID:     dbItem.ListID.String(),

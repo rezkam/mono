@@ -84,6 +84,22 @@ func (q *Queries) GetGenerationJob(ctx context.Context, id uuid.UUID) (Recurring
 	return i, err
 }
 
+const hasPendingOrRunningJob = `-- name: HasPendingOrRunningJob :one
+SELECT EXISTS(
+    SELECT 1 FROM recurring_generation_jobs
+    WHERE template_id = $1 AND status IN ('PENDING', 'RUNNING')
+) AS has_job
+`
+
+// Checks if a template already has a pending or running job to prevent duplicates.
+// Returns true if such a job exists, false otherwise.
+func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID uuid.UUID) (bool, error) {
+	row := q.db.QueryRowContext(ctx, hasPendingOrRunningJob, templateID)
+	var has_job bool
+	err := row.Scan(&has_job)
+	return has_job, err
+}
+
 const listPendingGenerationJobs = `-- name: ListPendingGenerationJobs :many
 SELECT id, template_id, scheduled_for, started_at, completed_at, failed_at, status, error_message, retry_count, generate_from, generate_until, created_at FROM recurring_generation_jobs
 WHERE status = 'PENDING' AND scheduled_for <= $1

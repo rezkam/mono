@@ -38,3 +38,11 @@ WHERE id = $4;
 -- name: DeleteCompletedGenerationJobs :exec
 DELETE FROM recurring_generation_jobs
 WHERE status = 'COMPLETED' AND completed_at < $1;
+
+-- name: HasPendingOrRunningJob :one
+-- Checks if a template already has a pending or running job to prevent duplicates.
+-- Returns true if such a job exists, false otherwise.
+SELECT EXISTS(
+    SELECT 1 FROM recurring_generation_jobs
+    WHERE template_id = $1 AND status IN ('PENDING', 'RUNNING')
+) AS has_job;

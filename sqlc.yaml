@@ -1,12 +1,12 @@
 version: "2"
 sql:
-  - schema: "internal/storage/sql/migrations"
-    queries: "internal/storage/sql/queries"
+  - schema: "internal/infrastructure/persistence/postgres/migrations"
+    queries: "internal/infrastructure/persistence/postgres/queries"
     engine: "postgresql"
     gen:
       go:
         package: "sqlcgen"
-        out: "internal/storage/sql/sqlcgen"
+        out: "internal/infrastructure/persistence/postgres/sqlcgen"
         sql_package: "database/sql"
         emit_json_tags: true
         emit_interface: true

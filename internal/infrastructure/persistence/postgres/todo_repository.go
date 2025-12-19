@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
 
 // === Todo Repository Implementation ===
@@ -165,14 +165,43 @@ func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.Todo
 	return nil
 }
 
+// FindItemByID retrieves a single todo item by its ID.
+// O(1) lookup - more efficient than FindListByID when only the item is needed.
+func (s *Store) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
+	itemUUID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+	}
+
+	dbItem, err := s.queries.GetTodoItem(ctx, itemUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: item %s", domain.ErrNotFound, id)
+		}
+		return nil, fmt.Errorf("failed to get item: %w", err)
+	}
+
+	item := dbTodoItemToDomain(dbItem)
+	return &item, nil
+}
+
 // UpdateItem updates an existing todo item.
-func (s *Store) UpdateItem(ctx context.Context, item *domain.TodoItem) error {
+// Validates that the item belongs to the specified list to prevent cross-list updates.
+func (s *Store) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
 	params, err := domainTodoItemToUpdateParams(item)
 	if err != nil {
 		return fmt.Errorf("failed to convert item: %w", err)
 	}
 
-	// Single-query pattern: check rowsAffected to detect non-existent record
+	// Parse list ID to UUID for database query
+	listUUID, err := uuid.Parse(listID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+	}
+	params.ListID = listUUID
+
+	// Single-query pattern: check rowsAffected to detect non-existent record or list mismatch
+	// Returns 0 rows if either the item doesn't exist OR it doesn't belong to the specified list
 	rowsAffected, err := s.queries.UpdateTodoItem(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to update item: %w", err)
@@ -231,11 +260,13 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 	updatedAt := zeroTime
 	createdAt := zeroTime
 
-	// Column9: order_by (empty string for default)
+	// Column9: order_by combined with direction (e.g., "created_at_desc", "due_time_asc")
+	// If direction is specified, append it; otherwise use bare field name (SQL uses defaults)
 	orderBy := params.OrderBy
+	if params.OrderDir != "" {
+		orderBy = params.OrderBy + "_" + params.OrderDir
+	}
 
-	// Use limit+1 pattern to accurately detect if more pages exist
-	// Fetch one extra row to determine if there are more results beyond this page
 	sqlcParams := sqlcgen.ListTasksWithFiltersParams{
 		Column1: listUUID,
 		Column2: status,
@@ -246,31 +277,49 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		Column7: updatedAt,
 		Column8: createdAt,
 		Column9: orderBy,
-		Limit:   int32(params.Limit + 1), // Fetch one extra to detect if there are more
+		Limit:   int32(params.Limit),
 		Offset:  int32(params.Offset),
 	}
 
-	// Execute query
+	// Execute query - includes COUNT(*) OVER() as total_count in each row
 	dbItems, err := s.queries.ListTasksWithFilters(ctx, sqlcParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list items: %w", err)
 	}
 
-	// Check if there are more items beyond the requested limit
-	hasMore := len(dbItems) > params.Limit
-	if hasMore {
-		// Trim to requested limit
-		dbItems = dbItems[:params.Limit]
+	// Get total count from first row (all rows have same total_count from window function)
+	// If no rows returned, run separate count query to get actual total
+	var totalCount int
+	if len(dbItems) > 0 {
+		totalCount = int(dbItems[0].TotalCount)
+	} else {
+		// Empty page - need separate count query to know actual total
+		// This handles the case where offset >= total items
+		countParams := sqlcgen.CountTasksWithFiltersParams{
+			Column1: listUUID,
+			Column2: status,
+			Column3: priority,
+			Column4: tag,
+			Column5: dueBefore,
+			Column6: dueAfter,
+			Column7: updatedAt,
+			Column8: createdAt,
+		}
+		count, err := s.queries.CountTasksWithFilters(ctx, countParams)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count items: %w", err)
+		}
+		totalCount = int(count)
 	}
 
 	// Convert to domain items
 	items := make([]domain.TodoItem, len(dbItems))
 	for i, dbItem := range dbItems {
-		items[i] = dbTodoItemToDomain(dbItem)
+		items[i] = dbListTasksRowToDomain(dbItem)
 	}
 
-	// Calculate total count heuristic
-	totalCount := params.Offset + len(items)
+	// HasMore is true if there are more items beyond what we've returned
+	hasMore := params.Offset+len(items) < totalCount
 
 	return &domain.PagedResult{
 		Items:      items,
@@ -407,20 +456,14 @@ func (s *Store) FindRecurringTemplates(ctx context.Context, listID string, activ
 
 	var dbTemplates []sqlcgen.RecurringTaskTemplate
 	if activeOnly {
-		// Get all active templates across all lists, then filter by listID
-		allActive, err := s.queries.ListAllActiveRecurringTemplates(ctx)
+		// Get active templates for this specific list (WHERE list_id = $1 AND is_active = true)
+		dbTemplates, err = s.queries.ListRecurringTemplates(ctx, listUUID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list active templates: %w", err)
 		}
-		// Filter for this specific list
-		for _, tmpl := range allActive {
-			if tmpl.ListID == listUUID {
-				dbTemplates = append(dbTemplates, tmpl)
-			}
-		}
 	} else {
-		var err error
-		dbTemplates, err = s.queries.ListRecurringTemplates(ctx, listUUID)
+		// Get all templates (active and inactive) for this list (WHERE list_id = $1)
+		dbTemplates, err = s.queries.ListAllRecurringTemplatesByList(ctx, listUUID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list templates: %w", err)
 		}

@@ -6,23 +6,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rezkam/mono/internal/core"
+	"github.com/rezkam/mono/internal/domain"
 )
 
-// Generator handles the generation of task instances from recurring templates.
-type Generator struct {
-	storage core.Storage
+// DomainGenerator handles the generation of task instances from recurring templates using domain types.
+type DomainGenerator struct {
+	// Repository interface for future use (e.g., checking existing tasks)
+	// Currently unused but kept for extensibility
+	repo interface{}
 }
 
-// NewGenerator creates a new task generator.
-func NewGenerator(storage core.Storage) *Generator {
-	return &Generator{
-		storage: storage,
+// NewDomainGenerator creates a new task generator that works with domain types.
+func NewDomainGenerator(repo interface{}) *DomainGenerator {
+	return &DomainGenerator{
+		repo: repo,
 	}
 }
 
 // GenerateTasksForTemplate generates task instances for a given template within the specified date range.
-func (g *Generator) GenerateTasksForTemplate(ctx context.Context, template *core.RecurringTaskTemplate, start, end time.Time) ([]core.TodoItem, error) {
+func (g *DomainGenerator) GenerateTasksForTemplate(ctx context.Context, template *domain.RecurringTemplate, start, end time.Time) ([]domain.TodoItem, error) {
 	calculator := GetCalculator(template.RecurrencePattern)
 	if calculator == nil {
 		return nil, fmt.Errorf("unsupported recurrence pattern: %s", template.RecurrencePattern)
@@ -38,7 +40,7 @@ func (g *Generator) GenerateTasksForTemplate(ctx context.Context, template *core
 	occurrences := calculator.OccurrencesBetween(start, end, config)
 
 	// Generate task instances
-	var tasks []core.TodoItem
+	var tasks []domain.TodoItem
 	for _, occurrence := range occurrences {
 		task, err := g.createTaskInstance(template, occurrence)
 		if err != nil {
@@ -51,10 +53,10 @@ func (g *Generator) GenerateTasksForTemplate(ctx context.Context, template *core
 }
 
 // createTaskInstance creates a single task instance from a template for a specific date.
-func (g *Generator) createTaskInstance(template *core.RecurringTaskTemplate, instanceDate time.Time) (core.TodoItem, error) {
+func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate, instanceDate time.Time) (domain.TodoItem, error) {
 	taskIDObj, err := uuid.NewV7()
 	if err != nil {
-		return core.TodoItem{}, fmt.Errorf("failed to generate task ID: %w", err)
+		return domain.TodoItem{}, fmt.Errorf("failed to generate task ID: %w", err)
 	}
 	taskID := taskIDObj.String()
 
@@ -65,10 +67,10 @@ func (g *Generator) createTaskInstance(template *core.RecurringTaskTemplate, ins
 		dueTime = &due
 	}
 
-	task := core.TodoItem{
+	task := domain.TodoItem{
 		ID:                  taskID,
 		Title:               template.Title,
-		Status:              core.TaskStatusTodo,
+		Status:              domain.TaskStatusTodo,
 		Priority:            template.Priority,
 		EstimatedDuration:   template.EstimatedDuration,
 		CreateTime:          time.Now().UTC(),
@@ -80,14 +82,4 @@ func (g *Generator) createTaskInstance(template *core.RecurringTaskTemplate, ins
 	}
 
 	return task, nil
-}
-
-// GenerateUpcomingTasks generates tasks for all active templates that need generation.
-// This should be called periodically (e.g., by a background worker).
-func (g *Generator) GenerateUpcomingTasks(ctx context.Context, listID string) error {
-	// Note: We need to extend the storage interface to support recurring templates.
-	// This will be implemented when we add template storage methods.
-	_ = listID // Mark as intentionally unused for now
-
-	return nil
 }

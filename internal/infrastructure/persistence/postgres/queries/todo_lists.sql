@@ -10,9 +10,10 @@ WHERE id = $1;
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 -- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 -- Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
+-- NOTE: create_time is immutable after creation - only title can be updated
 UPDATE todo_lists
-SET title = $1, create_time = $2
-WHERE id = $3;
+SET title = $1
+WHERE id = $2;
 
 -- name: DeleteTodoList :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected

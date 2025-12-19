@@ -147,21 +147,21 @@ func (q *Queries) ListTodoListsWithCounts(ctx context.Context) ([]ListTodoListsW
 
 const updateTodoList = `-- name: UpdateTodoList :execrows
 UPDATE todo_lists
-SET title = $1, create_time = $2
-WHERE id = $3
+SET title = $1
+WHERE id = $2
 `
 
 type UpdateTodoListParams struct {
-	Title      string    `json:"title"`
-	CreateTime time.Time `json:"create_time"`
-	ID         uuid.UUID `json:"id"`
+	Title string    `json:"title"`
+	ID    uuid.UUID `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
+// NOTE: create_time is immutable after creation - only title can be updated
 func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateTodoList, arg.Title, arg.CreateTime, arg.ID)
+	result, err := q.db.ExecContext(ctx, updateTodoList, arg.Title, arg.ID)
 	if err != nil {
 		return 0, err
 	}

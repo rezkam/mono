@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/storage/sql/sqlcgen"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
 
 // === Worker Repository Implementation ===
@@ -188,6 +188,21 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 	}
 
 	return checkRowsAffected(rowsAffected, "job", id)
+}
+
+// HasPendingOrRunningJob checks if a template already has a pending or running job.
+func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
+	templateUUID, err := uuid.Parse(templateID)
+	if err != nil {
+		return false, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+	}
+
+	hasJob, err := s.queries.HasPendingOrRunningJob(ctx, templateUUID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check for existing job: %w", err)
+	}
+
+	return hasJob, nil
 }
 
 // === Item Creation ===

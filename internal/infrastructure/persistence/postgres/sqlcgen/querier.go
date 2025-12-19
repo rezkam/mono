@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	// Counts total matching items for pagination (used when main query returns empty page).
+	// Uses same WHERE clause as ListTasksWithFilters for consistency.
+	CountTasksWithFilters(ctx context.Context, arg CountTasksWithFiltersParams) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error
 	// Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
 	// to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
@@ -53,6 +56,9 @@ type Querier interface {
 	GetTodoItem(ctx context.Context, id uuid.UUID) (TodoItem, error)
 	GetTodoItemsByListId(ctx context.Context, listID uuid.UUID) ([]TodoItem, error)
 	GetTodoList(ctx context.Context, id uuid.UUID) (TodoList, error)
+	// Checks if a template already has a pending or running job to prevent duplicates.
+	// Returns true if such a job exists, false otherwise.
+	HasPendingOrRunningJob(ctx context.Context, templateID uuid.UUID) (bool, error)
 	ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListAllActiveRecurringTemplates(ctx context.Context) ([]RecurringTaskTemplate, error)
 	ListAllRecurringTemplatesByList(ctx context.Context, listID uuid.UUID) ([]RecurringTaskTemplate, error)
@@ -71,9 +77,16 @@ type Querier interface {
 	//   $6: due_after   - Filter tasks due after timestamp (zero time to skip)
 	//   $7: updated_at  - Filter by last update time (zero time to skip)
 	//   $8: created_at  - Filter by creation time (zero time to skip)
-	//   $9: order_by    - Sort field: 'due_time', 'priority', 'created_at', 'updated_at'
+	//   $9: order_by    - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
+	//                     Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
+	//                     For bare field names, defaults are: due_time=asc, priority=asc,
+	//                     created_at=desc, updated_at=desc
 	//   $10: limit      - Page size (max items to return)
 	//   $11: offset     - Pagination offset (skip N items)
+	//
+	// Returns: All todo_items columns plus total_count (total matching rows across all pages)
+	// The COUNT(*) OVER() window function computes total matching rows in a single query pass,
+	// enabling accurate pagination UI without a separate count query.
 	//
 	// SQL Injection Protection:
 	// The ORDER BY clause uses parameterized queries ($9::text) with CASE expressions.
@@ -87,11 +100,11 @@ type Querier interface {
 	// provide security - parameterized queries are the security boundary.
 	//
 	// Access pattern example:
-	//   - "Show my overdue tasks": filter by due_before=now, order by due_time
+	//   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
 	//   - "Tasks in List X": filter by list_id, default sort
-	//   - "High priority items": filter by priority=HIGH, order by due_time
+	//   - "High priority items": filter by priority=HIGH, order by due_time_asc
 	//   - "Tasks tagged 'urgent'": filter by tag=urgent (uses GIN index)
-	ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]TodoItem, error)
+	ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]ListTasksWithFiltersRow, error)
 	// Legacy query: Returns all lists without items (use ListTodoListsWithCounts for list views).
 	ListTodoLists(ctx context.Context) ([]TodoList, error)
 	// Optimized for LIST VIEW access pattern: Returns list metadata with item counts.
@@ -138,6 +151,7 @@ type Querier interface {
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Single database round-trip prevents race conditions and reduces latency
+	// SECURITY: Validates item belongs to the specified list to prevent cross-list updates
 	UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
@@ -146,6 +160,7 @@ type Querier interface {
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
+	// NOTE: create_time is immutable after creation - only title can be updated
 	UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error)
 }
 
