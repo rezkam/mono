@@ -1,9 +1,9 @@
-package auth_test
+package keygen_test
 
 import (
 	"testing"
 
-	"github.com/rezkam/mono/internal/auth"
+	"github.com/rezkam/mono/internal/infrastructure/keygen"
 )
 
 // TestGenerateAPIKey_UniqueShortTokens tests that short tokens are unique
@@ -18,7 +18,7 @@ func TestGenerateAPIKey_UniqueShortTokens(t *testing.T) {
 
 	// Generate keys as fast as possible (simulates high-throughput scenario)
 	for i := 0; i < numKeys; i++ {
-		keyParts, err := auth.GenerateAPIKey("sk", "mono", "v1")
+		keyParts, err := keygen.GenerateAPIKey("sk", "mono", "v1")
 		if err != nil {
 			t.Fatalf("Failed to generate key %d: %v", i, err)
 		}
@@ -45,7 +45,7 @@ func TestGenerateAPIKey_ShortTokenCollisionRate(t *testing.T) {
 	seen := make(map[string]int)
 
 	for i := 0; i < numKeys; i++ {
-		keyParts, err := auth.GenerateAPIKey("sk", "mono", "v1")
+		keyParts, err := keygen.GenerateAPIKey("sk", "mono", "v1")
 		if err != nil {
 			t.Fatalf("Failed to generate key: %v", err)
 		}
@@ -82,12 +82,12 @@ func TestParseAPIKey_ValidFormat(t *testing.T) {
 	tests := []struct {
 		name   string
 		apiKey string
-		want   auth.APIKeyParts
+		want   keygen.APIKeyParts
 	}{
 		{
 			name:   "valid key",
 			apiKey: "sk-mono-v1-a3f5d8c2b4e6-8h3k2jf9s7d6f5g4h3j2k1m0n9p8q7r6s5t4u3v2w1x",
-			want: auth.APIKeyParts{
+			want: keygen.APIKeyParts{
 				KeyType:    "sk",
 				Service:    "mono",
 				Version:    "v1",
@@ -100,7 +100,7 @@ func TestParseAPIKey_ValidFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := auth.ParseAPIKey(tt.apiKey)
+			got, err := keygen.ParseAPIKey(tt.apiKey)
 			if err != nil {
 				t.Fatalf("ParseAPIKey() error = %v", err)
 			}
@@ -137,17 +137,10 @@ func TestParseAPIKey_InvalidFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := auth.ParseAPIKey(tt.apiKey)
+			_, err := keygen.ParseAPIKey(tt.apiKey)
 			if err == nil {
 				t.Errorf("ParseAPIKey() expected error for invalid format, got nil")
 			}
 		})
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

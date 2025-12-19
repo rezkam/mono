@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rezkam/mono/internal/auth"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
+	"github.com/rezkam/mono/internal/application/auth"
+	"github.com/rezkam/mono/internal/infrastructure/keygen"
+	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -23,7 +24,7 @@ func hashSecret(secret string) string {
 // BenchmarkAuthO1Lookup demonstrates O(1) authentication performance.
 // This benchmark proves that authentication time is CONSTANT regardless of total API keys.
 //
-// Run: BENCHMARK_POSTGRES_URL="postgres://..." go test -bench=BenchmarkAuthO1Lookup -benchmem ./internal/auth/
+// Run: BENCHMARK_POSTGRES_URL="postgres://..." go test -bench=BenchmarkAuthO1Lookup -benchmem ./internal/application/auth/
 //
 // Expected: <1ms per auth (BLAKE2b-256), consistent across 10/100/1000 keys
 func BenchmarkAuthO1Lookup(b *testing.B) {
@@ -33,7 +34,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	if err != nil {
 		b.Fatalf("Failed to connect: %v", err)
 	}
@@ -78,7 +79,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 			}
 
 			for i := 0; i < scenario.numKeys; i++ {
-				key, err := auth.CreateAPIKey(ctx, store.Queries(), "sk", "mono", "v1",
+				key, err := auth.CreateAPIKey(ctx, store, "sk", "mono", "v1",
 					fmt.Sprintf("Bench Key %d", i), nil)
 				if err != nil {
 					b.Fatalf("Failed to create key: %v", err)
@@ -89,7 +90,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 			}
 
 			// Parse key once (not part of measurement)
-			keyParts, err := auth.ParseAPIKey(targetKey)
+			keyParts, err := keygen.ParseAPIKey(targetKey)
 			if err != nil {
 				b.Fatalf("Failed to parse key: %v", err)
 			}
@@ -129,7 +130,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	if err != nil {
 		b.Fatalf("Failed to connect: %v", err)
 	}
@@ -146,7 +147,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 
 		var targetKey string
 		for i := 0; i < numKeys; i++ {
-			key, err := auth.CreateAPIKey(ctx, store.Queries(), "sk", "mono", "v1",
+			key, err := auth.CreateAPIKey(ctx, store, "sk", "mono", "v1",
 				fmt.Sprintf("Key %d", i), nil)
 			if err != nil {
 				b.Fatalf("Failed to create key: %v", err)
@@ -156,7 +157,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 			}
 		}
 
-		keyParts, _ := auth.ParseAPIKey(targetKey)
+		keyParts, _ := keygen.ParseAPIKey(targetKey)
 
 		// Benchmark using Go 1.24 B.Loop()
 		for b.Loop() {
@@ -183,7 +184,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 
 		var targetKey string
 		for i := 0; i < numKeys; i++ {
-			key, err := auth.CreateAPIKey(ctx, store.Queries(), "sk", "mono", "v1",
+			key, err := auth.CreateAPIKey(ctx, store, "sk", "mono", "v1",
 				fmt.Sprintf("Key %d", i), nil)
 			if err != nil {
 				b.Fatalf("Failed to create key: %v", err)
@@ -193,7 +194,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 			}
 		}
 
-		keyParts, _ := auth.ParseAPIKey(targetKey)
+		keyParts, _ := keygen.ParseAPIKey(targetKey)
 
 		// Load all keys (simulating old O(n) approach)
 		allKeys, err := store.Queries().ListActiveAPIKeys(ctx)
@@ -224,7 +225,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 // BenchmarkKeyGeneration benchmarks API key generation speed.
 func BenchmarkKeyGeneration(b *testing.B) {
 	for b.Loop() {
-		_, err := auth.GenerateAPIKey("sk", "mono", "v1")
+		_, err := keygen.GenerateAPIKey("sk", "mono", "v1")
 		if err != nil {
 			b.Fatalf("Failed to generate key: %v", err)
 		}
@@ -236,7 +237,7 @@ func BenchmarkKeyParsing(b *testing.B) {
 	key := "sk-mono-v1-a7f3d8e2-8h3k2jf9s7d6f5g4h3j2k1m0n9p8q7r6s5t4u3v2w1x"
 
 	for b.Loop() {
-		_, err := auth.ParseAPIKey(key)
+		_, err := keygen.ParseAPIKey(key)
 		if err != nil {
 			b.Fatalf("Failed to parse key: %v", err)
 		}

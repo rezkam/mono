@@ -77,7 +77,7 @@ tidy: ## Run go mod tidy to update dependencies
 
 fmt: ## Format all Go files tracked in git
 	@echo "Formatting Go files..."
-	@FILES=$$(git ls-files '*.go' 2>/dev/null | xargs -I {} test -f {} && echo {} || true); \
+	@FILES=$$(git ls-files '*.go' 2>/dev/null | while read f; do [ -f "$$f" ] && echo "$$f"; done); \
 	if [ -n "$$FILES" ]; then \
 		echo "$$FILES" | xargs gofmt -w; \
 	else \
