@@ -234,6 +234,8 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 	// Column9: order_by (empty string for default)
 	orderBy := params.OrderBy
 
+	// Use limit+1 pattern to accurately detect if more pages exist
+	// Fetch one extra row to determine if there are more results beyond this page
 	sqlcParams := sqlcgen.ListTasksWithFiltersParams{
 		Column1: listUUID,
 		Column2: status,
@@ -244,7 +246,7 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		Column7: updatedAt,
 		Column8: createdAt,
 		Column9: orderBy,
-		Limit:   int32(params.Limit),
+		Limit:   int32(params.Limit + 1), // Fetch one extra to detect if there are more
 		Offset:  int32(params.Offset),
 	}
 
@@ -254,16 +256,21 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		return nil, fmt.Errorf("failed to list items: %w", err)
 	}
 
+	// Check if there are more items beyond the requested limit
+	hasMore := len(dbItems) > params.Limit
+	if hasMore {
+		// Trim to requested limit
+		dbItems = dbItems[:params.Limit]
+	}
+
 	// Convert to domain items
 	items := make([]domain.TodoItem, len(dbItems))
 	for i, dbItem := range dbItems {
 		items[i] = dbTodoItemToDomain(dbItem)
 	}
 
-	// Get total count (would need a separate count query in real implementation)
-	// For now, we'll use a simple heuristic: if we got fewer items than limit, we've reached the end
+	// Calculate total count heuristic
 	totalCount := params.Offset + len(items)
-	hasMore := len(items) == params.Limit
 
 	return &domain.PagedResult{
 		Items:      items,
