@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/rezkam/mono/internal/infrastructure/keygen"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestGenerateAPIKey_UniqueShortTokens tests that short tokens are unique
@@ -101,24 +103,8 @@ func TestParseAPIKey_ValidFormat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := keygen.ParseAPIKey(tt.apiKey)
-			if err != nil {
-				t.Fatalf("ParseAPIKey() error = %v", err)
-			}
-			if got.KeyType != tt.want.KeyType {
-				t.Errorf("KeyType = %v, want %v", got.KeyType, tt.want.KeyType)
-			}
-			if got.Service != tt.want.Service {
-				t.Errorf("Service = %v, want %v", got.Service, tt.want.Service)
-			}
-			if got.Version != tt.want.Version {
-				t.Errorf("Version = %v, want %v", got.Version, tt.want.Version)
-			}
-			if got.ShortToken != tt.want.ShortToken {
-				t.Errorf("ShortToken = %v, want %v", got.ShortToken, tt.want.ShortToken)
-			}
-			if got.LongSecret != tt.want.LongSecret {
-				t.Errorf("LongSecret = %v, want %v", got.LongSecret, tt.want.LongSecret)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, *got, "parsed API key should match expected values")
 		})
 	}
 }
@@ -131,16 +117,85 @@ func TestParseAPIKey_InvalidFormat(t *testing.T) {
 	}{
 		{"empty", ""},
 		{"missing parts", "sk-mono-v1"},
-		{"too many parts", "sk-mono-v1-token-secret-extra"},
 		{"wrong separator", "sk_mono_v1_token_secret"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := keygen.ParseAPIKey(tt.apiKey)
-			if err == nil {
-				t.Errorf("ParseAPIKey() expected error for invalid format, got nil")
-			}
+			assert.Error(t, err, "should return error for invalid API key format")
 		})
+	}
+}
+
+// TestParseAPIKey_SpecialCharactersInLongSecret tests that ParseAPIKey correctly handles
+// hyphens and underscores in the long secret (base64 URL encoding).
+func TestParseAPIKey_SpecialCharactersInLongSecret(t *testing.T) {
+	tests := []struct {
+		name   string
+		apiKey string
+		want   keygen.APIKeyParts
+	}{
+		{
+			name:   "long secret with hyphens",
+			apiKey: "sk-mono-v1-a3f5d8c2b4e6-abc-def-ghi-jkl-mno-pqr-stu-vwx-yz",
+			want: keygen.APIKeyParts{
+				KeyType:    "sk",
+				Service:    "mono",
+				Version:    "v1",
+				ShortToken: "a3f5d8c2b4e6",
+				LongSecret: "abc-def-ghi-jkl-mno-pqr-stu-vwx-yz",
+				FullKey:    "sk-mono-v1-a3f5d8c2b4e6-abc-def-ghi-jkl-mno-pqr-stu-vwx-yz",
+			},
+		},
+		{
+			name:   "long secret with underscores",
+			apiKey: "sk-mono-v1-a3f5d8c2b4e6-abc_def_ghi_jkl_mno_pqr_stu_vwx_yz",
+			want: keygen.APIKeyParts{
+				KeyType:    "sk",
+				Service:    "mono",
+				Version:    "v1",
+				ShortToken: "a3f5d8c2b4e6",
+				LongSecret: "abc_def_ghi_jkl_mno_pqr_stu_vwx_yz",
+				FullKey:    "sk-mono-v1-a3f5d8c2b4e6-abc_def_ghi_jkl_mno_pqr_stu_vwx_yz",
+			},
+		},
+		{
+			name:   "long secret with mixed hyphens and underscores",
+			apiKey: "sk-mono-v1-a3f5d8c2b4e6-abc-def_ghi-jkl_mno-pqr_stu",
+			want: keygen.APIKeyParts{
+				KeyType:    "sk",
+				Service:    "mono",
+				Version:    "v1",
+				ShortToken: "a3f5d8c2b4e6",
+				LongSecret: "abc-def_ghi-jkl_mno-pqr_stu",
+				FullKey:    "sk-mono-v1-a3f5d8c2b4e6-abc-def_ghi-jkl_mno-pqr_stu",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := keygen.ParseAPIKey(tt.apiKey)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, *got, "parsed API key should handle special characters correctly")
+		})
+	}
+}
+
+// TestGenerateAndParse_RoundTrip tests that generated keys can be parsed correctly,
+// including keys whose long secrets happen to contain hyphens or underscores.
+func TestGenerateAndParse_RoundTrip(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		// Generate key
+		generated, err := keygen.GenerateAPIKey("sk", "mono", "v1")
+		require.NoError(t, err)
+
+		// Parse it back
+		parsed, err := keygen.ParseAPIKey(generated.FullKey)
+		require.NoError(t, err, "should parse generated key: %s", generated.FullKey)
+
+		// Verify all fields match using general struct comparison
+		assert.Equal(t, *generated, *parsed, "round-trip should preserve all fields")
 	}
 }

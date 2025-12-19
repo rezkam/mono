@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,29 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/keygen"
-	"golang.org/x/crypto/blake2b"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
-
-// hashSecret computes BLAKE2b-256 hash of the secret and returns hex-encoded string.
-// BLAKE2b is faster than SHA-256 while maintaining security for high-entropy API keys.
-func hashSecret(secret string) string {
-	hash := blake2b.Sum256([]byte(secret))
-	return hex.EncodeToString(hash[:])
-}
-
-// maskAPIKey returns a safe-to-log version of an API key showing only the prefix.
-// Example: "sk-mono-v1-a3f5d8c2b4e6-****" → "sk-***"
-func maskAPIKey(apiKey string) string {
-	parts := strings.Split(apiKey, "-")
-	if len(parts) >= 1 {
-		return parts[0] + "-***"
-	}
-	return "***"
-}
 
 // lastUsedUpdate holds information for updating an API key's last_used_at timestamp.
 type lastUsedUpdate struct {
@@ -76,10 +57,10 @@ func NewAuthenticator(ctx context.Context, repo Repository, operationTimeout tim
 // UnaryInterceptor is a gRPC unary interceptor for API key authentication.
 func (a *Authenticator) UnaryInterceptor(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	// Extract API key from metadata
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -107,7 +88,7 @@ func (a *Authenticator) UnaryInterceptor(
 		// Log detailed error internally for debugging and security monitoring
 		// DO NOT expose detailed error to client - prevents information disclosure attacks
 		slog.WarnContext(ctx, "Authentication failed",
-			slog.String("key_prefix", maskAPIKey(apiKey)),
+			slog.String("key_prefix", keygen.MaskAPIKey(apiKey)),
 			slog.String("error", err.Error()))
 
 		// Return generic error (same message for all failure types)
@@ -198,7 +179,7 @@ func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error
 	}
 
 	// Verify the long secret using BLAKE2b-256 with constant-time comparison
-	providedHash := hashSecret(keyParts.LongSecret)
+	providedHash := keygen.HashSecret(keyParts.LongSecret)
 	if subtle.ConstantTimeCompare([]byte(key.LongSecretHash), []byte(providedHash)) != 1 {
 		return fmt.Errorf("invalid API key")
 	}
@@ -234,7 +215,7 @@ func CreateAPIKey(ctx context.Context, repo Repository, keyType, service, versio
 	}
 
 	// Hash the long secret using BLAKE2b-256
-	longSecretHash := hashSecret(keyParts.LongSecret)
+	longSecretHash := keygen.HashSecret(keyParts.LongSecret)
 
 	// Store in repository
 	keyID, err := uuid.NewV7()

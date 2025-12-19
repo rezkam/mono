@@ -5,8 +5,8 @@ WORKER_BINARY_NAME=mono-worker
 DOCKER_IMAGE=mono-service
 # Default DB Driver
 DB_DRIVER ?= postgres
-# Development database URL (used by db-up, run, gen-apikey, db-migrate-* targets)
-DEV_POSTGRES_URL ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable
+# Development database DSN (used by db-up, run, gen-apikey, db-migrate-* targets)
+DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable
 
 # =============================================================================
 # Database Architecture
@@ -33,7 +33,7 @@ DEV_POSTGRES_URL ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security sync-agents
+.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -102,14 +102,14 @@ test: ## Run all unit tests (no database required)
 	@echo "Running tests..."
 	go test -v ./...
 
-bench: ## Run benchmarks (requires BENCHMARK_POSTGRES_URL env var)
+bench: ## Run benchmarks (requires MONO_STORAGE_DSN env var)
 	@echo "Running benchmarks..."
-	@if [ -z "$(BENCHMARK_POSTGRES_URL)" ]; then \
-		echo "Warning: BENCHMARK_POSTGRES_URL not set. Set it to run benchmarks with real database."; \
-		echo "Usage: BENCHMARK_POSTGRES_URL='postgres://user:pass@localhost:5432/dbname' make bench"; \
+	@if [ -z "$(MONO_STORAGE_DSN)" ]; then \
+		echo "Warning: MONO_STORAGE_DSN not set. Set it to run benchmarks with real database."; \
+		echo "Usage: MONO_STORAGE_DSN='postgres://user:pass@localhost:5432/dbname' make bench"; \
 		echo "Skipping benchmarks..."; \
 	else \
-		BENCHMARK_POSTGRES_URL=$(BENCHMARK_POSTGRES_URL) go test -bench=. -benchmem ./internal/service/...; \
+		MONO_STORAGE_DSN=$(MONO_STORAGE_DSN) go test -bench=. -benchmem ./tests/integration/postgres; \
 	fi
 
 bench-test: ## Run benchmarks using test database (port 5433, auto-cleanup)
@@ -120,8 +120,8 @@ bench-test: ## Run benchmarks using test database (port 5433, auto-cleanup)
 	@$(MAKE) test-integration-up
 	@echo ""
 	@echo "=== Running benchmarks with test database ==="
-	@BENCHMARK_POSTGRES_URL="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
-		go test -bench=. -benchmem ./internal/service/...; \
+	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+		go test -bench=. -benchmem ./tests/integration/postgres; \
 	BENCH_RESULT=$$?; \
 	echo ""; \
 	echo "=== Cleaning up test database ==="; \
@@ -155,9 +155,9 @@ gen-apikey: build-apikey ## Generate a new API key (usage: NAME="My Key" DAYS=30
 		exit 1; \
 	fi
 	@if [ -z "$(DAYS)" ]; then \
-		POSTGRES_URL="$(DEV_POSTGRES_URL)" ./mono-apikey -name "$(NAME)"; \
+		MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" ./mono-apikey -name "$(NAME)"; \
 	else \
-		POSTGRES_URL="$(DEV_POSTGRES_URL)" ./mono-apikey -name "$(NAME)" -days $(DAYS); \
+		MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" ./mono-apikey -name "$(NAME)" -days $(DAYS); \
 	fi
 
 lint: ## Run linter
@@ -170,7 +170,7 @@ setup-hooks: ## Configure git hooks to run automatically
 
 run: build ## Build and run server using dev database
 	@echo "Running server..."
-	MONO_POSTGRES_URL="$(DEV_POSTGRES_URL)" MONO_STORAGE_TYPE=postgres MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
+	MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."
@@ -190,7 +190,7 @@ db-up: ## [DEV DB] Start development database (port 5432)
 	docker compose up -d postgres
 	@echo "Waiting for PostgreSQL to be ready..."
 	@sleep 3
-	@echo "✅ Database ready at $(DEV_POSTGRES_URL)"
+	@echo "✅ Database ready at $(DEV_STORAGE_DSN)"
 
 db-down: ## [DEV DB] Stop development database
 	@echo "Stopping database containers..."
@@ -269,8 +269,8 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 	@$(MAKE) test-integration-up
 	@echo ""
 	@echo "=== Running integration tests ==="
-	@TEST_POSTGRES_URL="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
-		go test -v ./tests/integration/... -count=1; \
+	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+		go test -v ./tests/integration/postgres -count=1; \
 	TEST_RESULT=$$?; \
 	echo ""; \
 	echo "=== Cleaning up test database ==="; \
@@ -283,12 +283,37 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 		exit $$TEST_RESULT; \
 	fi
 
-test-all: ## Run all tests (unit tests + integration tests)
+test-e2e: ## [TEST DB] Run end-to-end tests (auto-cleanup before/after)
+	@echo "=== Cleaning any existing test database ==="
+	@docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
+	@echo ""
+	@echo "=== Starting fresh test database ==="
+	@$(MAKE) test-integration-up
+	@echo ""
+	@echo "=== Running e2e tests ==="
+	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+		go test -v ./tests/e2e -count=1; \
+	TEST_RESULT=$$?; \
+	echo ""; \
+	echo "=== Cleaning up test database ==="; \
+	$(MAKE) test-integration-clean; \
+	echo ""; \
+	if [ $$TEST_RESULT -eq 0 ]; then \
+		echo "✅ E2E tests PASSED"; \
+	else \
+		echo "❌ E2E tests FAILED"; \
+		exit $$TEST_RESULT; \
+	fi
+
+test-all: ## Run all tests (unit tests + integration tests + e2e tests)
 	@echo "=== Running unit tests ==="
 	@go test -v ./internal/recurring/... ./internal/service/...
 	@echo ""
 	@echo "=== Running integration tests ==="
 	@$(MAKE) test-integration
+	@echo ""
+	@echo "=== Running e2e tests ==="
+	@$(MAKE) test-e2e
 
 # Helper targets
 .PHONY: test-db-status test-db-logs test-db-shell
@@ -306,11 +331,7 @@ test-db-shell: ## Connect to PostgreSQL test database shell
 # Documentation Sync
 # =============================================================================
 
-sync-agents: ## Sync CLAUDE.md to AGENTS.md and .github/copilot-instructions.md
+sync-agents: ## Sync CLAUDE.md to AGENTS.md
 	@echo "Syncing agent instruction files..."
 	@cp CLAUDE.md AGENTS.md
-	@mkdir -p .github
-	@cp CLAUDE.md .github/copilot-instructions.md
-	@echo "Synced CLAUDE.md to:"
-	@echo "   - AGENTS.md"
-	@echo "   - .github/copilot-instructions.md"
+	@echo "Synced CLAUDE.md to AGENTS.md"

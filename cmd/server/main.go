@@ -40,7 +40,7 @@ func main() {
 
 func run() error {
 	// Load Configuration
-	cfg, err := config.Load()
+	cfg, err := config.LoadServerConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -103,13 +103,13 @@ func run() error {
 		ConnMaxIdleTime: time.Duration(cfg.DBConnMaxIdleTime) * time.Second,
 	}
 
-	store, err := postgres.NewPostgresStoreWithPoolConfig(ctx, cfg.PostgresURL, poolConfig)
+	store, err := postgres.NewPostgresStoreWithPoolConfig(ctx, cfg.StorageDSN, poolConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create store: %w", err)
 	}
 	defer store.Close()
 
-	slog.InfoContext(ctx, "storage initialized", "url", maskPassword(cfg.PostgresURL))
+	slog.InfoContext(ctx, "storage initialized", "dsn", maskPassword(cfg.StorageDSN))
 
 	// Init Application Service
 	todoService := todo.NewService(store)
@@ -177,7 +177,7 @@ func run() error {
 
 // createGRPCServer creates and configures the gRPC server with keepalive settings,
 // authentication, and observability. Returns the gRPC server, listener, and any error.
-func createGRPCServer(ctx context.Context, cfg *config.Config, svc *service.MonoService, authenticator *auth.Authenticator) (*grpc.Server, net.Listener, error) {
+func createGRPCServer(ctx context.Context, cfg *config.ServerConfig, svc *service.MonoService, authenticator *auth.Authenticator) (*grpc.Server, net.Listener, error) {
 	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to listen: %w", err)
@@ -225,7 +225,7 @@ func createGRPCServer(ctx context.Context, cfg *config.Config, svc *service.Mono
 // startRESTGateway initializes and starts the REST gateway server.
 // It provides a REST/JSON API for clients that don't speak gRPC, proxying requests
 // to the gRPC server. The REST gateway handles its own graceful shutdown when ctx is cancelled.
-func startRESTGateway(ctx context.Context, cfg *config.Config) {
+func startRESTGateway(ctx context.Context, cfg *config.ServerConfig) {
 	mux := runtime.NewServeMux()
 	// Configure gRPC client options for REST gateway → gRPC server communication
 	// The StatsHandler instruments outgoing gRPC calls from the gateway with:

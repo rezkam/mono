@@ -62,7 +62,9 @@ internal/
 api/proto/                     # Protobuf definitions (source of truth)
 pkg/observability/             # OpenTelemetry setup
 tests/
-  ├── integration/             # Integration tests with real database
+  ├── integration/
+  │   └── postgres/            # PostgreSQL integration tests + benchmarks
+  │       └── testhelper.go    # Test database setup utilities
   └── e2e/                     # End-to-end API tests
 ```
 
@@ -151,7 +153,7 @@ DB_URL="postgres://mono:mono_password@localhost:5432/mono_db" make db-migrate-up
 
 # 3. Build and run the server
 make build
-MONO_POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db" ./mono-server
+MONO_STORAGE_DSN="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" ./mono-server
 ```
 
 ### Using Docker
@@ -170,37 +172,50 @@ docker-compose up -d
 make build-apikey
 
 # Generate a key (never expires)
-POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db" \
+MONO_STORAGE_DSN="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" \
   NAME="My Application" make gen-apikey
 
 # Generate a key with 30-day expiration
-POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db" \
+MONO_STORAGE_DSN="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" \
   NAME="Temporary Key" DAYS=30 make gen-apikey
 ```
 
 ## Configuration
 
-All configuration is via environment variables with `MONO_` prefix:
+All configuration is via environment variables with `MONO_` prefix following 12-factor app methodology.
+
+### Configuration Pattern
+
+Each binary loads only the configuration it needs:
+- **Server**: `config.LoadServerConfig()` - gRPC, gateway, database, auth, pagination, observability
+- **Worker**: `config.LoadWorkerConfig()` - database, operation timeout
+- **API Key Tool**: `config.LoadAPIKeyGenConfig()` - database, API key settings + CLI flags
+- **Tests**: `config.LoadTestConfig()` - database configuration
+
+### Storage Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MONO_STORAGE_DSN` | *required* | Data Source Name (connection string) for storage backend<br>Format: `postgres://user:pass@host:port/db?options` |
+| `MONO_STORAGE_TYPE` | postgres | Storage backend (only `postgres` supported) |
 
 ### Server Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MONO_GRPC_PORT` | 8080 | gRPC server port (HTTP/2) |
-| `MONO_HTTP_PORT` | 8081 | HTTP gateway port (REST/JSON) |
+| `MONO_REST_PORT` | 8081 | REST gateway port (HTTP/JSON) |
 | `MONO_GRPC_HOST` | localhost | Host for gateway to connect to gRPC server |
 | `MONO_ENV` | dev | Environment (`dev`, `prod`) |
-| `MONO_STORAGE_TYPE` | postgres | Storage backend (only `postgres` supported) |
-| `MONO_POSTGRES_URL` | *required* | PostgreSQL connection string |
 
 ### Timeout Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MONO_SHUTDOWN_TIMEOUT` | 10 | Graceful shutdown timeout (seconds) |
-| `MONO_HTTP_READ_TIMEOUT` | 5 | HTTP read header timeout (seconds) |
-| `MONO_HTTP_WRITE_TIMEOUT` | 10 | HTTP write timeout (seconds) |
-| `MONO_HTTP_IDLE_TIMEOUT` | 120 | HTTP idle timeout (seconds) |
+| `MONO_REST_READ_TIMEOUT` | 5 | REST gateway read timeout (seconds) |
+| `MONO_REST_WRITE_TIMEOUT` | 10 | REST gateway write timeout (seconds) |
+| `MONO_REST_IDLE_TIMEOUT` | 120 | REST gateway idle timeout (seconds) |
 
 ### Database Connection Pool
 
@@ -299,12 +314,14 @@ curl -X POST http://localhost:8081/v1/lists/{list_id}/items \
 | `make gen-sqlc` | Generate type-safe Go code from SQL queries |
 | `make test` | Run unit tests |
 | `make test-integration` | Run integration tests (starts fresh DB) |
-| `make test-all` | Run unit + integration tests |
+| `make test-e2e` | Run end-to-end tests (starts fresh DB) |
+| `make test-all` | Run unit + integration + e2e tests |
 | `make bench` | Run benchmarks with real database |
 | `make bench-test` | Run benchmarks using test database |
 | `make security` | Check for vulnerabilities |
 | `make lint` | Run linter |
 | `make build` | Build the server binary |
+| `make build-worker` | Build the worker binary |
 | `make build-apikey` | Build the API key generator |
 | `make docker-build` | Build Docker image |
 
@@ -336,7 +353,7 @@ The pre-commit hook runs:
 
 ### Testing
 
-The project has comprehensive test coverage:
+The project has comprehensive test coverage across multiple levels:
 
 #### Unit Tests
 ```bash
@@ -348,40 +365,51 @@ go test -v ./internal/service/...
 ```
 
 #### Integration Tests
-Integration tests use a real PostgreSQL database and verify:
+Located in `tests/integration/postgres/`, these tests use a real PostgreSQL database and verify:
 - Database schema and migrations
-- CRUD operations
-- Triggers and functions
-- Job queue with SKIP LOCKED
-- Cascade deletes
+- CRUD operations with actual SQL queries
+- Database triggers and functions
+- Job queue with SKIP LOCKED concurrency
+- Cascade deletes and referential integrity
+- Status history tracking
 
 ```bash
-# Run integration tests (auto-starts/stops DB)
+# Run integration tests (auto-starts/stops test DB on port 5433)
 make test-integration
 
-# Run with cleanup
-make test-integration-full
+# Run specific integration test
+MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+  go test -v ./tests/integration/postgres -run TestName
 ```
 
 #### E2E Tests
-End-to-end tests verify the full gRPC API:
+End-to-end tests verify the complete API surface including authentication:
 
 ```bash
-# E2E tests run automatically with test-integration
+# Run e2e tests (auto-starts/stops test DB)
+make test-e2e
+
+# Run all test types
 make test-all
 ```
 
 #### Benchmarks
-Benchmarks use real PostgreSQL to measure actual performance:
+Benchmarks are located in `tests/integration/postgres/` and use real PostgreSQL to measure actual performance:
 
 ```bash
 # Run all benchmarks with test database
 make bench-test
 
+# Run with development database
+MONO_STORAGE_DSN="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" \
+  make bench
+
 # Run specific benchmark
-BENCHMARK_POSTGRES_URL="postgres://..." \
-  go test -bench=BenchmarkCreateList -benchmem ./internal/service/...
+MONO_STORAGE_DSN="postgres://..." \
+  go test -bench=BenchmarkAuthO1Lookup -benchmem ./tests/integration/postgres
 ```
+
+**Note**: All tests and benchmarks now use `MONO_STORAGE_DSN` for database connections.
 
 ### API Evolution
 
@@ -436,7 +464,7 @@ Mono supports flexible recurring task patterns:
 
 ```bash
 # Required
-export MONO_POSTGRES_URL="postgres://user:pass@host:5432/dbname?sslmode=require"
+export MONO_STORAGE_DSN="postgres://user:pass@host:5432/dbname?sslmode=require"
 
 # Recommended for production
 export MONO_ENV=prod
@@ -463,10 +491,10 @@ The service exports:
 
 ```bash
 # Backup database
-pg_dump $MONO_POSTGRES_URL > backup.sql
+pg_dump $MONO_STORAGE_DSN > backup.sql
 
 # Run migrations on production
-DB_URL=$MONO_POSTGRES_URL make db-migrate-up
+DB_URL=$MONO_STORAGE_DSN make db-migrate-up
 
 # Monitor connection pool
 # Check MONO_DB_MAX_OPEN_CONNS and adjust based on load

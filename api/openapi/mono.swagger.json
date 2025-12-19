@@ -734,8 +734,7 @@
         "RECURRENCE_PATTERN_WEEKDAYS"
       ],
       "default": "RECURRENCE_PATTERN_UNSPECIFIED",
-      "description": "- RECURRENCE_PATTERN_UNSPECIFIED: Default value, not set\n - RECURRENCE_PATTERN_DAILY: Every day\n - RECURRENCE_PATTERN_WEEKLY: Every week\n - RECURRENCE_PATTERN_BIWEEKLY: Every 2 weeks\n - RECURRENCE_PATTERN_MONTHLY: Every month\n - RECURRENCE_PATTERN_YEARLY: Every year\n - RECURRENCE_PATTERN_QUARTERLY: Every 3 months\n - RECURRENCE_PATTERN_WEEKDAYS: Monday through Friday",
-      "title": "RecurrencePattern defines how often a recurring task should repeat.\nValid values:\n - RECURRENCE_PATTERN_DAILY: Repeats every day\n - RECURRENCE_PATTERN_WEEKLY: Repeats every week on the same day\n - RECURRENCE_PATTERN_BIWEEKLY: Repeats every two weeks\n - RECURRENCE_PATTERN_MONTHLY: Repeats on the same day each month\n - RECURRENCE_PATTERN_YEARLY: Repeats once per year\n - RECURRENCE_PATTERN_QUARTERLY: Repeats every 3 months\n - RECURRENCE_PATTERN_WEEKDAYS: Repeats on weekdays only (Monday-Friday)"
+      "description": "RecurrencePattern defines how often a recurring task should repeat.\n\n - RECURRENCE_PATTERN_UNSPECIFIED: Default value, not set\n - RECURRENCE_PATTERN_DAILY: Every day\n - RECURRENCE_PATTERN_WEEKLY: Every week\n - RECURRENCE_PATTERN_BIWEEKLY: Every 2 weeks\n - RECURRENCE_PATTERN_MONTHLY: Every month\n - RECURRENCE_PATTERN_YEARLY: Every year\n - RECURRENCE_PATTERN_QUARTERLY: Every 3 months\n - RECURRENCE_PATTERN_WEEKDAYS: Monday through Friday"
     },
     "v1RecurringTaskTemplate": {
       "type": "object",
@@ -802,8 +801,7 @@
         "TASK_PRIORITY_URGENT"
       ],
       "default": "TASK_PRIORITY_UNSPECIFIED",
-      "description": "- TASK_PRIORITY_UNSPECIFIED: Default value, not set\n - TASK_PRIORITY_LOW: Low priority\n - TASK_PRIORITY_MEDIUM: Medium priority (recommended default)\n - TASK_PRIORITY_HIGH: High priority\n - TASK_PRIORITY_URGENT: Urgent, needs immediate attention",
-      "title": "TaskPriority indicates the importance and urgency of a task.\nValid values:\n - TASK_PRIORITY_LOW: Nice to have, low urgency\n - TASK_PRIORITY_MEDIUM: Standard priority, default for most tasks\n - TASK_PRIORITY_HIGH: Important, should be done soon\n - TASK_PRIORITY_URGENT: Critical, requires immediate attention"
+      "description": "TaskPriority indicates the importance and urgency of a task.\n\n - TASK_PRIORITY_UNSPECIFIED: Default value, not set\n - TASK_PRIORITY_LOW: Low priority\n - TASK_PRIORITY_MEDIUM: Medium priority (recommended default)\n - TASK_PRIORITY_HIGH: High priority\n - TASK_PRIORITY_URGENT: Urgent, needs immediate attention"
     },
     "v1TaskStatus": {
       "type": "string",
@@ -817,8 +815,7 @@
         "TASK_STATUS_CANCELLED"
       ],
       "default": "TASK_STATUS_UNSPECIFIED",
-      "description": "- TASK_STATUS_UNSPECIFIED: Default value, not set\n - TASK_STATUS_TODO: Ready to start\n - TASK_STATUS_IN_PROGRESS: Currently being worked on\n - TASK_STATUS_BLOCKED: Blocked by dependencies\n - TASK_STATUS_DONE: Completed successfully\n - TASK_STATUS_ARCHIVED: Archived for records\n - TASK_STATUS_CANCELLED: Cancelled, won't complete",
-      "title": "TaskStatus represents the current state of a task.\nValid values:\n - TASK_STATUS_TODO: Task is ready to be worked on\n - TASK_STATUS_IN_PROGRESS: Task is actively being worked on\n - TASK_STATUS_BLOCKED: Task is blocked by external dependencies\n - TASK_STATUS_DONE: Task is completed\n - TASK_STATUS_ARCHIVED: Task is archived for record keeping\n - TASK_STATUS_CANCELLED: Task was cancelled and won't be completed"
+      "description": "TaskStatus represents the current state of a task.\n\n - TASK_STATUS_UNSPECIFIED: Default value, not set\n - TASK_STATUS_TODO: Ready to start\n - TASK_STATUS_IN_PROGRESS: Currently being worked on\n - TASK_STATUS_BLOCKED: Blocked by dependencies\n - TASK_STATUS_DONE: Completed successfully\n - TASK_STATUS_ARCHIVED: Archived for records\n - TASK_STATUS_CANCELLED: Cancelled, won't complete"
     },
     "v1TodoItem": {
       "type": "object",

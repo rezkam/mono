@@ -5,8 +5,8 @@ import "time"
 // TodoList is an aggregate root representing a collection of tasks.
 //
 // Items may be populated or empty depending on the query:
-//  - List view (dashboard): counts populated, Items empty
-//  - Detail view: Items populated with full details
+//   - List view (dashboard): counts populated, Items empty
+//   - Detail view: Items populated with full details
 type TodoList struct {
 	ID         string
 	Title      string

@@ -37,3 +37,6 @@ dist/
 # Git worktrees
 .worktrees/
 
+# Documentation (local research notes)
+docs/
+

@@ -27,13 +27,6 @@ const (
 )
 
 // TaskStatus represents the current state of a task.
-// Valid values:
-//   - TASK_STATUS_TODO: Task is ready to be worked on
-//   - TASK_STATUS_IN_PROGRESS: Task is actively being worked on
-//   - TASK_STATUS_BLOCKED: Task is blocked by external dependencies
-//   - TASK_STATUS_DONE: Task is completed
-//   - TASK_STATUS_ARCHIVED: Task is archived for record keeping
-//   - TASK_STATUS_CANCELLED: Task was cancelled and won't be completed
 type TaskStatus int32
 
 const (
@@ -96,11 +89,6 @@ func (TaskStatus) EnumDescriptor() ([]byte, []int) {
 }
 
 // TaskPriority indicates the importance and urgency of a task.
-// Valid values:
-//   - TASK_PRIORITY_LOW: Nice to have, low urgency
-//   - TASK_PRIORITY_MEDIUM: Standard priority, default for most tasks
-//   - TASK_PRIORITY_HIGH: Important, should be done soon
-//   - TASK_PRIORITY_URGENT: Critical, requires immediate attention
 type TaskPriority int32
 
 const (
@@ -157,14 +145,6 @@ func (TaskPriority) EnumDescriptor() ([]byte, []int) {
 }
 
 // RecurrencePattern defines how often a recurring task should repeat.
-// Valid values:
-//   - RECURRENCE_PATTERN_DAILY: Repeats every day
-//   - RECURRENCE_PATTERN_WEEKLY: Repeats every week on the same day
-//   - RECURRENCE_PATTERN_BIWEEKLY: Repeats every two weeks
-//   - RECURRENCE_PATTERN_MONTHLY: Repeats on the same day each month
-//   - RECURRENCE_PATTERN_YEARLY: Repeats once per year
-//   - RECURRENCE_PATTERN_QUARTERLY: Repeats every 3 months
-//   - RECURRENCE_PATTERN_WEEKDAYS: Repeats on weekdays only (Monday-Friday)
 type RecurrencePattern int32
 
 const (

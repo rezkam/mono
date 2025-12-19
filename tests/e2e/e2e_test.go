@@ -18,6 +18,7 @@ import (
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/config"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
@@ -38,16 +39,15 @@ var (
 
 func TestMain(m *testing.M) {
 	// Skip e2e tests if PostgreSQL is not available
-	pgURL := os.Getenv("TEST_POSTGRES_URL")
-	if pgURL == "" {
-		// Log that we are skipping
-		println("Skipping E2E tests: TEST_POSTGRES_URL is not set")
+	cfg, err := config.LoadTestConfig()
+	if err != nil {
+		fmt.Printf("Skipping E2E tests: %v\n", err)
 		os.Exit(0)
 	}
 
 	// Setup Server with PostgreSQL
 	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 	svc := service.NewMonoService(todoService, 50, 100)
 
 	// Generate API key using the standard apikey tool (tests the tool itself)
-	testAPIKey, err = generateAPIKeyWithTool(pgURL)
+	testAPIKey, err = generateAPIKeyWithTool(cfg.StorageDSN)
 	if err != nil {
 		panic(fmt.Errorf("failed to generate API key with tool: %w", err))
 	}
@@ -134,8 +134,8 @@ func generateAPIKeyWithTool(pgURL string) (string, error) {
 	defer os.Remove("mono-apikey-test")
 
 	// Run the apikey tool
+	// The subprocess inherits MONO_STORAGE_DSN from the parent process
 	cmd := exec.Command("./mono-apikey-test", "-name", "E2E Test Key", "-days", "1")
-	cmd.Env = append(os.Environ(), "POSTGRES_URL="+pgURL)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -444,11 +444,14 @@ func TestE2E_ListTasksWithFilter_HTTP(t *testing.T) {
 	require.NoError(t, err)
 	listID := createListResp["list"].(map[string]interface{})["id"].(string)
 
+	// Use unique tag to avoid interference from other tests
+	uniqueTag := fmt.Sprintf("urgent-%d", time.Now().Unix())
+
 	// Create items with different tags
 	items := []string{
-		`{"title": "Urgent Task", "tags": ["urgent", "work"]}`,
+		fmt.Sprintf(`{"title": "Urgent Task", "tags": ["%s", "work"]}`, uniqueTag),
 		`{"title": "Normal Task", "tags": ["work"]}`,
-		`{"title": "Personal Task", "tags": ["urgent", "personal"]}`,
+		fmt.Sprintf(`{"title": "Personal Task", "tags": ["%s", "personal"]}`, uniqueTag),
 	}
 
 	for _, itemJSON := range items {
@@ -457,8 +460,8 @@ func TestE2E_ListTasksWithFilter_HTTP(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	// 2. List tasks filtered by "urgent" tag
-	resp, err = httpRequest(t, "GET", "/v1/tasks?filter=tags:urgent", "")
+	// 2. List tasks filtered by unique tag
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/v1/tasks?filter=tags:%s", uniqueTag), "")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -469,12 +472,12 @@ func TestE2E_ListTasksWithFilter_HTTP(t *testing.T) {
 	require.NoError(t, err)
 
 	itemsRaw := listResp["items"].([]interface{})
-	assert.Len(t, itemsRaw, 2) // Should find 2 items with "urgent" tag
+	assert.Len(t, itemsRaw, 2) // Should find 2 items with unique tag
 
 	for _, itemRaw := range itemsRaw {
 		itemMap := itemRaw.(map[string]interface{})
 		tags := itemMap["tags"].([]interface{})
-		assert.Contains(t, tags, "urgent")
+		assert.Contains(t, tags, uniqueTag)
 	}
 }
 
@@ -516,7 +519,8 @@ func TestE2E_RecurringTemplateFieldMask_HTTP(t *testing.T) {
 		"update_mask": "title"
 	}`, templateID, listID)
 
-	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/v1/lists/%s/recurring-templates/%s", listID, templateID), updateJSON)
+	// Note: Update endpoint is /v1/recurring-templates/{id}, not /v1/lists/{listID}/recurring-templates/{id}
+	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/v1/recurring-templates/%s", templateID), updateJSON)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 

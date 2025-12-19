@@ -20,14 +20,14 @@ func main() {
 	defer cancel()
 
 	// Load configuration
-	cfg, err := config.Load()
+	cfg, err := config.LoadWorkerConfig()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// Connect to database
 	store, err := postgres.NewStoreWithConfig(ctx, postgres.DBConfig{
-		DSN: cfg.PostgresURL,
+		DSN: cfg.StorageDSN,
 	})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
