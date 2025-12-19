@@ -3,14 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
-	"github.com/rezkam/mono/internal/core"
-	"github.com/rezkam/mono/internal/storage/sql/repository"
+	"github.com/rezkam/mono/internal/domain"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -42,7 +40,7 @@ func (s *MonoService) CreateRecurringTemplate(ctx context.Context, req *monov1.C
 		return nil, status.Errorf(codes.InvalidArgument, "invalid recurrence config: %v", err)
 	}
 
-	template := &core.RecurringTaskTemplate{
+	template := &domain.RecurringTemplate{
 		ID:                   templateID,
 		ListID:               req.ListId,
 		Title:                req.Title,
@@ -60,11 +58,9 @@ func (s *MonoService) CreateRecurringTemplate(ctx context.Context, req *monov1.C
 	}
 
 	// Create and store template
-	if err := s.storage.CreateRecurringTemplate(ctx, template); err != nil {
-		if errors.Is(err, repository.ErrListNotFound) {
-			return nil, status.Error(codes.NotFound, "list not found")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to create template: %v", err)
+	_, err = s.service.CreateRecurringTemplate(ctx, template)
+	if err != nil {
+		return nil, mapError(err)
 	}
 
 	return &monov1.CreateRecurringTemplateResponse{
@@ -78,15 +74,9 @@ func (s *MonoService) GetRecurringTemplate(ctx context.Context, req *monov1.GetR
 		return nil, status.Error(codes.InvalidArgument, "id is required")
 	}
 
-	template, err := s.storage.GetRecurringTemplate(ctx, req.Id)
+	template, err := s.service.GetRecurringTemplate(ctx, req.Id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, status.Error(codes.NotFound, "template not found")
-		}
-		if errors.Is(err, repository.ErrInvalidID) {
-			return nil, status.Error(codes.InvalidArgument, "invalid template ID")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to retrieve template: %v", err)
+		return nil, mapError(err)
 	}
 
 	return &monov1.GetRecurringTemplateResponse{
@@ -101,15 +91,9 @@ func (s *MonoService) UpdateRecurringTemplate(ctx context.Context, req *monov1.U
 	}
 
 	// Get existing template
-	existing, err := s.storage.GetRecurringTemplate(ctx, req.Template.Id)
+	existing, err := s.service.GetRecurringTemplate(ctx, req.Template.Id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, status.Error(codes.NotFound, "template not found")
-		}
-		if errors.Is(err, repository.ErrInvalidID) {
-			return nil, status.Error(codes.InvalidArgument, "invalid template ID")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to retrieve template: %v", err)
+		return nil, mapError(err)
 	}
 
 	// Apply updates based on field mask
@@ -155,8 +139,8 @@ func (s *MonoService) UpdateRecurringTemplate(ctx context.Context, req *monov1.U
 
 	existing.UpdatedAt = time.Now().UTC()
 
-	if err := s.storage.UpdateRecurringTemplate(ctx, existing); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update template: %v", err)
+	if err := s.service.UpdateRecurringTemplate(ctx, existing); err != nil {
+		return nil, mapError(err)
 	}
 
 	return &monov1.UpdateRecurringTemplateResponse{
@@ -170,8 +154,8 @@ func (s *MonoService) DeleteRecurringTemplate(ctx context.Context, req *monov1.D
 		return nil, status.Error(codes.InvalidArgument, "id is required")
 	}
 
-	if err := s.storage.DeleteRecurringTemplate(ctx, req.Id); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to delete template: %v", err)
+	if err := s.service.DeleteRecurringTemplate(ctx, req.Id); err != nil {
+		return nil, mapError(err)
 	}
 
 	return &monov1.DeleteRecurringTemplateResponse{}, nil
@@ -183,9 +167,9 @@ func (s *MonoService) ListRecurringTemplates(ctx context.Context, req *monov1.Li
 		return nil, status.Error(codes.InvalidArgument, "list_id is required")
 	}
 
-	templates, err := s.storage.ListRecurringTemplates(ctx, req.ListId, req.ActiveOnly)
+	templates, err := s.service.ListRecurringTemplates(ctx, req.ListId, req.ActiveOnly)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list templates: %v", err)
+		return nil, mapError(err)
 	}
 
 	protoTemplates := make([]*monov1.RecurringTaskTemplate, len(templates))
@@ -200,21 +184,21 @@ func (s *MonoService) ListRecurringTemplates(ctx context.Context, req *monov1.Li
 
 // Helper conversion functions
 
-func convertToCorePriority(p monov1.TaskPriority) *core.TaskPriority {
+func convertToCorePriority(p monov1.TaskPriority) *domain.TaskPriority {
 	if p == monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
 		return nil
 	}
 
-	var priority core.TaskPriority
+	var priority domain.TaskPriority
 	switch p {
 	case monov1.TaskPriority_TASK_PRIORITY_LOW:
-		priority = core.TaskPriorityLow
+		priority = domain.TaskPriorityLow
 	case monov1.TaskPriority_TASK_PRIORITY_MEDIUM:
-		priority = core.TaskPriorityMedium
+		priority = domain.TaskPriorityMedium
 	case monov1.TaskPriority_TASK_PRIORITY_HIGH:
-		priority = core.TaskPriorityHigh
+		priority = domain.TaskPriorityHigh
 	case monov1.TaskPriority_TASK_PRIORITY_URGENT:
-		priority = core.TaskPriorityUrgent
+		priority = domain.TaskPriorityUrgent
 	default:
 		return nil
 	}
@@ -231,22 +215,22 @@ func convertToDuration(d *durationpb.Duration) *time.Duration {
 	return &duration
 }
 
-func convertToCoreRecurrencePattern(p monov1.RecurrencePattern) core.RecurrencePattern {
+func convertToCoreRecurrencePattern(p monov1.RecurrencePattern) domain.RecurrencePattern {
 	switch p {
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY:
-		return core.RecurrenceDaily
+		return domain.RecurrenceDaily
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_WEEKLY:
-		return core.RecurrenceWeekly
+		return domain.RecurrenceWeekly
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_BIWEEKLY:
-		return core.RecurrenceBiweekly
+		return domain.RecurrenceBiweekly
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_MONTHLY:
-		return core.RecurrenceMonthly
+		return domain.RecurrenceMonthly
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_YEARLY:
-		return core.RecurrenceYearly
+		return domain.RecurrenceYearly
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_QUARTERLY:
-		return core.RecurrenceQuarterly
+		return domain.RecurrenceQuarterly
 	case monov1.RecurrencePattern_RECURRENCE_PATTERN_WEEKDAYS:
-		return core.RecurrenceWeekdays
+		return domain.RecurrenceWeekdays
 	default:
 		return ""
 	}
@@ -265,28 +249,28 @@ func convertRecurrenceConfig(configJSON string) (map[string]interface{}, error) 
 	return config, nil
 }
 
-func convertToProtoRecurrencePattern(p core.RecurrencePattern) monov1.RecurrencePattern {
+func convertToProtoRecurrencePattern(p domain.RecurrencePattern) monov1.RecurrencePattern {
 	switch p {
-	case core.RecurrenceDaily:
+	case domain.RecurrenceDaily:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY
-	case core.RecurrenceWeekly:
+	case domain.RecurrenceWeekly:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_WEEKLY
-	case core.RecurrenceBiweekly:
+	case domain.RecurrenceBiweekly:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_BIWEEKLY
-	case core.RecurrenceMonthly:
+	case domain.RecurrenceMonthly:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_MONTHLY
-	case core.RecurrenceYearly:
+	case domain.RecurrenceYearly:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_YEARLY
-	case core.RecurrenceQuarterly:
+	case domain.RecurrenceQuarterly:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_QUARTERLY
-	case core.RecurrenceWeekdays:
+	case domain.RecurrenceWeekdays:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_WEEKDAYS
 	default:
 		return monov1.RecurrencePattern_RECURRENCE_PATTERN_UNSPECIFIED
 	}
 }
 
-func toProtoRecurringTemplate(t *core.RecurringTaskTemplate) *monov1.RecurringTaskTemplate {
+func toProtoRecurringTemplate(t *domain.RecurringTemplate) *monov1.RecurringTaskTemplate {
 	template := &monov1.RecurringTaskTemplate{
 		Id:                   t.ID,
 		ListId:               t.ListID,

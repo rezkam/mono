@@ -57,6 +57,12 @@ type Config struct {
 	// Pagination Configuration
 	DefaultPageSize int `env:"MONO_DEFAULT_PAGE_SIZE" default:"50"` // Default page size for list operations
 	MaxPageSize     int `env:"MONO_MAX_PAGE_SIZE" default:"100"`    // Maximum allowed page size
+
+	// Authentication Configuration
+	AuthOperationTimeout int `env:"MONO_AUTH_OPERATION_TIMEOUT" default:"5"` // Timeout for auth storage operations in seconds
+
+	// Worker Configuration
+	WorkerOperationTimeout int `env:"MONO_WORKER_OPERATION_TIMEOUT" default:"30"` // Timeout for worker storage operations in seconds
 }
 
 // Load parses environment variables into a Config struct.

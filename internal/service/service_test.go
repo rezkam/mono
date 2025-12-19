@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
-	"github.com/rezkam/mono/internal/core"
+	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/service"
-	"github.com/rezkam/mono/internal/storage/sql/repository"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -21,64 +22,78 @@ import (
 
 // MockStorage is a simple in-memory storage for unit testing.
 type MockStorage struct {
-	lists map[string]*core.TodoList
+	lists map[string]*domain.TodoList
 }
 
 func NewMockStorage() *MockStorage {
 	return &MockStorage{
-		lists: make(map[string]*core.TodoList),
+		lists: make(map[string]*domain.TodoList),
 	}
 }
 
-func (m *MockStorage) CreateList(ctx context.Context, list *core.TodoList) error {
+func (m *MockStorage) CreateList(ctx context.Context, list *domain.TodoList) error {
 	m.lists[list.ID] = list
 	return nil
 }
 
-func (m *MockStorage) GetList(ctx context.Context, id string) (*core.TodoList, error) {
+func (m *MockStorage) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	if l, ok := m.lists[id]; ok {
 		return l, nil
 	}
-	return nil, fmt.Errorf("not found")
+	return nil, fmt.Errorf("%w: list %s", domain.ErrNotFound, id)
 }
 
-func (m *MockStorage) UpdateList(ctx context.Context, list *core.TodoList) error {
+func (m *MockStorage) UpdateList(ctx context.Context, list *domain.TodoList) error {
 	m.lists[list.ID] = list
 	return nil
 }
 
-func (m *MockStorage) CreateTodoItem(ctx context.Context, listID string, item core.TodoItem) error {
+func (m *MockStorage) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
 	if l, ok := m.lists[listID]; ok {
-		l.Items = append(l.Items, item)
+		l.Items = append(l.Items, *item)
 		return nil
 	}
-	return repository.ErrListNotFound
+	return domain.ErrListNotFound
 }
 
-func (m *MockStorage) UpdateTodoItem(ctx context.Context, item core.TodoItem) error {
-	// Find the list containing this item
+func (m *MockStorage) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
 	for _, l := range m.lists {
-		for i, existingItem := range l.Items {
-			if existingItem.ID == item.ID {
-				l.Items[i] = item
-				return nil
+		for i := range l.Items {
+			if l.Items[i].ID == id {
+				return &l.Items[i], nil
 			}
 		}
 	}
-	return fmt.Errorf("item not found")
+	return nil, fmt.Errorf("%w: item %s", domain.ErrNotFound, id)
 }
 
-func (m *MockStorage) ListLists(ctx context.Context) ([]*core.TodoList, error) {
-	var results []*core.TodoList
+func (m *MockStorage) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+	l, ok := m.lists[listID]
+	if !ok {
+		return domain.ErrListNotFound
+	}
+
+	for i, existingItem := range l.Items {
+		if existingItem.ID == item.ID {
+			l.Items[i] = *item
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: item %s", domain.ErrNotFound, item.ID)
+}
+
+func (m *MockStorage) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
+	var results []*domain.TodoList
 	for _, l := range m.lists {
 		results = append(results, l)
 	}
 	return results, nil
 }
 
-func (m *MockStorage) ListTasks(ctx context.Context, params core.ListTasksParams) (*core.ListTasksResult, error) {
+func (m *MockStorage) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
 	// Simple implementation for testing - gather all items
-	var allItems []core.TodoItem
+	var allItems []domain.TodoItem
 	for _, l := range m.lists {
 		if params.ListID != nil && l.ID != *params.ListID {
 			continue
@@ -112,8 +127,8 @@ func (m *MockStorage) ListTasks(ctx context.Context, params core.ListTasksParams
 	start := params.Offset
 	end := start + params.Limit
 	if start >= len(allItems) {
-		return &core.ListTasksResult{
-			Items:      []core.TodoItem{},
+		return &domain.PagedResult{
+			Items:      []domain.TodoItem{},
 			TotalCount: 0,
 			HasMore:    false,
 		}, nil
@@ -122,7 +137,7 @@ func (m *MockStorage) ListTasks(ctx context.Context, params core.ListTasksParams
 		end = len(allItems)
 	}
 
-	return &core.ListTasksResult{
+	return &domain.PagedResult{
 		Items:      allItems[start:end],
 		TotalCount: end - start,
 		HasMore:    end < len(allItems),
@@ -133,18 +148,18 @@ func (m *MockStorage) Close() error {
 	return nil
 }
 
-func (m *MockStorage) CreateRecurringTemplate(ctx context.Context, template *core.RecurringTaskTemplate) error {
+func (m *MockStorage) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
 	if _, ok := m.lists[template.ListID]; !ok {
-		return repository.ErrListNotFound
+		return domain.ErrListNotFound
 	}
 	return nil
 }
 
-func (m *MockStorage) GetRecurringTemplate(ctx context.Context, id string) (*core.RecurringTaskTemplate, error) {
+func (m *MockStorage) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *MockStorage) UpdateRecurringTemplate(ctx context.Context, template *core.RecurringTaskTemplate) error {
+func (m *MockStorage) UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
 	return nil
 }
 
@@ -152,11 +167,11 @@ func (m *MockStorage) DeleteRecurringTemplate(ctx context.Context, id string) er
 	return nil
 }
 
-func (m *MockStorage) ListRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*core.RecurringTaskTemplate, error) {
+func (m *MockStorage) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
 	return nil, nil
 }
 
-func (m *MockStorage) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*core.RecurringTaskTemplate, error) {
+func (m *MockStorage) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
 	return nil, nil
 }
 
@@ -172,7 +187,7 @@ func (m *MockStorage) ClaimNextGenerationJob(ctx context.Context) (string, error
 	return "", nil
 }
 
-func (m *MockStorage) GetGenerationJob(ctx context.Context, jobID string) (*core.GenerationJob, error) {
+func (m *MockStorage) GetGenerationJob(ctx context.Context, jobID string) (*domain.GenerationJob, error) {
 	return nil, fmt.Errorf("not found")
 }
 
@@ -184,7 +199,8 @@ func (m *MockStorage) UpdateGenerationJobStatus(ctx context.Context, jobID strin
 func TestCreateList(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		resp, err := svc.CreateList(ctx, &monov1.CreateListRequest{
@@ -210,7 +226,8 @@ func TestCreateList(t *testing.T) {
 
 	t.Run("EmptyTitle", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.CreateList(ctx, &monov1.CreateListRequest{
@@ -236,7 +253,8 @@ func TestCreateList(t *testing.T) {
 func TestGetList(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create a list first
@@ -267,11 +285,17 @@ func TestGetList(t *testing.T) {
 
 	t.Run("NotFound", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.GetList(ctx, &monov1.GetListRequest{
-			Id: uuid.New().String(),
+		nonExistentID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.GetList(ctx, &monov1.GetListRequest{
+			Id: nonExistentID.String(),
 		})
 
 		if err == nil {
@@ -283,14 +307,15 @@ func TestGetList(t *testing.T) {
 			t.Fatal("expected gRPC status error")
 		}
 
-		if st.Code() != codes.Internal {
-			t.Errorf("expected Internal error, got %v", st.Code())
+		if st.Code() != codes.NotFound {
+			t.Errorf("expected NotFound error, got %v", st.Code())
 		}
 	})
 
 	t.Run("EmptyID", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.GetList(ctx, &monov1.GetListRequest{
@@ -313,7 +338,8 @@ func TestGetList(t *testing.T) {
 
 	t.Run("ListWithRecurringItems", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and template
@@ -377,7 +403,8 @@ func TestGetList(t *testing.T) {
 func TestCreateItem(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create a list first
@@ -418,7 +445,8 @@ func TestCreateItem(t *testing.T) {
 
 	t.Run("WithPriorityAndDuration", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{
@@ -458,7 +486,8 @@ func TestCreateItem(t *testing.T) {
 
 	t.Run("EmptyListID", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
@@ -482,11 +511,17 @@ func TestCreateItem(t *testing.T) {
 
 	t.Run("EmptyTitle", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-			ListId: uuid.New().String(),
+		listID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.CreateItem(ctx, &monov1.CreateItemRequest{
+			ListId: listID.String(),
 			Title:  "",
 		})
 
@@ -506,11 +541,17 @@ func TestCreateItem(t *testing.T) {
 
 	t.Run("ListNotFound", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-			ListId: uuid.New().String(),
+		nonExistentListID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.CreateItem(ctx, &monov1.CreateItemRequest{
+			ListId: nonExistentListID.String(),
 			Title:  "Test Item",
 		})
 
@@ -536,7 +577,8 @@ func TestCreateItem(t *testing.T) {
 
 	t.Run("WithRecurringTemplateMetadata", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and recurring template
@@ -579,7 +621,8 @@ func TestCreateItem(t *testing.T) {
 func TestUpdateItem(t *testing.T) {
 	t.Run("SuccessFullUpdate", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and item
@@ -620,7 +663,8 @@ func TestUpdateItem(t *testing.T) {
 
 	t.Run("SuccessFieldMask", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -658,15 +702,21 @@ func TestUpdateItem(t *testing.T) {
 
 	t.Run("ItemNotFound", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
 
-		_, err := svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
+		nonExistentItemID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
 			ListId: listResp.List.Id,
 			Item: &monov1.TodoItem{
-				Id:    uuid.New().String(),
+				Id:    nonExistentItemID.String(),
 				Title: "Updated",
 			},
 		})
@@ -687,7 +737,8 @@ func TestUpdateItem(t *testing.T) {
 
 	t.Run("PreservesStatusWhenUpdatingOtherFieldsWithoutMask", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and item (starts as TODO by default)
@@ -740,7 +791,8 @@ func TestUpdateItem(t *testing.T) {
 func TestListLists(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create multiple lists
@@ -761,7 +813,8 @@ func TestListLists(t *testing.T) {
 
 	t.Run("EmptyLists", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		resp, err := svc.ListLists(ctx, &monov1.ListListsRequest{})
@@ -780,7 +833,8 @@ func TestListLists(t *testing.T) {
 func TestListTasks(t *testing.T) {
 	t.Run("AllTasks", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list with items
@@ -801,7 +855,8 @@ func TestListTasks(t *testing.T) {
 
 	t.Run("FilterByTag", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -824,7 +879,8 @@ func TestListTasks(t *testing.T) {
 
 	t.Run("FilterByParent", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		list1, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "List 1"})
@@ -849,7 +905,8 @@ func TestListTasks(t *testing.T) {
 
 	t.Run("OrderByValidation_ValidFields", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -874,7 +931,8 @@ func TestListTasks(t *testing.T) {
 
 	t.Run("OrderByValidation_InvalidField", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -914,7 +972,8 @@ func TestListTasks(t *testing.T) {
 
 	t.Run("OrderByValidation_SQLInjectionAttempt", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -954,7 +1013,8 @@ func TestListTasks(t *testing.T) {
 func TestCreateRecurringTemplate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create a list first
@@ -991,7 +1051,8 @@ func TestCreateRecurringTemplate(t *testing.T) {
 
 	t.Run("WithPriorityAndDuration", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -1024,7 +1085,8 @@ func TestCreateRecurringTemplate(t *testing.T) {
 
 	t.Run("EmptyListID", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
@@ -1049,11 +1111,17 @@ func TestCreateRecurringTemplate(t *testing.T) {
 
 	t.Run("EmptyTitle", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
-			ListId:            uuid.New().String(),
+		listID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
+			ListId:            listID.String(),
 			Title:             "",
 			RecurrencePattern: monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY,
 		})
@@ -1074,11 +1142,17 @@ func TestCreateRecurringTemplate(t *testing.T) {
 
 	t.Run("ListNotFound", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
-			ListId:            uuid.New().String(),
+		nonExistentListID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
+			ListId:            nonExistentListID.String(),
 			Title:             "Test Template",
 			RecurrencePattern: monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY,
 		})
@@ -1099,7 +1173,8 @@ func TestCreateRecurringTemplate(t *testing.T) {
 
 	t.Run("InvalidRecurrenceConfig", func(t *testing.T) {
 		storage := NewMockStorage()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -1130,7 +1205,8 @@ func TestCreateRecurringTemplate(t *testing.T) {
 func TestGetRecurringTemplate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create a list and template first
@@ -1160,11 +1236,17 @@ func TestGetRecurringTemplate(t *testing.T) {
 
 	t.Run("NotFound", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.GetRecurringTemplate(ctx, &monov1.GetRecurringTemplateRequest{
-			Id: uuid.New().String(),
+		nonExistentID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.GetRecurringTemplate(ctx, &monov1.GetRecurringTemplateRequest{
+			Id: nonExistentID.String(),
 		})
 
 		if err == nil {
@@ -1183,7 +1265,8 @@ func TestGetRecurringTemplate(t *testing.T) {
 
 	t.Run("EmptyID", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.GetRecurringTemplate(ctx, &monov1.GetRecurringTemplateRequest{
@@ -1209,7 +1292,8 @@ func TestGetRecurringTemplate(t *testing.T) {
 func TestUpdateRecurringTemplate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and template
@@ -1250,12 +1334,18 @@ func TestUpdateRecurringTemplate(t *testing.T) {
 
 	t.Run("NotFound", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
-		_, err := svc.UpdateRecurringTemplate(ctx, &monov1.UpdateRecurringTemplateRequest{
+		nonExistentID, err := uuid.NewV7()
+		if err != nil {
+			t.Fatalf("failed to generate UUID: %v", err)
+		}
+
+		_, err = svc.UpdateRecurringTemplate(ctx, &monov1.UpdateRecurringTemplateRequest{
 			Template: &monov1.RecurringTaskTemplate{
-				Id:    uuid.New().String(),
+				Id:    nonExistentID.String(),
 				Title: "Updated",
 			},
 		})
@@ -1276,7 +1366,8 @@ func TestUpdateRecurringTemplate(t *testing.T) {
 
 	t.Run("InvalidRecurrenceConfig", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -1310,7 +1401,8 @@ func TestUpdateRecurringTemplate(t *testing.T) {
 
 	t.Run("PartialUpdate_WithFieldMask_OnlyUpdatesSpecifiedFields", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create a template with all fields populated
@@ -1364,7 +1456,8 @@ func TestUpdateRecurringTemplate(t *testing.T) {
 
 	t.Run("PartialUpdate_WithFieldMask_MultipleFields", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -1413,7 +1506,8 @@ func TestUpdateRecurringTemplate(t *testing.T) {
 
 	t.Run("PartialUpdate_EmptyFieldMask_UpdatesAllFields", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -1457,7 +1551,8 @@ func TestUpdateRecurringTemplate(t *testing.T) {
 func TestDeleteRecurringTemplate(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and template
@@ -1489,7 +1584,8 @@ func TestDeleteRecurringTemplate(t *testing.T) {
 
 	t.Run("EmptyID", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.DeleteRecurringTemplate(ctx, &monov1.DeleteRecurringTemplateRequest{
@@ -1515,7 +1611,8 @@ func TestDeleteRecurringTemplate(t *testing.T) {
 func TestListRecurringTemplates(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		// Create list and templates
@@ -1546,7 +1643,8 @@ func TestListRecurringTemplates(t *testing.T) {
 
 	t.Run("EmptyListID", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		_, err := svc.ListRecurringTemplates(ctx, &monov1.ListRecurringTemplatesRequest{
@@ -1569,7 +1667,8 @@ func TestListRecurringTemplates(t *testing.T) {
 
 	t.Run("ActiveOnlyFilter", func(t *testing.T) {
 		storage := NewMockStorageWithTemplates()
-		svc := service.NewMonoService(storage, 50, 100)
+		todoService := todo.NewService(storage)
+		svc := service.NewMonoService(todoService, 50, 100)
 		ctx := context.Background()
 
 		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -1601,66 +1700,80 @@ func TestListRecurringTemplates(t *testing.T) {
 // NewMockStorageWithTemplates extends MockStorage with proper template support.
 func NewMockStorageWithTemplates() *MockStorageWithTemplates {
 	return &MockStorageWithTemplates{
-		lists:     make(map[string]*core.TodoList),
-		templates: make(map[string]*core.RecurringTaskTemplate),
+		lists:     make(map[string]*domain.TodoList),
+		templates: make(map[string]*domain.RecurringTemplate),
 	}
 }
 
 // MockStorageWithTemplates extends MockStorage with full recurring template support.
 type MockStorageWithTemplates struct {
-	lists     map[string]*core.TodoList
-	templates map[string]*core.RecurringTaskTemplate
+	lists     map[string]*domain.TodoList
+	templates map[string]*domain.RecurringTemplate
 }
 
-func (m *MockStorageWithTemplates) CreateList(ctx context.Context, list *core.TodoList) error {
+func (m *MockStorageWithTemplates) CreateList(ctx context.Context, list *domain.TodoList) error {
 	m.lists[list.ID] = list
 	return nil
 }
 
-func (m *MockStorageWithTemplates) GetList(ctx context.Context, id string) (*core.TodoList, error) {
+func (m *MockStorageWithTemplates) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	if l, ok := m.lists[id]; ok {
 		return l, nil
 	}
 	return nil, fmt.Errorf("not found")
 }
 
-func (m *MockStorageWithTemplates) UpdateList(ctx context.Context, list *core.TodoList) error {
+func (m *MockStorageWithTemplates) UpdateList(ctx context.Context, list *domain.TodoList) error {
 	m.lists[list.ID] = list
 	return nil
 }
 
-func (m *MockStorageWithTemplates) CreateTodoItem(ctx context.Context, listID string, item core.TodoItem) error {
+func (m *MockStorageWithTemplates) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
 	if l, ok := m.lists[listID]; ok {
-		l.Items = append(l.Items, item)
+		l.Items = append(l.Items, *item)
 		return nil
 	}
-	return repository.ErrListNotFound
+	return domain.ErrListNotFound
 }
 
-func (m *MockStorageWithTemplates) UpdateTodoItem(ctx context.Context, item core.TodoItem) error {
-	// Find the list containing this item
+func (m *MockStorageWithTemplates) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
 	for _, l := range m.lists {
-		for i, existingItem := range l.Items {
-			if existingItem.ID == item.ID {
-				l.Items[i] = item
-				return nil
+		for i := range l.Items {
+			if l.Items[i].ID == id {
+				return &l.Items[i], nil
 			}
 		}
 	}
-	return fmt.Errorf("item not found")
+	return nil, fmt.Errorf("%w: item %s", domain.ErrNotFound, id)
 }
 
-func (m *MockStorageWithTemplates) ListLists(ctx context.Context) ([]*core.TodoList, error) {
-	var results []*core.TodoList
+func (m *MockStorageWithTemplates) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+	l, ok := m.lists[listID]
+	if !ok {
+		return domain.ErrListNotFound
+	}
+
+	for i, existingItem := range l.Items {
+		if existingItem.ID == item.ID {
+			l.Items[i] = *item
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: item %s", domain.ErrNotFound, item.ID)
+}
+
+func (m *MockStorageWithTemplates) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
+	var results []*domain.TodoList
 	for _, l := range m.lists {
 		results = append(results, l)
 	}
 	return results, nil
 }
 
-func (m *MockStorageWithTemplates) ListTasks(ctx context.Context, params core.ListTasksParams) (*core.ListTasksResult, error) {
+func (m *MockStorageWithTemplates) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
 	// Simple implementation for testing - gather all items
-	var allItems []core.TodoItem
+	var allItems []domain.TodoItem
 	for _, l := range m.lists {
 		if params.ListID != nil && l.ID != *params.ListID {
 			continue
@@ -1694,8 +1807,8 @@ func (m *MockStorageWithTemplates) ListTasks(ctx context.Context, params core.Li
 	start := params.Offset
 	end := start + params.Limit
 	if start >= len(allItems) {
-		return &core.ListTasksResult{
-			Items:      []core.TodoItem{},
+		return &domain.PagedResult{
+			Items:      []domain.TodoItem{},
 			TotalCount: 0,
 			HasMore:    false,
 		}, nil
@@ -1704,31 +1817,31 @@ func (m *MockStorageWithTemplates) ListTasks(ctx context.Context, params core.Li
 		end = len(allItems)
 	}
 
-	return &core.ListTasksResult{
+	return &domain.PagedResult{
 		Items:      allItems[start:end],
 		TotalCount: end - start,
 		HasMore:    end < len(allItems),
 	}, nil
 }
 
-func (m *MockStorageWithTemplates) CreateRecurringTemplate(ctx context.Context, template *core.RecurringTaskTemplate) error {
+func (m *MockStorageWithTemplates) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
 	if _, ok := m.lists[template.ListID]; !ok {
-		return repository.ErrListNotFound
+		return domain.ErrListNotFound
 	}
 	m.templates[template.ID] = template
 	return nil
 }
 
-func (m *MockStorageWithTemplates) GetRecurringTemplate(ctx context.Context, id string) (*core.RecurringTaskTemplate, error) {
+func (m *MockStorageWithTemplates) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	if tmpl, ok := m.templates[id]; ok {
 		return tmpl, nil
 	}
-	return nil, fmt.Errorf("%w: template %s", repository.ErrNotFound, id)
+	return nil, fmt.Errorf("%w: template %s", domain.ErrNotFound, id)
 }
 
-func (m *MockStorageWithTemplates) UpdateRecurringTemplate(ctx context.Context, template *core.RecurringTaskTemplate) error {
+func (m *MockStorageWithTemplates) UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
 	if _, ok := m.templates[template.ID]; !ok {
-		return fmt.Errorf("%w: template %s", repository.ErrNotFound, template.ID)
+		return fmt.Errorf("%w: template %s", domain.ErrNotFound, template.ID)
 	}
 	m.templates[template.ID] = template
 	return nil
@@ -1739,8 +1852,8 @@ func (m *MockStorageWithTemplates) DeleteRecurringTemplate(ctx context.Context, 
 	return nil
 }
 
-func (m *MockStorageWithTemplates) ListRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*core.RecurringTaskTemplate, error) {
-	var results []*core.RecurringTaskTemplate
+func (m *MockStorageWithTemplates) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
+	var results []*domain.RecurringTemplate
 	for _, tmpl := range m.templates {
 		if tmpl.ListID == listID {
 			if !activeOnly || tmpl.IsActive {
@@ -1751,7 +1864,7 @@ func (m *MockStorageWithTemplates) ListRecurringTemplates(ctx context.Context, l
 	return results, nil
 }
 
-func (m *MockStorageWithTemplates) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*core.RecurringTaskTemplate, error) {
+func (m *MockStorageWithTemplates) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
 	return nil, nil
 }
 
@@ -1767,7 +1880,7 @@ func (m *MockStorageWithTemplates) ClaimNextGenerationJob(ctx context.Context) (
 	return "", nil
 }
 
-func (m *MockStorageWithTemplates) GetGenerationJob(ctx context.Context, jobID string) (*core.GenerationJob, error) {
+func (m *MockStorageWithTemplates) GetGenerationJob(ctx context.Context, jobID string) (*domain.GenerationJob, error) {
 	return nil, fmt.Errorf("not found")
 }
 
@@ -1777,4 +1890,277 @@ func (m *MockStorageWithTemplates) UpdateGenerationJobStatus(ctx context.Context
 
 func (m *MockStorageWithTemplates) Close() error {
 	return nil
+}
+
+// === Regression Tests for Nil Checks and Input Validation ===
+
+// TestUpdateItem_NilItem tests that UpdateItem returns InvalidArgument when Item is nil.
+// This prevents a panic from dereferencing nil req.Item.
+func TestUpdateItem_NilItem(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
+	ctx := context.Background()
+
+	// Create a list first
+	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+
+	// Send request with nil Item - should return InvalidArgument, not panic
+	_, err := svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
+		ListId: listResp.List.Id,
+		Item:   nil, // This is the bug - nil item causes panic
+	})
+
+	if err == nil {
+		t.Fatal("expected error for nil item")
+	}
+
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatal("expected gRPC status error")
+	}
+
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", st.Code())
+	}
+
+	if !strings.Contains(st.Message(), "item") {
+		t.Errorf("error message should mention 'item', got: %s", st.Message())
+	}
+}
+
+// TestUpdateItem_NilItemId tests that UpdateItem with empty Item.Id returns InvalidArgument.
+func TestUpdateItem_EmptyItemId(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
+	ctx := context.Background()
+
+	// Create a list first
+	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+
+	// Send request with empty Item.Id
+	_, err := svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
+		ListId: listResp.List.Id,
+		Item: &monov1.TodoItem{
+			Id:    "", // Empty ID
+			Title: "Test",
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for empty item ID")
+	}
+
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatal("expected gRPC status error")
+	}
+
+	if st.Code() != codes.InvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", st.Code())
+	}
+}
+
+// TestUpdateItem_ItemNotFound tests that updating a non-existent item returns NotFound.
+// This verifies the O(1) GetItem lookup returns proper errors.
+func TestUpdateItem_ItemNotFound(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
+	ctx := context.Background()
+
+	// Create a list first
+	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+
+	// Try to update an item that doesn't exist
+	_, err := svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
+		ListId: listResp.List.Id,
+		Item: &monov1.TodoItem{
+			Id:    "019b0000-0000-7000-8000-000000000000", // Valid UUID format but doesn't exist
+			Title: "Test",
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for non-existent item")
+	}
+
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatal("expected gRPC status error")
+	}
+
+	if st.Code() != codes.NotFound {
+		t.Errorf("expected NotFound, got %v", st.Code())
+	}
+}
+
+// TestUpdateItem_Success tests the O(1) item lookup works correctly for valid updates.
+func TestUpdateItem_Success(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
+	ctx := context.Background()
+
+	// Create a list and item
+	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+	itemResp, _ := svc.CreateItem(ctx, &monov1.CreateItemRequest{
+		ListId: listResp.List.Id,
+		Title:  "Original Title",
+	})
+
+	// Update the item
+	updateResp, err := svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
+		ListId: listResp.List.Id,
+		Item: &monov1.TodoItem{
+			Id:     itemResp.Item.Id,
+			Title:  "Updated Title",
+			Status: monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if updateResp.Item.Title != "Updated Title" {
+		t.Errorf("expected title 'Updated Title', got %q", updateResp.Item.Title)
+	}
+
+	if updateResp.Item.Status != monov1.TaskStatus_TASK_STATUS_IN_PROGRESS {
+		t.Errorf("expected status IN_PROGRESS, got %v", updateResp.Item.Status)
+	}
+}
+
+// TestGetItem_ApplicationService tests the application service GetItem method directly.
+func TestGetItem_ApplicationService(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	ctx := context.Background()
+
+	// Create a list and item
+	list, _ := todoService.CreateList(ctx, "Test List")
+	item, _ := todoService.CreateItem(ctx, list.ID, &domain.TodoItem{
+		Title: "Test Item",
+	})
+
+	// Test successful retrieval
+	retrieved, err := todoService.GetItem(ctx, item.ID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if retrieved.ID != item.ID {
+		t.Errorf("expected ID %q, got %q", item.ID, retrieved.ID)
+	}
+
+	if retrieved.Title != "Test Item" {
+		t.Errorf("expected title 'Test Item', got %q", retrieved.Title)
+	}
+}
+
+// TestGetItem_NotFound tests GetItem returns error for non-existent items.
+func TestGetItem_NotFound(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	ctx := context.Background()
+
+	// Try to get an item that doesn't exist
+	_, err := todoService.GetItem(ctx, "019b0000-0000-7000-8000-000000000000")
+
+	if err == nil {
+		t.Fatal("expected error for non-existent item")
+	}
+
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+// TestGetItem_EmptyID tests GetItem returns error for empty ID.
+func TestGetItem_EmptyID(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	ctx := context.Background()
+
+	_, err := todoService.GetItem(ctx, "")
+
+	if err == nil {
+		t.Fatal("expected error for empty ID")
+	}
+}
+
+// === Regression Tests for order_by field validation ===
+
+// TestListTasks_OrderBy_BareField tests that bare field names work (current behavior).
+func TestListTasks_OrderBy_BareField(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
+	ctx := context.Background()
+
+	// Create a list and item
+	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+	svc.CreateItem(ctx, &monov1.CreateItemRequest{
+		ListId: listResp.List.Id,
+		Title:  "Test Item",
+	})
+
+	// Test bare field names (current supported behavior)
+	validFields := []string{"due_time", "priority", "created_at", "updated_at"}
+	for _, field := range validFields {
+		t.Run(field, func(t *testing.T) {
+			_, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
+				Parent:  listResp.List.Id,
+				OrderBy: field,
+			})
+			if err != nil {
+				t.Errorf("expected %q to be valid, got error: %v", field, err)
+			}
+		})
+	}
+}
+
+// TestListTasks_OrderBy_WithDirection tests order_by with AIP-132 direction syntax.
+// Proto documentation (line 228) promises "create_time desc" syntax but implementation
+// only accepts bare field names. This test documents the expected vs actual behavior.
+func TestListTasks_OrderBy_WithDirection(t *testing.T) {
+	storage := NewMockStorage()
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
+	ctx := context.Background()
+
+	// Create a list and item
+	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+	svc.CreateItem(ctx, &monov1.CreateItemRequest{
+		ListId: listResp.List.Id,
+		Title:  "Test Item",
+	})
+
+	// AIP-132 style with direction - per proto docs, these SHOULD work
+	testCases := []struct {
+		orderBy     string
+		shouldWork  bool
+		description string
+	}{
+		{"created_at desc", true, "AIP-132 descending"},
+		{"created_at asc", true, "AIP-132 ascending"},
+		{"due_time desc", true, "due_time descending"},
+		{"priority asc", true, "priority ascending"},
+		{"create_time desc", true, "proto example from line 228"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			_, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
+				Parent:  listResp.List.Id,
+				OrderBy: tc.orderBy,
+			})
+
+			if tc.shouldWork && err != nil {
+				t.Errorf("order_by %q should work per AIP-132, got error: %v", tc.orderBy, err)
+			}
+		})
+	}
 }

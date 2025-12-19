@@ -3,7 +3,7 @@ package recurring
 import (
 	"time"
 
-	"github.com/rezkam/mono/internal/core"
+	"github.com/rezkam/mono/internal/domain"
 )
 
 // PatternCalculator calculates the next occurrence date for a given recurrence pattern.
@@ -17,21 +17,21 @@ type PatternCalculator interface {
 }
 
 // GetCalculator returns the appropriate calculator for the given pattern.
-func GetCalculator(pattern core.RecurrencePattern) PatternCalculator {
+func GetCalculator(pattern domain.RecurrencePattern) PatternCalculator {
 	switch pattern {
-	case core.RecurrenceDaily:
+	case domain.RecurrenceDaily:
 		return &DailyCalculator{}
-	case core.RecurrenceWeekly:
+	case domain.RecurrenceWeekly:
 		return &WeeklyCalculator{}
-	case core.RecurrenceBiweekly:
+	case domain.RecurrenceBiweekly:
 		return &BiweeklyCalculator{}
-	case core.RecurrenceMonthly:
+	case domain.RecurrenceMonthly:
 		return &MonthlyCalculator{}
-	case core.RecurrenceYearly:
+	case domain.RecurrenceYearly:
 		return &YearlyCalculator{}
-	case core.RecurrenceQuarterly:
+	case domain.RecurrenceQuarterly:
 		return &QuarterlyCalculator{}
-	case core.RecurrenceWeekdays:
+	case domain.RecurrenceWeekdays:
 		return &WeekdaysCalculator{}
 	default:
 		return nil

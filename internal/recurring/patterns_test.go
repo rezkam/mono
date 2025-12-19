@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rezkam/mono/internal/core"
+	"github.com/rezkam/mono/internal/domain"
 )
 
 // TestDailyCalculator tests daily recurrence pattern
@@ -188,7 +188,7 @@ func TestGetCalculator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			calc := GetCalculator(core.RecurrencePattern(tt.pattern))
+			calc := GetCalculator(domain.RecurrencePattern(tt.pattern))
 			if tt.wantNil && calc != nil {
 				t.Errorf("expected nil for invalid pattern, got %T", calc)
 			}

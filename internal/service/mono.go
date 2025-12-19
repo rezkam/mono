@@ -1,3 +1,30 @@
+// Package service provides thin gRPC handlers that translate between protocol buffers and domain models.
+//
+// ARCHITECTURE DECISION: Thin Handler Layer
+//
+// This layer is intentionally kept thin (~15-20 lines per handler) with zero business logic.
+// Each handler follows a strict 4-step pattern:
+//
+//  1. Validate - Protocol-level validation only (empty checks, format validation)
+//  2. Convert - Transform protobuf messages to domain models
+//  3. Delegate - Call application service (where ALL business logic lives)
+//  4. Map & Convert - Map domain errors to gRPC codes, convert domain models back to protobuf
+//
+// Example:
+//
+//	func (s *MonoService) CreateItem(ctx, req) {
+//	    if req.Title == "" { return InvalidArgument }        // 1. Validate
+//	    item := protoToTodoItem(req)                         // 2. Convert
+//	    created, err := s.service.CreateItem(ctx, req.ListId, item) // 3. Delegate
+//	    if err != nil { return mapError(err) }               // 4. Map errors
+//	    return &Response{Item: toProtoItem(*created)}, nil   // 4. Convert response
+//	}
+//
+// WHY THIS PATTERN:
+//   - Business logic in application layer is testable without gRPC overhead
+//   - Same application service reused by gRPC, REST gateway, CLI, background workers
+//   - Clear separation: handlers do protocol translation, services do business logic
+//   - Field mask handling stays here as it's a protocol-level optimization
 package service
 
 import (
@@ -8,51 +35,41 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
-	"github.com/rezkam/mono/internal/core"
-	"github.com/rezkam/mono/internal/storage/sql/repository"
+	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/domain"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type MonoService struct {
 	monov1.UnimplementedMonoServiceServer
-	storage         core.Storage
+	service         *todo.Service
 	defaultPageSize int
 	maxPageSize     int
 }
 
-func NewMonoService(storage core.Storage, defaultPageSize, maxPageSize int) *MonoService {
+func NewMonoService(service *todo.Service, defaultPageSize, maxPageSize int) *MonoService {
 	return &MonoService{
-		storage:         storage,
+		service:         service,
 		defaultPageSize: defaultPageSize,
 		maxPageSize:     maxPageSize,
 	}
 }
 
 func (s *MonoService) CreateList(ctx context.Context, req *monov1.CreateListRequest) (*monov1.CreateListResponse, error) {
+	// Validate protocol-level requirements
 	if req.Title == "" {
 		return nil, status.Error(codes.InvalidArgument, "title is required")
 	}
 
-	idObj, err := uuid.NewV7()
+	list, err := s.service.CreateList(ctx, req.Title)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to generate id: %v", err)
-	}
-	id := idObj.String()
-	list := &core.TodoList{
-		ID:         id,
-		Title:      req.Title,
-		Items:      []core.TodoItem{},
-		CreateTime: time.Now().UTC(),
-	}
-
-	if err := s.storage.CreateList(ctx, list); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create list: %v", err)
+		return nil, mapError(err)
 	}
 
 	return &monov1.CreateListResponse{
@@ -61,13 +78,14 @@ func (s *MonoService) CreateList(ctx context.Context, req *monov1.CreateListRequ
 }
 
 func (s *MonoService) GetList(ctx context.Context, req *monov1.GetListRequest) (*monov1.GetListResponse, error) {
+	// Validate protocol-level requirements
 	if req.Id == "" {
 		return nil, status.Error(codes.InvalidArgument, "id is required")
 	}
 
-	list, err := s.storage.GetList(ctx, req.Id)
+	list, err := s.service.GetList(ctx, req.Id)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get list: %v", err)
+		return nil, mapError(err)
 	}
 
 	return &monov1.GetListResponse{
@@ -76,6 +94,7 @@ func (s *MonoService) GetList(ctx context.Context, req *monov1.GetListRequest) (
 }
 
 func (s *MonoService) CreateItem(ctx context.Context, req *monov1.CreateItemRequest) (*monov1.CreateItemResponse, error) {
+	// Validate protocol-level requirements
 	if req.ListId == "" {
 		return nil, status.Error(codes.InvalidArgument, "list_id is required")
 	}
@@ -83,221 +102,60 @@ func (s *MonoService) CreateItem(ctx context.Context, req *monov1.CreateItemRequ
 		return nil, status.Error(codes.InvalidArgument, "title is required")
 	}
 
-	itemIDObj, err := uuid.NewV7()
+	// Convert proto to domain
+	item, err := protoToTodoItem(req)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to generate id: %v", err)
-	}
-	itemID := itemIDObj.String()
-	item := core.TodoItem{
-		ID:         itemID,
-		Title:      req.Title,
-		Status:     core.TaskStatusTodo,
-		CreateTime: time.Now().UTC(),
-		Tags:       req.Tags,
-	}
-	item.UpdatedAt = item.CreateTime
-
-	if req.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
-		p := toCorePriority(req.Priority)
-		item.Priority = &p
+		return nil, err // Already a status error
 	}
 
-	if req.EstimatedDuration != nil {
-		d := req.EstimatedDuration.AsDuration()
-		item.EstimatedDuration = &d
-	}
-
-	if req.DueTime != nil {
-		t := req.DueTime.AsTime()
-		item.DueTime = &t
-	}
-
-	// Handle timezone for due_time
-	if req.Timezone != "" {
-		// Fixed timezone - validate IANA timezone
-		_, err := time.LoadLocation(req.Timezone)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone: %s", req.Timezone)
-		}
-		item.Timezone = &req.Timezone
-	}
-	// If req.Timezone is empty, item.Timezone stays nil (floating time)
-
-	if req.RecurringTemplateId != "" {
-		item.RecurringTemplateID = &req.RecurringTemplateId
-	}
-
-	if req.InstanceDate != nil {
-		t := req.InstanceDate.AsTime()
-		item.InstanceDate = &t
-	}
-
-	// Use the new CreateTodoItem method to preserve status history
-	if err := s.storage.CreateTodoItem(ctx, req.ListId, item); err != nil {
-		if errors.Is(err, repository.ErrListNotFound) {
-			return nil, status.Error(codes.NotFound, "list not found")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to create item: %v", err)
+	// Delegate to application service
+	created, err := s.service.CreateItem(ctx, req.ListId, item)
+	if err != nil {
+		return nil, mapError(err)
 	}
 
 	return &monov1.CreateItemResponse{
-		Item: toProtoItem(item),
+		Item: toProtoItem(*created),
 	}, nil
 }
 
 func (s *MonoService) UpdateItem(ctx context.Context, req *monov1.UpdateItemRequest) (*monov1.UpdateItemResponse, error) {
-	// The protovalidate logic is ideally handled by an interceptor, but we assume
-	// valid requests here or rely on the fact that we can check basic things.
+	// Validate required fields to prevent nil pointer dereference
+	if req.Item == nil {
+		return nil, status.Error(codes.InvalidArgument, "item is required")
+	}
+	if req.Item.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "item.id is required")
+	}
+	if req.ListId == "" {
+		return nil, status.Error(codes.InvalidArgument, "list_id is required")
+	}
 
-	list, err := s.storage.GetList(ctx, req.ListId)
+	// O(1) lookup: Fetch only the item being updated, not the entire list
+	// This replaces the previous O(N) approach that loaded all items in the list
+	item, err := s.service.GetItem(ctx, req.Item.Id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, status.Error(codes.NotFound, "list not found")
-		}
-		if errors.Is(err, repository.ErrInvalidID) {
-			return nil, status.Error(codes.InvalidArgument, "invalid list ID")
-		}
-		return nil, status.Errorf(codes.Internal, "failed to retrieve list: %v", err)
+		return nil, mapError(err)
 	}
 
-	// Find the item
-	var itemIndex = -1
-	for i, item := range list.Items {
-		if item.ID == req.Item.Id {
-			itemIndex = i
-			break
-		}
-	}
-	if itemIndex == -1 {
-		return nil, status.Errorf(codes.NotFound, "item not found")
+	// Apply field mask to update item
+	if err := applyItemFieldMask(item, req.Item, req.UpdateMask); err != nil {
+		return nil, err // Already a status error
 	}
 
-	// Apply FieldMask
-	// If mask is empty, we might default to full update or no-op.
-	// AIP-134 says empty mask = replace all fields (for HTTP PUT) or specific behavior.
-	// For PATCH, it usually means update all provided fields.
-	// But let's be strict: use the mask.
-
-	if req.UpdateMask == nil || len(req.UpdateMask.Paths) == 0 {
-		// Update all available mutable fields
-		list.Items[itemIndex].Title = req.Item.Title
-
-		// Only update status if explicitly provided (not UNSPECIFIED)
-		// to avoid silently resetting status when clients update other fields
-		if req.Item.Status != monov1.TaskStatus_TASK_STATUS_UNSPECIFIED {
-			list.Items[itemIndex].Status = toCoreStatus(req.Item.Status)
-		}
-
-		if req.Item.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
-			p := toCorePriority(req.Item.Priority)
-			list.Items[itemIndex].Priority = &p
-		} else {
-			list.Items[itemIndex].Priority = nil
-		}
-
-		list.Items[itemIndex].Tags = req.Item.Tags
-
-		if req.Item.EstimatedDuration != nil {
-			d := req.Item.EstimatedDuration.AsDuration()
-			list.Items[itemIndex].EstimatedDuration = &d
-		} else {
-			list.Items[itemIndex].EstimatedDuration = nil
-		}
-
-		if req.Item.ActualDuration != nil {
-			d := req.Item.ActualDuration.AsDuration()
-			list.Items[itemIndex].ActualDuration = &d
-		} else {
-			list.Items[itemIndex].ActualDuration = nil
-		}
-
-		if req.Item.DueTime != nil {
-			t := req.Item.DueTime.AsTime()
-			list.Items[itemIndex].DueTime = &t
-		} else {
-			list.Items[itemIndex].DueTime = nil
-		}
-
-		// Handle timezone
-		if req.Item.Timezone != "" {
-			// Validate IANA timezone
-			_, err := time.LoadLocation(req.Item.Timezone)
-			if err != nil {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid timezone: %s", req.Item.Timezone)
-			}
-			tz := req.Item.Timezone
-			list.Items[itemIndex].Timezone = &tz
-		} else {
-			list.Items[itemIndex].Timezone = nil
-		}
-
-		list.Items[itemIndex].UpdatedAt = time.Now()
-	} else {
-		for _, path := range req.UpdateMask.Paths {
-			switch path {
-			case "title":
-				list.Items[itemIndex].Title = req.Item.Title
-			case "status":
-				list.Items[itemIndex].Status = toCoreStatus(req.Item.Status)
-			case "priority":
-				if req.Item.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
-					p := toCorePriority(req.Item.Priority)
-					list.Items[itemIndex].Priority = &p
-				} else {
-					list.Items[itemIndex].Priority = nil
-				}
-			case "tags":
-				list.Items[itemIndex].Tags = req.Item.Tags
-			case "due_time":
-				if req.Item.DueTime != nil {
-					t := req.Item.DueTime.AsTime()
-					list.Items[itemIndex].DueTime = &t
-				} else {
-					list.Items[itemIndex].DueTime = nil
-				}
-			case "estimated_duration":
-				if req.Item.EstimatedDuration != nil {
-					d := req.Item.EstimatedDuration.AsDuration()
-					list.Items[itemIndex].EstimatedDuration = &d
-				} else {
-					list.Items[itemIndex].EstimatedDuration = nil
-				}
-			case "actual_duration":
-				if req.Item.ActualDuration != nil {
-					d := req.Item.ActualDuration.AsDuration()
-					list.Items[itemIndex].ActualDuration = &d
-				} else {
-					list.Items[itemIndex].ActualDuration = nil
-				}
-			case "timezone":
-				if req.Item.Timezone != "" {
-					// Validate IANA timezone
-					_, err := time.LoadLocation(req.Item.Timezone)
-					if err != nil {
-						return nil, status.Errorf(codes.InvalidArgument, "invalid timezone: %s", req.Item.Timezone)
-					}
-					tz := req.Item.Timezone
-					list.Items[itemIndex].Timezone = &tz
-				} else {
-					list.Items[itemIndex].Timezone = nil
-				}
-			}
-		}
-		list.Items[itemIndex].UpdatedAt = time.Now()
+	// Delegate to application service with list_id validation
+	// This prevents users from updating items in lists they don't own
+	if err := s.service.UpdateItem(ctx, req.ListId, item); err != nil {
+		return nil, mapError(err)
 	}
 
-	// Use the new UpdateTodoItem method to preserve status history
-	if err := s.storage.UpdateTodoItem(ctx, list.Items[itemIndex]); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to update item: %v", err)
-	}
-
-	return &monov1.UpdateItemResponse{Item: toProtoItem(list.Items[itemIndex])}, nil
+	return &monov1.UpdateItemResponse{Item: toProtoItem(*item)}, nil
 }
 
 func (s *MonoService) ListLists(ctx context.Context, req *monov1.ListListsRequest) (*monov1.ListListsResponse, error) {
-	lists, err := s.storage.ListLists(ctx)
+	lists, err := s.service.ListLists(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list lists: %v", err)
+		return nil, mapError(err)
 	}
 
 	protoLists := make([]*monov1.TodoList, len(lists))
@@ -331,7 +189,7 @@ func (s *MonoService) ListTasks(ctx context.Context, req *monov1.ListTasksReques
 	}
 
 	// Build storage params
-	params := core.ListTasksParams{
+	params := domain.ListTasksParams{
 		Limit:  pageSize,
 		Offset: offset,
 	}
@@ -351,10 +209,10 @@ func (s *MonoService) ListTasks(ctx context.Context, req *monov1.ListTasksReques
 
 			switch field {
 			case "status":
-				status := core.TaskStatus(value)
+				status := domain.TaskStatus(value)
 				params.Status = &status
 			case "priority":
-				priority := core.TaskPriority(value)
+				priority := domain.TaskPriority(value)
 				params.Priority = &priority
 			case "tags":
 				params.Tag = &value
@@ -362,22 +220,23 @@ func (s *MonoService) ListTasks(ctx context.Context, req *monov1.ListTasksReques
 		}
 	}
 
-	// Set ordering (default: created_at)
-	// Validation provides clear error messages (UX), not security.
-	// SQL injection protection comes from parameterized queries in the storage layer.
+	// Set ordering (default: created_at desc)
+	// Supports AIP-132 style: "field" or "field desc" / "field asc"
 	if req.OrderBy != "" {
-		if !isValidOrderByField(req.OrderBy) {
+		field, direction := parseOrderByField(req.OrderBy)
+		if field == "" {
 			return nil, status.Errorf(codes.InvalidArgument,
-				"invalid order_by field: %q (supported: due_time, priority, created_at, updated_at)",
+				"invalid order_by: %q (supported: due_time, priority, created_at, updated_at, create_time; optional: asc/desc)",
 				req.OrderBy)
 		}
-		params.OrderBy = req.OrderBy
+		params.OrderBy = field
+		params.OrderDir = direction
 	}
 
 	// Execute query
-	result, err := s.storage.ListTasks(ctx, params)
+	result, err := s.service.ListTasks(ctx, params)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list tasks: %v", err)
+		return nil, mapError(err)
 	}
 
 	// Convert to proto items
@@ -398,7 +257,7 @@ func (s *MonoService) ListTasks(ctx context.Context, req *monov1.ListTasksReques
 	}, nil
 }
 
-func toProtoList(l *core.TodoList) *monov1.TodoList {
+func toProtoList(l *domain.TodoList) *monov1.TodoList {
 	items := make([]*monov1.TodoItem, len(l.Items))
 	for i, item := range l.Items {
 		items[i] = toProtoItem(item)
@@ -413,7 +272,7 @@ func toProtoList(l *core.TodoList) *monov1.TodoList {
 	}
 }
 
-func toProtoItem(i core.TodoItem) *monov1.TodoItem {
+func toProtoItem(i domain.TodoItem) *monov1.TodoItem {
 	item := &monov1.TodoItem{
 		Id:         i.ID,
 		Title:      i.Title,
@@ -454,68 +313,68 @@ func toProtoItem(i core.TodoItem) *monov1.TodoItem {
 	return item
 }
 
-func toCoreStatus(s monov1.TaskStatus) core.TaskStatus {
+func toCoreStatus(s monov1.TaskStatus) domain.TaskStatus {
 	switch s {
 	case monov1.TaskStatus_TASK_STATUS_TODO:
-		return core.TaskStatusTodo
+		return domain.TaskStatusTodo
 	case monov1.TaskStatus_TASK_STATUS_IN_PROGRESS:
-		return core.TaskStatusInProgress
+		return domain.TaskStatusInProgress
 	case monov1.TaskStatus_TASK_STATUS_BLOCKED:
-		return core.TaskStatusBlocked
+		return domain.TaskStatusBlocked
 	case monov1.TaskStatus_TASK_STATUS_DONE:
-		return core.TaskStatusDone
+		return domain.TaskStatusDone
 	case monov1.TaskStatus_TASK_STATUS_ARCHIVED:
-		return core.TaskStatusArchived
+		return domain.TaskStatusArchived
 	case monov1.TaskStatus_TASK_STATUS_CANCELLED:
-		return core.TaskStatusCancelled
+		return domain.TaskStatusCancelled
 	default:
-		return core.TaskStatusTodo
+		return domain.TaskStatusTodo
 	}
 }
 
-func toProtoStatus(s core.TaskStatus) monov1.TaskStatus {
+func toProtoStatus(s domain.TaskStatus) monov1.TaskStatus {
 	switch s {
-	case core.TaskStatusTodo:
+	case domain.TaskStatusTodo:
 		return monov1.TaskStatus_TASK_STATUS_TODO
-	case core.TaskStatusInProgress:
+	case domain.TaskStatusInProgress:
 		return monov1.TaskStatus_TASK_STATUS_IN_PROGRESS
-	case core.TaskStatusBlocked:
+	case domain.TaskStatusBlocked:
 		return monov1.TaskStatus_TASK_STATUS_BLOCKED
-	case core.TaskStatusDone:
+	case domain.TaskStatusDone:
 		return monov1.TaskStatus_TASK_STATUS_DONE
-	case core.TaskStatusArchived:
+	case domain.TaskStatusArchived:
 		return monov1.TaskStatus_TASK_STATUS_ARCHIVED
-	case core.TaskStatusCancelled:
+	case domain.TaskStatusCancelled:
 		return monov1.TaskStatus_TASK_STATUS_CANCELLED
 	default:
 		return monov1.TaskStatus_TASK_STATUS_UNSPECIFIED
 	}
 }
 
-func toCorePriority(p monov1.TaskPriority) core.TaskPriority {
+func toCorePriority(p monov1.TaskPriority) domain.TaskPriority {
 	switch p {
 	case monov1.TaskPriority_TASK_PRIORITY_LOW:
-		return core.TaskPriorityLow
+		return domain.TaskPriorityLow
 	case monov1.TaskPriority_TASK_PRIORITY_MEDIUM:
-		return core.TaskPriorityMedium
+		return domain.TaskPriorityMedium
 	case monov1.TaskPriority_TASK_PRIORITY_HIGH:
-		return core.TaskPriorityHigh
+		return domain.TaskPriorityHigh
 	case monov1.TaskPriority_TASK_PRIORITY_URGENT:
-		return core.TaskPriorityUrgent
+		return domain.TaskPriorityUrgent
 	default:
-		return core.TaskPriorityLow
+		return domain.TaskPriorityLow
 	}
 }
 
-func toProtoPriority(p core.TaskPriority) monov1.TaskPriority {
+func toProtoPriority(p domain.TaskPriority) monov1.TaskPriority {
 	switch p {
-	case core.TaskPriorityLow:
+	case domain.TaskPriorityLow:
 		return monov1.TaskPriority_TASK_PRIORITY_LOW
-	case core.TaskPriorityMedium:
+	case domain.TaskPriorityMedium:
 		return monov1.TaskPriority_TASK_PRIORITY_MEDIUM
-	case core.TaskPriorityHigh:
+	case domain.TaskPriorityHigh:
 		return monov1.TaskPriority_TASK_PRIORITY_HIGH
-	case core.TaskPriorityUrgent:
+	case domain.TaskPriorityUrgent:
 		return monov1.TaskPriority_TASK_PRIORITY_URGENT
 	default:
 		return monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED
@@ -537,6 +396,7 @@ func encodePageToken(offset int) string {
 }
 
 // decodePageToken decodes a base64 page token into an offset.
+// Returns an error for negative offsets or values that exceed int32 range.
 func decodePageToken(token string) (int, error) {
 	if token == "" {
 		return 0, nil
@@ -564,22 +424,68 @@ func decodePageToken(token string) (int, error) {
 		return 0, fmt.Errorf("invalid token format: %w", err)
 	}
 
+	// Validate offset is non-negative
+	if offset < 0 {
+		return 0, fmt.Errorf("invalid token: offset must be non-negative")
+	}
+
+	// Validate offset fits in int32 (database OFFSET parameter limit)
+	const maxInt32 = 2147483647
+	if offset > maxInt32 {
+		return 0, fmt.Errorf("invalid token: offset exceeds maximum allowed value")
+	}
+
 	return offset, nil
 }
 
-// isValidOrderByField validates that the order_by field is one of the supported values.
+// parseOrderByField parses an AIP-132 style order_by string and extracts field and direction.
+// Supports both bare field names ("created_at") and AIP-132 style ("created_at desc", "created_at asc").
+// Returns the normalized field name and direction ("asc" or "desc").
+// Returns empty strings if invalid.
+//
 // This validation provides clear error messages to API users (UX), not security.
 // Security against SQL injection is guaranteed by parameterized queries in the storage layer.
 // See tests/integration/sql_injection_resistance_test.go for proof that even with direct
 // assignment (params.OrderBy = req.OrderBy) and no validation, SQL injection is impossible.
-func isValidOrderByField(field string) bool {
+func parseOrderByField(orderBy string) (field string, direction string) {
 	validFields := map[string]bool{
-		"due_time":   true,
-		"priority":   true,
-		"created_at": true,
-		"updated_at": true,
+		"due_time":    true,
+		"priority":    true,
+		"created_at":  true,
+		"updated_at":  true,
+		"create_time": true, // Alias for proto docs compatibility
 	}
-	return validFields[field]
+
+	// Normalize to lowercase and trim spaces
+	orderBy = strings.TrimSpace(strings.ToLower(orderBy))
+
+	// Check for AIP-132 style with direction: "field desc" or "field asc"
+	parts := strings.Fields(orderBy)
+	if len(parts) == 0 {
+		return "", ""
+	}
+
+	field = parts[0]
+
+	// If there's a direction, validate it
+	if len(parts) == 2 {
+		direction = parts[1]
+		if direction != "asc" && direction != "desc" {
+			return "", "" // Invalid direction
+		}
+	} else if len(parts) > 2 {
+		return "", "" // Too many parts
+	}
+
+	// Normalize create_time to created_at (proto uses create_time, SQL uses created_at)
+	if field == "create_time" {
+		field = "created_at"
+	}
+
+	if validFields[field] {
+		return field, direction
+	}
+	return "", ""
 }
 
 // extractUserTimezone extracts the user's timezone from the X-User-Timezone header.
@@ -608,4 +514,205 @@ func extractUserTimezone(ctx context.Context) (string, error) {
 	}
 
 	return userTZ, nil
+}
+
+// protoToTodoItem converts a CreateItemRequest to a domain TodoItem.
+func protoToTodoItem(req *monov1.CreateItemRequest) (*domain.TodoItem, error) {
+	item := &domain.TodoItem{
+		Title: req.Title,
+		Tags:  req.Tags,
+	}
+
+	if req.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
+		p := toCorePriority(req.Priority)
+		item.Priority = &p
+	}
+
+	if req.EstimatedDuration != nil {
+		d := req.EstimatedDuration.AsDuration()
+		item.EstimatedDuration = &d
+	}
+
+	if req.DueTime != nil {
+		t := req.DueTime.AsTime()
+		item.DueTime = &t
+	}
+
+	// Handle timezone for due_time
+	if req.Timezone != "" {
+		// Fixed timezone - validate IANA timezone
+		if _, err := time.LoadLocation(req.Timezone); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid timezone: %s", req.Timezone)
+		}
+		item.Timezone = &req.Timezone
+	}
+
+	if req.RecurringTemplateId != "" {
+		item.RecurringTemplateID = &req.RecurringTemplateId
+	}
+
+	if req.InstanceDate != nil {
+		t := req.InstanceDate.AsTime()
+		item.InstanceDate = &t
+	}
+
+	return item, nil
+}
+
+// applyItemFieldMask applies a field mask to enable partial updates.
+//
+// WHY FIELD MASKS:
+// Field masks allow clients to update only specific fields without sending the entire object.
+// This is a protocol-level optimization that solves several problems:
+//
+//  1. BANDWIDTH: Send only changed fields, not entire object
+//     Example: Update just status → send {id: "123", status: "DONE"}, mask: ["status"]
+//     Instead of: Send entire item with all 15+ fields
+//
+//  2. RACE CONDITIONS: Prevent accidental overwrites
+//     Example: User A updates title, User B updates status simultaneously
+//     Without mask: Last write wins, one update is lost
+//     With mask: Both updates succeed, updating different fields
+//
+//  3. BACKWARD COMPATIBILITY: Old clients don't break when new fields are added
+//     Example: Add "reminder_time" field to TodoItem
+//     Old clients sending full updates won't accidentally null out the new field
+//
+// USAGE EXAMPLES:
+//
+//	Update only status:
+//	  UpdateItem({id: "123", status: "DONE"}, mask: ["status"])
+//	  → Only status changes, title/tags/priority unchanged
+//
+//	Update multiple fields:
+//	  UpdateItem({id: "123", title: "New", priority: "HIGH"}, mask: ["title", "priority"])
+//	  → Only title and priority change
+//
+//	Update all fields (no mask):
+//	  UpdateItem({...full item...}, mask: nil)
+//	  → All mutable fields updated (legacy behavior)
+//
+// PROTOCOL-LEVEL CONCERN:
+// Field masks are a protobuf/gRPC optimization, not business logic.
+// They stay in the handler layer (not application layer) because:
+//   - Application layer works with complete domain models
+//   - Field mask logic is protocol-specific (gRPC/protobuf concept)
+//   - Different protocols may have different partial update mechanisms
+func applyItemFieldMask(item *domain.TodoItem, protoItem *monov1.TodoItem, mask *fieldmaskpb.FieldMask) error {
+	if mask == nil || len(mask.Paths) == 0 {
+		// No mask provided - update all mutable fields (legacy full-update behavior)
+		item.Title = protoItem.Title
+
+		if protoItem.Status != monov1.TaskStatus_TASK_STATUS_UNSPECIFIED {
+			item.Status = toCoreStatus(protoItem.Status)
+		}
+
+		if protoItem.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
+			p := toCorePriority(protoItem.Priority)
+			item.Priority = &p
+		} else {
+			item.Priority = nil
+		}
+
+		item.Tags = protoItem.Tags
+
+		if protoItem.EstimatedDuration != nil {
+			d := protoItem.EstimatedDuration.AsDuration()
+			item.EstimatedDuration = &d
+		} else {
+			item.EstimatedDuration = nil
+		}
+
+		if protoItem.ActualDuration != nil {
+			d := protoItem.ActualDuration.AsDuration()
+			item.ActualDuration = &d
+		} else {
+			item.ActualDuration = nil
+		}
+
+		if protoItem.DueTime != nil {
+			t := protoItem.DueTime.AsTime()
+			item.DueTime = &t
+		} else {
+			item.DueTime = nil
+		}
+
+		if protoItem.Timezone != "" {
+			if _, err := time.LoadLocation(protoItem.Timezone); err != nil {
+				return status.Errorf(codes.InvalidArgument, "invalid timezone: %s", protoItem.Timezone)
+			}
+			item.Timezone = &protoItem.Timezone
+		} else {
+			item.Timezone = nil
+		}
+	} else {
+		// Apply only specified fields
+		for _, path := range mask.Paths {
+			switch path {
+			case "title":
+				item.Title = protoItem.Title
+			case "status":
+				item.Status = toCoreStatus(protoItem.Status)
+			case "priority":
+				if protoItem.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
+					p := toCorePriority(protoItem.Priority)
+					item.Priority = &p
+				} else {
+					item.Priority = nil
+				}
+			case "tags":
+				item.Tags = protoItem.Tags
+			case "due_time":
+				if protoItem.DueTime != nil {
+					t := protoItem.DueTime.AsTime()
+					item.DueTime = &t
+				} else {
+					item.DueTime = nil
+				}
+			case "estimated_duration":
+				if protoItem.EstimatedDuration != nil {
+					d := protoItem.EstimatedDuration.AsDuration()
+					item.EstimatedDuration = &d
+				} else {
+					item.EstimatedDuration = nil
+				}
+			case "actual_duration":
+				if protoItem.ActualDuration != nil {
+					d := protoItem.ActualDuration.AsDuration()
+					item.ActualDuration = &d
+				} else {
+					item.ActualDuration = nil
+				}
+			case "timezone":
+				if protoItem.Timezone != "" {
+					if _, err := time.LoadLocation(protoItem.Timezone); err != nil {
+						return status.Errorf(codes.InvalidArgument, "invalid timezone: %s", protoItem.Timezone)
+					}
+					item.Timezone = &protoItem.Timezone
+				} else {
+					item.Timezone = nil
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// mapError maps domain errors to gRPC status codes.
+func mapError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Map domain errors to gRPC codes
+	if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrListNotFound) {
+		return status.Error(codes.NotFound, err.Error())
+	}
+	if errors.Is(err, domain.ErrInvalidID) {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	// Default to Internal for unmapped errors
+	return status.Errorf(codes.Internal, "%v", err)
 }

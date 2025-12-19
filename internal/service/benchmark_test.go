@@ -9,14 +9,15 @@ import (
 
 	"github.com/google/uuid"
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
-	"github.com/rezkam/mono/internal/core"
+	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/domain"
+	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/service"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
 )
 
 // getBenchmarkStorage creates a real PostgreSQL storage connection for benchmarking.
 // Skips the benchmark if BENCHMARK_POSTGRES_URL is not set.
-func getBenchmarkStorage(b *testing.B) core.Storage {
+func getBenchmarkStorage(b *testing.B) *postgres.Store {
 	b.Helper()
 
 	dbURL := os.Getenv("BENCHMARK_POSTGRES_URL")
@@ -25,7 +26,7 @@ func getBenchmarkStorage(b *testing.B) core.Storage {
 	}
 
 	ctx := context.Background()
-	store, err := sqlstorage.NewPostgresStore(ctx, dbURL)
+	store, err := postgres.NewPostgresStore(ctx, dbURL)
 	if err != nil {
 		b.Fatalf("failed to create storage: %v", err)
 	}
@@ -34,11 +35,11 @@ func getBenchmarkStorage(b *testing.B) core.Storage {
 }
 
 // cleanupBenchmarkData removes all lists and items from the database.
-func cleanupBenchmarkData(b *testing.B, storage core.Storage) {
+func cleanupBenchmarkData(b *testing.B, storage todo.Repository) {
 	b.Helper()
 
 	ctx := context.Background()
-	lists, err := storage.ListLists(ctx)
+	lists, err := storage.FindAllLists(ctx)
 	if err != nil {
 		b.Logf("failed to list lists for cleanup: %v", err)
 		return
@@ -46,7 +47,7 @@ func cleanupBenchmarkData(b *testing.B, storage core.Storage) {
 
 	// Delete all recurring templates first (they reference lists)
 	for _, list := range lists {
-		templates, err := storage.ListRecurringTemplates(ctx, list.ID, false)
+		templates, err := storage.FindRecurringTemplates(ctx, list.ID, false)
 		if err == nil {
 			for _, tmpl := range templates {
 				storage.DeleteRecurringTemplate(ctx, tmpl.ID)
@@ -59,7 +60,7 @@ func cleanupBenchmarkData(b *testing.B, storage core.Storage) {
 		// Set items to empty and update to effectively delete them
 		// NOTE: UpdateList deletes all items (and their status history) before recreating.
 		// This is acceptable for benchmark cleanup where history loss is expected.
-		list.Items = []core.TodoItem{}
+		list.Items = []domain.TodoItem{}
 		if err := storage.UpdateList(ctx, list); err != nil {
 			b.Logf("failed to clear list %s: %v", list.ID, err)
 		}
@@ -67,24 +68,32 @@ func cleanupBenchmarkData(b *testing.B, storage core.Storage) {
 }
 
 // setupBenchmarkData populates the real database with N lists, each having M items.
-func setupBenchmarkData(b *testing.B, storage core.Storage, numLists, itemsPerList int) {
+func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPerList int) {
 	b.Helper()
 
 	ctx := context.Background()
 	now := time.Now().UTC()
 
 	for i := 0; i < numLists; i++ {
-		listID := uuid.New().String()
-		items := make([]core.TodoItem, itemsPerList)
+		listUUID, err := uuid.NewV7()
+		if err != nil {
+			b.Fatalf("failed to generate list UUID: %v", err)
+		}
+		listID := listUUID.String()
+		items := make([]domain.TodoItem, itemsPerList)
 
 		for j := 0; j < itemsPerList; j++ {
 			due := now.Add(time.Duration(j+100) * time.Minute)
-			status := core.TaskStatusTodo
+			status := domain.TaskStatusTodo
 			if j%2 == 0 {
-				status = core.TaskStatusDone
+				status = domain.TaskStatusDone
 			}
-			items[j] = core.TodoItem{
-				ID:         uuid.New().String(),
+			itemUUID, err := uuid.NewV7()
+			if err != nil {
+				b.Fatalf("failed to generate item UUID: %v", err)
+			}
+			items[j] = domain.TodoItem{
+				ID:         itemUUID.String(),
 				Title:      fmt.Sprintf("Large Payload Item %d-%d with description and metadata to simulate real object size", i, j),
 				Status:     status,
 				CreateTime: now.Add(time.Duration(j) * time.Minute),
@@ -94,7 +103,7 @@ func setupBenchmarkData(b *testing.B, storage core.Storage, numLists, itemsPerLi
 			}
 		}
 
-		list := &core.TodoList{
+		list := &domain.TodoList{
 			ID:         listID,
 			Title:      fmt.Sprintf("Benchmark List %d", i),
 			Items:      items,
@@ -142,7 +151,8 @@ func BenchmarkListTasks(b *testing.B) {
 			// Clean up after benchmark
 			defer cleanupBenchmarkData(b, storage)
 
-			svc := service.NewMonoService(storage, 50, 100)
+			todoService := todo.NewService(storage)
+			svc := service.NewMonoService(todoService, 50, 100)
 			ctx := context.Background()
 
 			b.Run("NoFilter", func(b *testing.B) {
@@ -202,7 +212,8 @@ func BenchmarkCreateList(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	svc := service.NewMonoService(storage, 50, 100)
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
 	for b.Loop() {
@@ -221,7 +232,8 @@ func BenchmarkCreateItem(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	svc := service.NewMonoService(storage, 50, 100)
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
 	// Create a list to add items to
@@ -249,7 +261,8 @@ func BenchmarkUpdateItem(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	svc := service.NewMonoService(storage, 50, 100)
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
 	// Create list and item
@@ -282,7 +295,8 @@ func BenchmarkGetList(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	svc := service.NewMonoService(storage, 50, 100)
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
 	// Create a list with items
@@ -325,7 +339,8 @@ func BenchmarkListLists(b *testing.B) {
 			defer storage.Close()
 			defer cleanupBenchmarkData(b, storage)
 
-			svc := service.NewMonoService(storage, 50, 100)
+			todoService := todo.NewService(storage)
+			svc := service.NewMonoService(todoService, 50, 100)
 			ctx := context.Background()
 
 			// Create N lists, each with 10 items
@@ -357,7 +372,8 @@ func BenchmarkRecurringTemplates(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	svc := service.NewMonoService(storage, 50, 100)
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
 	// Create a list for templates
@@ -461,7 +477,8 @@ func BenchmarkAccessPatterns(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	svc := service.NewMonoService(storage, 50, 100)
+	todoService := todo.NewService(storage)
+	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
 	// Setup: Create realistic dataset
