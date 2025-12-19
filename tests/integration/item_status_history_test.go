@@ -7,8 +7,9 @@ import (
 	"time"
 
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
+	"github.com/rezkam/mono/internal/application/todo"
+	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/service"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,11 +32,12 @@ func TestStatusHistoryPreservation(t *testing.T) {
 
 	// Create storage and service
 	pgURL := getTestDSN(t)
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 	defer store.Close()
 
-	svc := service.NewMonoService(store, 50, 100)
+	todoService := todo.NewService(store)
+	svc := service.NewMonoService(todoService, 50, 100)
 
 	// Create a list
 	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{
@@ -130,11 +132,12 @@ func TestStatusHistoryPreservationMultipleUpdates(t *testing.T) {
 	ctx := context.Background()
 
 	pgURL := getTestDSN(t)
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 	defer store.Close()
 
-	svc := service.NewMonoService(store, 50, 100)
+	todoService := todo.NewService(store)
+	svc := service.NewMonoService(todoService, 50, 100)
 
 	// Create list and item
 	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
@@ -187,11 +190,12 @@ func TestCreateItemDoesNotWipeOtherItemsHistory(t *testing.T) {
 	ctx := context.Background()
 
 	pgURL := getTestDSN(t)
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 	defer store.Close()
 
-	svc := service.NewMonoService(store, 50, 100)
+	todoService := todo.NewService(store)
+	svc := service.NewMonoService(todoService, 50, 100)
 
 	// Create list and first item
 	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})

@@ -10,20 +10,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rezkam/mono/internal/core"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
-	"github.com/rezkam/mono/internal/storage/sql/repository"
+	"github.com/rezkam/mono/internal/domain"
+	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
 
 // setupSQLInjectionTest initializes test environment for SQL injection testing
-func setupSQLInjectionTest(t *testing.T) (*repository.Store, func()) {
+func setupSQLInjectionTest(t *testing.T) (*postgres.Store, func()) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
 	if pgURL == "" {
 		t.Skip("TEST_POSTGRES_URL not set, skipping integration tests")
 	}
 
 	ctx := context.Background()
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 
 	// Clean up tables before test
@@ -51,29 +50,33 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test data
-	listID := uuid.New().String()
-	list := &core.TodoList{
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate list UUID")
+	listID := listUUID.String()
+	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "SQL Injection Test List",
-		Items:      []core.TodoItem{},
+		Items:      []domain.TodoItem{},
 		CreateTime: time.Now(),
 	}
-	err := store.CreateList(ctx, list)
+	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create test tasks
 	taskIDs := make([]string, 5)
 	for i := 0; i < 5; i++ {
-		taskID := uuid.New().String()
+		taskUUID, err := uuid.NewV7()
+		require.NoError(t, err, "failed to generate task UUID")
+		taskID := taskUUID.String()
 		taskIDs[i] = taskID
-		priorityMedium := core.TaskPriorityMedium
-		task := core.TodoItem{
+		priorityMedium := domain.TaskPriorityMedium
+		task := domain.TodoItem{
 			ID:       taskID,
 			Title:    "Test Task",
-			Status:   core.TaskStatusTodo,
+			Status:   domain.TaskStatusTodo,
 			Priority: &priorityMedium,
 		}
-		err = store.CreateTodoItem(ctx, listID, task)
+		err = store.CreateItem(ctx, listID, &task)
 		require.NoError(t, err)
 	}
 
@@ -131,7 +134,7 @@ Flow:
 	for _, tc := range injectionAttempts {
 		t.Run(tc.name, func(t *testing.T) {
 			// Simulate service layer: params.OrderBy = req.OrderBy (direct assignment)
-			params := core.ListTasksParams{
+			params := domain.ListTasksParams{
 				ListID:  &listID,
 				OrderBy: tc.orderBy, // MALICIOUS INPUT - No validation!
 				Limit:   10,
@@ -139,7 +142,7 @@ Flow:
 			}
 
 			// Execute query (simulating storage layer receiving unvalidated input)
-			result, err := store.ListTasks(ctx, params)
+			result, err := store.FindItems(ctx, params)
 
 			// CRITICAL ASSERTIONS PROVING SAFETY
 
@@ -153,11 +156,11 @@ Flow:
 				"At least 5 original tasks should be returned (none deleted by injection)")
 
 			// 3. Verify table still exists (DROP TABLE didn't execute)
-			verifyParams := core.ListTasksParams{
+			verifyParams := domain.ListTasksParams{
 				ListID: &listID,
 				Limit:  100,
 			}
-			verifyResult, verifyErr := store.ListTasks(ctx, verifyParams)
+			verifyResult, verifyErr := store.FindItems(ctx, verifyParams)
 			require.NoError(t, verifyErr,
 				"Table should still exist (DROP TABLE was blocked)")
 			assert.GreaterOrEqual(t, len(verifyResult.Items), 5,
@@ -168,7 +171,7 @@ Flow:
 			originalTaskCount := 0
 			for _, item := range verifyResult.Items {
 				if item.Title == "Test Task" {
-					assert.Equal(t, core.TaskStatusTodo, item.Status,
+					assert.Equal(t, domain.TaskStatusTodo, item.Status,
 						"Original task status should still be TODO (UPDATE was blocked)")
 					originalTaskCount++
 				}
@@ -183,21 +186,23 @@ Flow:
 					// Verify original tasks have expected priority
 					assert.NotNil(t, item.Priority, "Original task should have priority")
 					if item.Priority != nil {
-						assert.Equal(t, core.TaskPriorityMedium, *item.Priority,
+						assert.Equal(t, domain.TaskPriorityMedium, *item.Priority,
 							"Original task priority unchanged")
 					}
 				}
 			}
 
 			// 6. Verify can insert new tasks (table not dropped/corrupted)
-			priorityLow := core.TaskPriorityLow
-			newTask := core.TodoItem{
-				ID:       uuid.New().String(),
+			priorityLow := domain.TaskPriorityLow
+			newTaskUUID, err := uuid.NewV7()
+			require.NoError(t, err, "failed to generate task UUID")
+			newTask := domain.TodoItem{
+				ID:       newTaskUUID.String(),
 				Title:    "Post-injection task",
-				Status:   core.TaskStatusTodo,
+				Status:   domain.TaskStatusTodo,
 				Priority: &priorityLow,
 			}
-			createErr := store.CreateTodoItem(ctx, listID, newTask)
+			createErr := store.CreateItem(ctx, listID, &newTask)
 			require.NoError(t, createErr,
 				"Should create new tasks after injection attempt")
 
@@ -219,11 +224,11 @@ Flow:
 	t.Run("comprehensive_integrity_check", func(t *testing.T) {
 		// After all injection attempts, verify complete system integrity
 
-		params := core.ListTasksParams{
+		params := domain.ListTasksParams{
 			ListID: &listID,
 			Limit:  100,
 		}
-		result, err := store.ListTasks(ctx, params)
+		result, err := store.FindItems(ctx, params)
 		require.NoError(t, err)
 
 		// Should have 5 original + 3 post-injection tasks
@@ -232,12 +237,12 @@ Flow:
 
 		// Verify different ORDER BY options work (table structure intact)
 		for _, validOrder := range []string{"due_time", "priority", "created_at", "updated_at"} {
-			orderParams := core.ListTasksParams{
+			orderParams := domain.ListTasksParams{
 				ListID:  &listID,
 				OrderBy: validOrder,
 				Limit:   10,
 			}
-			resp, err := store.ListTasks(ctx, orderParams)
+			resp, err := store.FindItems(ctx, orderParams)
 			require.NoError(t, err,
 				"Should support valid order_by: %s", validOrder)
 			assert.NotEmpty(t, resp.Items,

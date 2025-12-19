@@ -10,23 +10,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rezkam/mono/internal/core"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
-	"github.com/rezkam/mono/internal/storage/sql/repository"
-	"github.com/rezkam/mono/internal/worker"
+	"github.com/rezkam/mono/internal/application/worker"
+	"github.com/rezkam/mono/internal/domain"
+	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // setupWorkerTest initializes a test environment with storage and worker.
-func setupWorkerTest(t *testing.T) (*repository.Store, *worker.Worker, func()) {
+func setupWorkerTest(t *testing.T) (*postgres.Store, *worker.Worker, func()) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
 	if pgURL == "" {
 		t.Skip("TEST_POSTGRES_URL not set, skipping worker tests")
 	}
 
 	ctx := context.Background()
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 
 	// Clean up tables before test
@@ -53,7 +52,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 	// Test cases with different patterns
 	testCases := []struct {
 		name             string
-		pattern          core.RecurrencePattern
+		pattern          domain.RecurrencePattern
 		config           map[string]interface{}
 		generationWindow int
 		expectedMinTasks int // Minimum tasks expected
@@ -61,7 +60,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 	}{
 		{
 			name:             "Daily",
-			pattern:          core.RecurrenceDaily,
+			pattern:          domain.RecurrenceDaily,
 			config:           map[string]interface{}{"interval": float64(1)},
 			generationWindow: 30,
 			expectedMinTasks: 30,
@@ -69,7 +68,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		},
 		{
 			name:             "Weekly",
-			pattern:          core.RecurrenceWeekly,
+			pattern:          domain.RecurrenceWeekly,
 			config:           map[string]interface{}{"interval": float64(1)},
 			generationWindow: 90,
 			expectedMinTasks: 12,
@@ -77,7 +76,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		},
 		{
 			name:             "Monthly",
-			pattern:          core.RecurrenceMonthly,
+			pattern:          domain.RecurrenceMonthly,
 			config:           map[string]interface{}{"interval": float64(1)},
 			generationWindow: 365,
 			expectedMinTasks: 11,
@@ -85,7 +84,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		},
 		{
 			name:             "Weekdays",
-			pattern:          core.RecurrenceWeekdays,
+			pattern:          domain.RecurrenceWeekdays,
 			config:           map[string]interface{}{},
 			generationWindow: 30,
 			expectedMinTasks: 21,
@@ -102,19 +101,23 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create fresh list for this subtest
-			listID := uuid.New().String()
-			list := &core.TodoList{
+			listUUID, err := uuid.NewV7()
+			require.NoError(t, err, "failed to generate list UUID")
+			listID := listUUID.String()
+			list := &domain.TodoList{
 				ID:         listID,
 				Title:      fmt.Sprintf("Test List - %s", tc.name),
-				Items:      []core.TodoItem{},
+				Items:      []domain.TodoItem{},
 				CreateTime: time.Now(),
 			}
 			err = store.CreateList(ctx, list)
 			require.NoError(t, err)
 
 			// Create template
-			templateID := uuid.New().String()
-			template := &core.RecurringTaskTemplate{
+			templateUUID, err := uuid.NewV7()
+			require.NoError(t, err, "failed to generate template UUID")
+			templateID := templateUUID.String()
+			template := &domain.RecurringTemplate{
 				ID:                   templateID,
 				ListID:               listID,
 				Title:                fmt.Sprintf("Test Task - %s", tc.name),
@@ -156,7 +159,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			assert.Equal(t, 1, completedCount, "Job should be completed")
 
 			// Verify tasks were created
-			updatedList, err := store.GetList(ctx, listID)
+			updatedList, err := store.FindListByID(ctx, listID)
 			require.NoError(t, err)
 
 			taskCount := len(updatedList.Items)
@@ -184,7 +187,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			}
 
 			// Verify template was updated
-			updatedTemplate, err := store.GetRecurringTemplate(ctx, template.ID)
+			updatedTemplate, err := store.FindRecurringTemplate(ctx, template.ID)
 			require.NoError(t, err)
 			assert.False(t, updatedTemplate.LastGeneratedUntil.IsZero(),
 				"LastGeneratedUntil should be updated")
@@ -200,28 +203,32 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test list
-	listID := uuid.New().String()
-	list := &core.TodoList{
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate list UUID")
+	listID := listUUID.String()
+	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Distribution Test",
-		Items:      []core.TodoItem{},
+		Items:      []domain.TodoItem{},
 		CreateTime: time.Now(),
 	}
-	err := store.CreateList(ctx, list)
+	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 10 templates
 	numTemplates := 10
 	templateIDs := make([]string, numTemplates)
 	for i := 0; i < numTemplates; i++ {
-		templateID := uuid.New().String()
+		templateUUID, err := uuid.NewV7()
+		require.NoError(t, err, "failed to generate template UUID")
+		templateID := templateUUID.String()
 		templateIDs[i] = templateID
 
-		template := &core.RecurringTaskTemplate{
+		template := &domain.RecurringTemplate{
 			ID:                   templateID,
 			ListID:               listID,
 			Title:                fmt.Sprintf("Task %d", i),
-			RecurrencePattern:    core.RecurrenceDaily,
+			RecurrencePattern:    domain.RecurrenceDaily,
 			RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 			GenerationWindowDays: 7,
 			IsActive:             true,
@@ -318,36 +325,40 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test list
-	listID := uuid.New().String()
-	list := &core.TodoList{
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate list UUID")
+	listID := listUUID.String()
+	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "High Load Test",
-		Items:      []core.TodoItem{},
+		Items:      []domain.TodoItem{},
 		CreateTime: time.Now(),
 	}
-	err := store.CreateList(ctx, list)
+	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 500 templates with mix of patterns
 	totalTemplates := 500
 	patterns := []struct {
-		pattern core.RecurrencePattern
+		pattern domain.RecurrencePattern
 		config  map[string]interface{}
 		count   int
 		window  int
 	}{
-		{core.RecurrenceDaily, map[string]interface{}{"interval": float64(1)}, 200, 15},
-		{core.RecurrenceWeekly, map[string]interface{}{"interval": float64(1)}, 150, 60},
-		{core.RecurrenceMonthly, map[string]interface{}{"interval": float64(1)}, 100, 180},
-		{core.RecurrenceWeekdays, map[string]interface{}{}, 50, 30},
+		{domain.RecurrenceDaily, map[string]interface{}{"interval": float64(1)}, 200, 15},
+		{domain.RecurrenceWeekly, map[string]interface{}{"interval": float64(1)}, 150, 60},
+		{domain.RecurrenceMonthly, map[string]interface{}{"interval": float64(1)}, 100, 180},
+		{domain.RecurrenceWeekdays, map[string]interface{}{}, 50, 30},
 	}
 
 	templateCount := 0
 	for _, p := range patterns {
 		for i := 0; i < p.count; i++ {
-			templateID := uuid.New().String()
+			templateUUID, err := uuid.NewV7()
+			require.NoError(t, err, "failed to generate template UUID")
+			templateID := templateUUID.String()
 
-			template := &core.RecurringTaskTemplate{
+			template := &domain.RecurringTemplate{
 				ID:                   templateID,
 				ListID:               listID,
 				Title:                fmt.Sprintf("Load Task %d", templateCount),
@@ -426,7 +437,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	assert.Equal(t, int32(totalTemplates), processedCount.Load())
 
 	// Verify task counts
-	updatedList, err := store.GetList(ctx, listID)
+	updatedList, err := store.FindListByID(ctx, listID)
 	require.NoError(t, err)
 
 	taskCount := len(updatedList.Items)
@@ -458,25 +469,29 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test list
-	listID := uuid.New().String()
-	list := &core.TodoList{
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate list UUID")
+	listID := listUUID.String()
+	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Window Test",
-		Items:      []core.TodoItem{},
+		Items:      []domain.TodoItem{},
 		CreateTime: time.Now(),
 	}
-	err := store.CreateList(ctx, list)
+	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create template with specific last_generated_until
-	templateID := uuid.New().String()
+	templateUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate template UUID")
+	templateID := templateUUID.String()
 	lastGenerated := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 
-	template := &core.RecurringTaskTemplate{
+	template := &domain.RecurringTemplate{
 		ID:                   templateID,
 		ListID:               listID,
 		Title:                "Window Test Task",
-		RecurrencePattern:    core.RecurrenceMonthly,
+		RecurrencePattern:    domain.RecurrenceMonthly,
 		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 		GenerationWindowDays: 180,
 		LastGeneratedUntil:   lastGenerated,
@@ -499,7 +514,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	assert.True(t, processed)
 
 	// Verify tasks start from lastGenerated date
-	updatedList, err := store.GetList(ctx, listID)
+	updatedList, err := store.FindListByID(ctx, listID)
 	require.NoError(t, err)
 
 	if len(updatedList.Items) > 0 {
@@ -513,7 +528,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	}
 
 	// Verify template window was updated
-	updatedTemplate, err := store.GetRecurringTemplate(ctx, templateID)
+	updatedTemplate, err := store.FindRecurringTemplate(ctx, templateID)
 	require.NoError(t, err)
 	assert.True(t, updatedTemplate.LastGeneratedUntil.After(lastGenerated),
 		"LastGeneratedUntil should be updated")
@@ -540,37 +555,41 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test list
-	listID := uuid.New().String()
-	list := &core.TodoList{
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate list UUID")
+	listID := listUUID.String()
+	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "History Preservation Test",
-		Items:      []core.TodoItem{},
+		Items:      []domain.TodoItem{},
 		CreateTime: time.Now(),
 	}
-	err := store.CreateList(ctx, list)
+	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an existing task with status history
-	existingTaskID := uuid.New().String()
-	existingTask := core.TodoItem{
+	existingTaskUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate task UUID")
+	existingTaskID := existingTaskUUID.String()
+	existingTask := domain.TodoItem{
 		ID:         existingTaskID,
 		Title:      "Existing Task - Do Not Delete",
-		Status:     core.TaskStatusTodo,
+		Status:     domain.TaskStatusTodo,
 		CreateTime: time.Now().Add(-24 * time.Hour), // Created yesterday
 		UpdatedAt:  time.Now().Add(-24 * time.Hour),
 	}
-	err = store.CreateTodoItem(ctx, listID, existingTask)
+	err = store.CreateItem(ctx, listID, &existingTask)
 	require.NoError(t, err)
 
 	// Update task status to create status history
-	existingTask.Status = core.TaskStatusInProgress
+	existingTask.Status = domain.TaskStatusInProgress
 	existingTask.UpdatedAt = time.Now().Add(-1 * time.Hour)
-	err = store.UpdateTodoItem(ctx, existingTask)
+	err = store.UpdateItem(ctx, listID, &existingTask)
 	require.NoError(t, err)
 
-	existingTask.Status = core.TaskStatusDone
+	existingTask.Status = domain.TaskStatusDone
 	existingTask.UpdatedAt = time.Now()
-	err = store.UpdateTodoItem(ctx, existingTask)
+	err = store.UpdateItem(ctx, listID, &existingTask)
 	require.NoError(t, err)
 
 	// Verify status history was created (should have 3 entries: TODO, IN_PROGRESS, DONE)
@@ -582,12 +601,14 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	assert.Equal(t, 3, historyCount, "Existing task should have 3 status history entries")
 
 	// Create recurring template for the same list
-	templateID := uuid.New().String()
-	template := &core.RecurringTaskTemplate{
+	templateUUID, err := uuid.NewV7()
+	require.NoError(t, err, "failed to generate template UUID")
+	templateID := templateUUID.String()
+	template := &domain.RecurringTemplate{
 		ID:                   templateID,
 		ListID:               listID,
 		Title:                "Recurring Task",
-		RecurrencePattern:    core.RecurrenceDaily,
+		RecurrencePattern:    domain.RecurrenceDaily,
 		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 		GenerationWindowDays: 7,
 		IsActive:             true,
@@ -606,7 +627,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	assert.True(t, processed, "Should process the job")
 
 	// Verify existing task still exists
-	updatedList, err := store.GetList(ctx, listID)
+	updatedList, err := store.FindListByID(ctx, listID)
 	require.NoError(t, err)
 
 	var foundExisting bool
@@ -615,7 +636,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		if item.ID == existingTaskID {
 			foundExisting = true
 			assert.Equal(t, "Existing Task - Do Not Delete", item.Title)
-			assert.Equal(t, core.TaskStatusDone, item.Status)
+			assert.Equal(t, domain.TaskStatusDone, item.Status)
 		}
 		if item.RecurringTemplateID != nil && *item.RecurringTemplateID == templateID {
 			foundRecurring++

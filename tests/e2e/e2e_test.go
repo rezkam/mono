@@ -16,9 +16,10 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
-	"github.com/rezkam/mono/internal/auth"
+	"github.com/rezkam/mono/internal/application/auth"
+	"github.com/rezkam/mono/internal/application/todo"
+	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/service"
-	sqlstorage "github.com/rezkam/mono/internal/storage/sql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -46,13 +47,14 @@ func TestMain(m *testing.M) {
 
 	// Setup Server with PostgreSQL
 	ctx := context.Background()
-	store, err := sqlstorage.NewPostgresStore(ctx, pgURL)
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	if err != nil {
 		panic(err)
 	}
 	defer store.Close()
 
-	svc := service.NewMonoService(store, 50, 100)
+	todoService := todo.NewService(store)
+	svc := service.NewMonoService(todoService, 50, 100)
 
 	// Generate API key using the standard apikey tool (tests the tool itself)
 	testAPIKey, err = generateAPIKeyWithTool(pgURL)
@@ -61,7 +63,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Start gRPC server with auth interceptor
-	authenticator := auth.NewAuthenticator(ctx, store.DB(), store.Queries())
+	authenticator := auth.NewAuthenticator(ctx, store, 5*time.Second)
 	lis, err := net.Listen("tcp", "localhost:0") // Random port
 	if err != nil {
 		panic(err)
