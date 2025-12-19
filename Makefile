@@ -33,7 +33,7 @@ DEV_POSTGRES_URL ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security
+.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -77,13 +77,24 @@ tidy: ## Run go mod tidy to update dependencies
 
 fmt: ## Format all Go files tracked in git
 	@echo "Formatting Go files..."
-	gofmt -w $$(git ls-files '*.go')
+	@FILES=$$(git ls-files '*.go' 2>/dev/null | xargs -I {} test -f {} && echo {} || true); \
+	if [ -n "$$FILES" ]; then \
+		echo "$$FILES" | xargs gofmt -w; \
+	else \
+		echo "No Go files to format"; \
+	fi
 
-fmt-check: ## Ensure all Go files are gofmt'ed
+fmt-check: ## Ensure all staged Go files are gofmt'ed (used by pre-commit hook)
 	@echo "Checking Go formatting..."
-	@if [ -n "$$(gofmt -l $$(git ls-files '*.go'))" ]; then \
-		echo "The following files need gofmt (run 'make fmt' or 'gofmt -w'): "; \
-		gofmt -l $$(git ls-files '*.go'); \
+	@STAGED_FILES=$$(git diff --cached --name-only --diff-filter=ACMR '*.go' 2>/dev/null || true); \
+	if [ -z "$$STAGED_FILES" ]; then \
+		echo "No staged Go files to check"; \
+		exit 0; \
+	fi; \
+	UNFORMATTED=$$(echo "$$STAGED_FILES" | xargs gofmt -l 2>/dev/null || true); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "The following staged files need gofmt (run 'make fmt' or 'gofmt -w'):"; \
+		echo "$$UNFORMATTED"; \
 		exit 1; \
 	fi
 
@@ -290,3 +301,16 @@ test-db-logs: ## Show PostgreSQL test database logs
 
 test-db-shell: ## Connect to PostgreSQL test database shell
 	@docker compose -f docker-compose.test.yml exec postgres psql -U postgres -d mono_test
+
+# =============================================================================
+# Documentation Sync
+# =============================================================================
+
+sync-agents: ## Sync CLAUDE.md to AGENTS.md and .github/copilot-instructions.md
+	@echo "Syncing agent instruction files..."
+	@cp CLAUDE.md AGENTS.md
+	@mkdir -p .github
+	@cp CLAUDE.md .github/copilot-instructions.md
+	@echo "Synced CLAUDE.md to:"
+	@echo "   - AGENTS.md"
+	@echo "   - .github/copilot-instructions.md"
