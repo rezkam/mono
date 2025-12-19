@@ -47,15 +47,21 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) erro
 	return err
 }
 
-const deactivateAPIKey = `-- name: DeactivateAPIKey :exec
+const deactivateAPIKey = `-- name: DeactivateAPIKey :execrows
 UPDATE api_keys
 SET is_active = false
 WHERE id = $1
 `
 
-func (q *Queries) DeactivateAPIKey(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deactivateAPIKey, id)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Revokes API key with existence check in single operation
+func (q *Queries) DeactivateAPIKey(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deactivateAPIKey, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getAPIKeyByShortToken = `-- name: GetAPIKeyByShortToken :one
@@ -123,7 +129,7 @@ func (q *Queries) ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error) {
 	return items, nil
 }
 
-const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :exec
+const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :execrows
 UPDATE api_keys
 SET last_used_at = $1
 WHERE id = $2
@@ -134,7 +140,13 @@ type UpdateAPIKeyLastUsedParams struct {
 	ID         uuid.UUID    `json:"id"`
 }
 
-func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) error {
-	_, err := q.db.ExecContext(ctx, updateAPIKeyLastUsed, arg.LastUsedAt, arg.ID)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Updates last access timestamp with existence detection in single query
+func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateAPIKeyLastUsed, arg.LastUsedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

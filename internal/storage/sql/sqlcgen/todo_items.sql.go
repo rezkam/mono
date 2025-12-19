@@ -66,14 +66,20 @@ func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) 
 	return err
 }
 
-const deleteTodoItem = `-- name: DeleteTodoItem :exec
+const deleteTodoItem = `-- name: DeleteTodoItem :execrows
 DELETE FROM todo_items
 WHERE id = $1
 `
 
-func (q *Queries) DeleteTodoItem(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteTodoItem, id)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Single-query delete with existence detection built-in
+func (q *Queries) DeleteTodoItem(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTodoItem, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteTodoItemsByListId = `-- name: DeleteTodoItemsByListId :exec
@@ -253,6 +259,17 @@ type ListTasksWithFiltersParams struct {
 //	$10: limit      - Page size (max items to return)
 //	$11: offset     - Pagination offset (skip N items)
 //
+// SQL Injection Protection:
+// The ORDER BY clause uses parameterized queries ($9::text) with CASE expressions.
+// PostgreSQL's parameterized query protocol treats $9 as DATA, never CODE, making SQL
+// injection structurally impossible. Even if malicious input like "id; DROP TABLE--"
+// flows through without validation, it's compared as a string literal in CASE expressions,
+// never executed as SQL. This protection is guaranteed by PostgreSQL's wire protocol.
+// See tests/integration/sql_injection_resistance_test.go for proof.
+//
+// Input validation at the service layer improves UX (clear error messages) but does NOT
+// provide security - parameterized queries are the security boundary.
+//
 // Access pattern example:
 //   - "Show my overdue tasks": filter by due_before=now, order by due_time
 //   - "Tasks in List X": filter by list_id, default sort
@@ -308,7 +325,7 @@ func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFil
 	return items, nil
 }
 
-const updateTodoItem = `-- name: UpdateTodoItem :exec
+const updateTodoItem = `-- name: UpdateTodoItem :execrows
 UPDATE todo_items
 SET title = $1,
     status = $2,
@@ -335,8 +352,11 @@ type UpdateTodoItemParams struct {
 	ID                uuid.UUID             `json:"id"`
 }
 
-func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) error {
-	_, err := q.db.ExecContext(ctx, updateTodoItem,
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Single database round-trip prevents race conditions and reduces latency
+func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateTodoItem,
 		arg.Title,
 		arg.Status,
 		arg.Priority,
@@ -348,10 +368,13 @@ func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) 
 		arg.Timezone,
 		arg.ID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-const updateTodoItemStatus = `-- name: UpdateTodoItemStatus :exec
+const updateTodoItemStatus = `-- name: UpdateTodoItemStatus :execrows
 UPDATE todo_items
 SET status = $1, updated_at = $2
 WHERE id = $3
@@ -363,7 +386,13 @@ type UpdateTodoItemStatusParams struct {
 	ID        uuid.UUID `json:"id"`
 }
 
-func (q *Queries) UpdateTodoItemStatus(ctx context.Context, arg UpdateTodoItemStatusParams) error {
-	_, err := q.db.ExecContext(ctx, updateTodoItemStatus, arg.Status, arg.UpdatedAt, arg.ID)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Efficient status updates without separate existence check
+func (q *Queries) UpdateTodoItemStatus(ctx context.Context, arg UpdateTodoItemStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateTodoItemStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

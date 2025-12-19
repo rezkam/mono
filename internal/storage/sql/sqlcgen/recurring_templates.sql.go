@@ -69,7 +69,7 @@ func (q *Queries) CreateRecurringTemplate(ctx context.Context, arg CreateRecurri
 	return err
 }
 
-const deactivateRecurringTemplate = `-- name: DeactivateRecurringTemplate :exec
+const deactivateRecurringTemplate = `-- name: DeactivateRecurringTemplate :execrows
 UPDATE recurring_task_templates
 SET is_active = false,
     updated_at = $1
@@ -81,19 +81,31 @@ type DeactivateRecurringTemplateParams struct {
 	ID        uuid.UUID `json:"id"`
 }
 
-func (q *Queries) DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) error {
-	_, err := q.db.ExecContext(ctx, deactivateRecurringTemplate, arg.UpdatedAt, arg.ID)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Soft delete with existence detection in single operation
+func (q *Queries) DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deactivateRecurringTemplate, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-const deleteRecurringTemplate = `-- name: DeleteRecurringTemplate :exec
+const deleteRecurringTemplate = `-- name: DeleteRecurringTemplate :execrows
 DELETE FROM recurring_task_templates
 WHERE id = $1
 `
 
-func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteRecurringTemplate, id)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Hard delete with built-in existence verification
+func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteRecurringTemplate, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getRecurringTemplate = `-- name: GetRecurringTemplate :one
@@ -255,7 +267,7 @@ func (q *Queries) ListRecurringTemplates(ctx context.Context, listID uuid.UUID) 
 	return items, nil
 }
 
-const updateRecurringTemplate = `-- name: UpdateRecurringTemplate :exec
+const updateRecurringTemplate = `-- name: UpdateRecurringTemplate :execrows
 UPDATE recurring_task_templates
 SET title = $1,
     tags = $2,
@@ -280,8 +292,23 @@ type UpdateRecurringTemplateParams struct {
 	ID                uuid.UUID             `json:"id"`
 }
 
-func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) error {
-	_, err := q.db.ExecContext(ctx, updateRecurringTemplate,
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) where int64 is the number of rows affected
+//
+// Why this pattern:
+//   - Single database round-trip (vs two-query SELECT+UPDATE pattern)
+//   - No race condition: record cannot be deleted between check and update
+//   - Efficient: PostgreSQL returns affected count with no additional cost
+//   - Repository layer checks: rowsAffected == 0 → domain.ErrNotFound
+//
+// Anti-pattern to avoid:
+//
+//	SELECT to check existence, then UPDATE if found
+//	- Two round-trips to database
+//	- Race condition window between queries
+//	- Doubled network latency
+func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateRecurringTemplate,
 		arg.Title,
 		arg.Tags,
 		arg.Priority,
@@ -292,10 +319,13 @@ func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurri
 		arg.UpdatedAt,
 		arg.ID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
-const updateRecurringTemplateGenerationWindow = `-- name: UpdateRecurringTemplateGenerationWindow :exec
+const updateRecurringTemplateGenerationWindow = `-- name: UpdateRecurringTemplateGenerationWindow :execrows
 UPDATE recurring_task_templates
 SET last_generated_until = $1,
     updated_at = $2
@@ -308,7 +338,13 @@ type UpdateRecurringTemplateGenerationWindowParams struct {
 	ID                 uuid.UUID `json:"id"`
 }
 
-func (q *Queries) UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) error {
-	_, err := q.db.ExecContext(ctx, updateRecurringTemplateGenerationWindow, arg.LastGeneratedUntil, arg.UpdatedAt, arg.ID)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Critical for worker: Detects if template was deleted between job claim and generation
+func (q *Queries) UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateRecurringTemplateGenerationWindow, arg.LastGeneratedUntil, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

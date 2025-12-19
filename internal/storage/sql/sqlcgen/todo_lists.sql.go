@@ -28,14 +28,20 @@ func (q *Queries) CreateTodoList(ctx context.Context, arg CreateTodoListParams) 
 	return err
 }
 
-const deleteTodoList = `-- name: DeleteTodoList :exec
+const deleteTodoList = `-- name: DeleteTodoList :execrows
 DELETE FROM todo_lists
 WHERE id = $1
 `
 
-func (q *Queries) DeleteTodoList(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteTodoList, id)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Efficient detection of non-existent records without separate SELECT query
+func (q *Queries) DeleteTodoList(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTodoList, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getTodoList = `-- name: GetTodoList :one
@@ -139,7 +145,7 @@ func (q *Queries) ListTodoListsWithCounts(ctx context.Context) ([]ListTodoListsW
 	return items, nil
 }
 
-const updateTodoList = `-- name: UpdateTodoList :exec
+const updateTodoList = `-- name: UpdateTodoList :execrows
 UPDATE todo_lists
 SET title = $1, create_time = $2
 WHERE id = $3
@@ -151,7 +157,13 @@ type UpdateTodoListParams struct {
 	ID         uuid.UUID `json:"id"`
 }
 
-func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) error {
-	_, err := q.db.ExecContext(ctx, updateTodoList, arg.Title, arg.CreateTime, arg.ID)
-	return err
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
+func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateTodoList, arg.Title, arg.CreateTime, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

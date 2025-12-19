@@ -22,13 +22,28 @@ type Querier interface {
 	CreateStatusHistoryEntry(ctx context.Context, arg CreateStatusHistoryEntryParams) error
 	CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) error
 	CreateTodoList(ctx context.Context, arg CreateTodoListParams) error
-	DeactivateAPIKey(ctx context.Context, id uuid.UUID) error
-	DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) error
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Revokes API key with existence check in single operation
+	DeactivateAPIKey(ctx context.Context, id uuid.UUID) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Soft delete with existence detection in single operation
+	DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error)
 	DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.NullTime) error
-	DeleteRecurringTemplate(ctx context.Context, id uuid.UUID) error
-	DeleteTodoItem(ctx context.Context, id uuid.UUID) error
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Hard delete with built-in existence verification
+	DeleteRecurringTemplate(ctx context.Context, id uuid.UUID) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Single-query delete with existence detection built-in
+	DeleteTodoItem(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteTodoItemsByListId(ctx context.Context, listID uuid.UUID) error
-	DeleteTodoList(ctx context.Context, id uuid.UUID) error
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Efficient detection of non-existent records without separate SELECT query
+	DeleteTodoList(ctx context.Context, id uuid.UUID) (int64, error)
 	GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error)
 	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
 	GetGenerationJob(ctx context.Context, id uuid.UUID) (RecurringGenerationJob, error)
@@ -60,6 +75,17 @@ type Querier interface {
 	//   $10: limit      - Page size (max items to return)
 	//   $11: offset     - Pagination offset (skip N items)
 	//
+	// SQL Injection Protection:
+	// The ORDER BY clause uses parameterized queries ($9::text) with CASE expressions.
+	// PostgreSQL's parameterized query protocol treats $9 as DATA, never CODE, making SQL
+	// injection structurally impossible. Even if malicious input like "id; DROP TABLE--"
+	// flows through without validation, it's compared as a string literal in CASE expressions,
+	// never executed as SQL. This protection is guaranteed by PostgreSQL's wire protocol.
+	// See tests/integration/sql_injection_resistance_test.go for proof.
+	//
+	// Input validation at the service layer improves UX (clear error messages) but does NOT
+	// provide security - parameterized queries are the security boundary.
+	//
 	// Access pattern example:
 	//   - "Show my overdue tasks": filter by due_before=now, order by due_time
 	//   - "Tasks in List X": filter by list_id, default sort
@@ -79,13 +105,48 @@ type Querier interface {
 	// This query uses LEFT JOIN to ensure lists with zero items still appear with count=0.
 	// The FILTER clause efficiently counts only active items in a single pass.
 	ListTodoListsWithCounts(ctx context.Context) ([]ListTodoListsWithCountsRow, error)
-	UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) error
-	UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) error
-	UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) error
-	UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) error
-	UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) error
-	UpdateTodoItemStatus(ctx context.Context, arg UpdateTodoItemStatusParams) error
-	UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) error
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Updates last access timestamp with existence detection in single query
+	UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	//
+	// Eliminates two-query anti-pattern: Previously required GET to fetch retry_count, then UPDATE
+	// Now: retry_count preserved automatically (not in SET clause), single query updates status
+	// Critical for worker: Detects if job was deleted/claimed by another worker between operations
+	UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) where int64 is the number of rows affected
+	//
+	// Why this pattern:
+	//   - Single database round-trip (vs two-query SELECT+UPDATE pattern)
+	//   - No race condition: record cannot be deleted between check and update
+	//   - Efficient: PostgreSQL returns affected count with no additional cost
+	//   - Repository layer checks: rowsAffected == 0 → domain.ErrNotFound
+	//
+	// Anti-pattern to avoid:
+	//   SELECT to check existence, then UPDATE if found
+	//   - Two round-trips to database
+	//   - Race condition window between queries
+	//   - Doubled network latency
+	UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Critical for worker: Detects if template was deleted between job claim and generation
+	UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Single database round-trip prevents race conditions and reduces latency
+	UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Efficient status updates without separate existence check
+	UpdateTodoItemStatus(ctx context.Context, arg UpdateTodoItemStatusParams) (int64, error)
+	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+	// Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
+	UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

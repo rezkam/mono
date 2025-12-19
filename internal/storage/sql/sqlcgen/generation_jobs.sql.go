@@ -132,32 +132,38 @@ func (q *Queries) ListPendingGenerationJobs(ctx context.Context, arg ListPending
 	return items, nil
 }
 
-const updateGenerationJobStatus = `-- name: UpdateGenerationJobStatus :exec
+const updateGenerationJobStatus = `-- name: UpdateGenerationJobStatus :execrows
 UPDATE recurring_generation_jobs
 SET status = $1,
     started_at = CASE WHEN $1 = 'RUNNING' THEN $2 ELSE started_at END,
     completed_at = CASE WHEN $1 = 'COMPLETED' THEN $2 ELSE completed_at END,
     failed_at = CASE WHEN $1 = 'FAILED' THEN $2 ELSE failed_at END,
-    error_message = $3,
-    retry_count = $4
-WHERE id = $5
+    error_message = $3
+WHERE id = $4
 `
 
 type UpdateGenerationJobStatusParams struct {
 	Status       string         `json:"status"`
 	StartedAt    sql.NullTime   `json:"started_at"`
 	ErrorMessage sql.NullString `json:"error_message"`
-	RetryCount   int32          `json:"retry_count"`
 	ID           uuid.UUID      `json:"id"`
 }
 
-func (q *Queries) UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) error {
-	_, err := q.db.ExecContext(ctx, updateGenerationJobStatus,
+// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+//
+// Eliminates two-query anti-pattern: Previously required GET to fetch retry_count, then UPDATE
+// Now: retry_count preserved automatically (not in SET clause), single query updates status
+// Critical for worker: Detects if job was deleted/claimed by another worker between operations
+func (q *Queries) UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateGenerationJobStatus,
 		arg.Status,
 		arg.StartedAt,
 		arg.ErrorMessage,
-		arg.RetryCount,
 		arg.ID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

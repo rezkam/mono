@@ -24,7 +24,10 @@ ORDER BY create_time ASC;
 SELECT * FROM todo_items
 ORDER BY list_id, create_time ASC;
 
--- name: UpdateTodoItem :exec
+-- name: UpdateTodoItem :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Single database round-trip prevents race conditions and reduces latency
 UPDATE todo_items
 SET title = sqlc.arg(title),
     status = sqlc.arg(status),
@@ -37,12 +40,18 @@ SET title = sqlc.arg(title),
     timezone = sqlc.narg(timezone)
 WHERE id = sqlc.arg(id);
 
--- name: UpdateTodoItemStatus :exec
+-- name: UpdateTodoItemStatus :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Efficient status updates without separate existence check
 UPDATE todo_items
 SET status = $1, updated_at = $2
 WHERE id = $3;
 
--- name: DeleteTodoItem :exec
+-- name: DeleteTodoItem :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Single-query delete with existence detection built-in
 DELETE FROM todo_items
 WHERE id = $1;
 

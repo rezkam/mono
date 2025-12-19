@@ -6,12 +6,18 @@ VALUES ($1, $2, $3);
 SELECT * FROM todo_lists
 WHERE id = $1;
 
--- name: UpdateTodoList :exec
+-- name: UpdateTodoList :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
 UPDATE todo_lists
 SET title = $1, create_time = $2
 WHERE id = $3;
 
--- name: DeleteTodoList :exec
+-- name: DeleteTodoList :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Efficient detection of non-existent records without separate SELECT query
 DELETE FROM todo_lists
 WHERE id = $1;
 

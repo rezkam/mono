@@ -32,7 +32,21 @@ SELECT * FROM recurring_task_templates
 WHERE is_active = true
 ORDER BY created_at DESC;
 
--- name: UpdateRecurringTemplate :exec
+-- name: UpdateRecurringTemplate :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) where int64 is the number of rows affected
+--
+-- Why this pattern:
+--   - Single database round-trip (vs two-query SELECT+UPDATE pattern)
+--   - No race condition: record cannot be deleted between check and update
+--   - Efficient: PostgreSQL returns affected count with no additional cost
+--   - Repository layer checks: rowsAffected == 0 → domain.ErrNotFound
+--
+-- Anti-pattern to avoid:
+--   SELECT to check existence, then UPDATE if found
+--   - Two round-trips to database
+--   - Race condition window between queries
+--   - Doubled network latency
 UPDATE recurring_task_templates
 SET title = sqlc.arg(title),
     tags = sqlc.arg(tags),
@@ -44,18 +58,27 @@ SET title = sqlc.arg(title),
     updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id);
 
--- name: UpdateRecurringTemplateGenerationWindow :exec
+-- name: UpdateRecurringTemplateGenerationWindow :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Critical for worker: Detects if template was deleted between job claim and generation
 UPDATE recurring_task_templates
 SET last_generated_until = $1,
     updated_at = $2
 WHERE id = $3;
 
--- name: DeactivateRecurringTemplate :exec
+-- name: DeactivateRecurringTemplate :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Soft delete with existence detection in single operation
 UPDATE recurring_task_templates
 SET is_active = false,
     updated_at = $1
 WHERE id = $2;
 
--- name: DeleteRecurringTemplate :exec
+-- name: DeleteRecurringTemplate :execrows
+-- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
+-- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+-- Hard delete with built-in existence verification
 DELETE FROM recurring_task_templates
 WHERE id = $1;
