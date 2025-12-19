@@ -1,11 +1,11 @@
 # Mono Service
 
-Mono is a production-ready task management service providing both gRPC and REST APIs. Built with PostgreSQL, it features recurring tasks, background job processing, API key authentication, and full observability with OpenTelemetry.
+Mono is a simple task management service providing both gRPC and REST APIs. It features recurring tasks, background job processing using a simple job queue, API key authentication, and full observability stack with OpenTelemetry.
 
 ## Features
 
 - **Dual API**: gRPC (port 8080) and REST Gateway (port 8081)
-- **PostgreSQL Storage**: ACID-compliant with optimized connection pooling
+- **PostgreSQL Storage Implementation**: ACID-compliant with optimized connection pooling
 - **Recurring Tasks**: Template-based task generation with flexible patterns
 - **Background Jobs**: Distributed job queue with SKIP LOCKED concurrency
 - **API Key Authentication**: bcrypt-secured authentication with gRPC interceptors
@@ -16,11 +16,112 @@ Mono is a production-ready task management service providing both gRPC and REST 
 
 ## Architecture
 
+### Runtime Components
+
 The Mono service runs **multiple components**:
 
 1. **gRPC Server** (`MONO_GRPC_PORT`): Core application logic serving HTTP/2 requests using Protobuf
 2. **HTTP Gateway** (`MONO_HTTP_PORT`): REST/JSON proxy translating HTTP requests to gRPC
 3. **Background Worker**: Processes recurring task generation jobs on a schedule
+
+### Codebase Structure (DDD Layered)
+
+```
+cmd/
+  ├── server/                  # gRPC + REST gateway server
+  ├── worker/                  # Background job processor
+  └── apikey/                  # API key generation CLI
+
+internal/
+  # Domain Layer (pure business logic)
+  ├── domain/                  # Domain models, value objects, domain errors
+
+  # Application Layer (use cases)
+  ├── application/
+  │   ├── auth/                # Authentication service + repository interface
+  │   ├── todo/                # Todo business logic + repository interface
+  │   └── worker/              # Worker business logic + repository interface
+
+  # Infrastructure Layer (implementations)
+  ├── infrastructure/
+  │   ├── keygen/              # API key generation and parsing utilities
+  │   └── persistence/
+  │       └── postgres/        # PostgreSQL repository implementations
+  │           ├── migrations/  # Database schema versions (goose)
+  │           ├── queries/     # SQL query definitions (sqlc source)
+  │           └── sqlcgen/     # Generated type-safe Go code (sqlc)
+
+  # Service Layer (protocol handlers)
+  ├── service/                 # Thin gRPC handlers (protocol translation only)
+
+  # Supporting utilities
+  ├── recurring/               # Recurrence pattern calculators
+  ├── config/                  # Configuration management
+  └── env/                     # Environment variable parsing
+
+api/proto/                     # Protobuf definitions (source of truth)
+pkg/observability/             # OpenTelemetry setup
+tests/
+  ├── integration/             # Integration tests with real database
+  └── e2e/                     # End-to-end API tests
+```
+
+**Layer Responsibilities**:
+
+**1. Domain Layer** (`internal/domain/`)
+- Pure business entities and value objects
+- Domain errors (ErrNotFound, ErrInvalidID, etc.)
+- No dependencies on other layers
+- Example: TodoItem, TodoList, RecurringTemplate structs
+
+**2. Application Layer** (`internal/application/`)
+- Business logic and use case orchestration
+- Defines repository interfaces (Dependency Inversion)
+- Coordinates domain objects to fulfill use cases
+- Protocol-agnostic (no gRPC, HTTP, or database knowledge)
+- Example: CreateItem validates title, generates UUID, calls repository
+
+**3. Infrastructure Layer** (`internal/infrastructure/`)
+- Repository implementations (PostgreSQL)
+- Database queries, connection management
+- Wraps errors with domain error sentinels
+- Example: Implements FindListByID, CreateItem using SQL
+
+**4. Service Layer** (`internal/service/`)
+- Thin protocol handlers (gRPC in this case)
+- Protocol translation only (protobuf ↔ domain models)
+- Validates protocol requirements, delegates to application layer
+- Maps domain errors to gRPC status codes
+- Example: Validates req.Title not empty, calls app.CreateItem, returns proto response
+
+**Key Patterns**:
+- **Dependency Inversion**: Application layer defines interfaces, infrastructure implements them
+- **Domain Errors**: Infrastructure wraps DB errors with domain sentinels for application layer
+- **Layer Flow**: gRPC Handler → Application Service → Repository → Database
+- **Code Generation**: Protobuf → Go (buf), SQL → Go (sqlc)
+
+### Design Decisions
+
+**Terminology Note**: "Application Layer" is standard Domain-Driven Design (DDD) terminology.
+Also known as "Application Service Layer" or "Use Case Layer" in Clean Architecture.
+
+**Thin Handler Layer**
+- gRPC handlers are kept thin (~15-20 lines) with zero business logic
+- Each handler follows 4 steps: Validate → Convert → Delegate → Map
+- All business logic lives in the application layer
+- Field mask handling stays at protocol boundary as optimization
+
+**Application Layer**
+- Contains ALL business logic and use case orchestration
+- Protocol-agnostic - no knowledge of gRPC, HTTP, or delivery mechanisms
+- Same service used by gRPC, REST gateway, CLI, and background workers
+- Defines repository interfaces (dependency inversion)
+
+**Benefits**:
+- Business logic testable without protocol overhead
+- Clear separation of concerns (protocol vs business vs persistence)
+- Easy to add new delivery mechanisms (GraphQL, CLI, etc.)
+- No circular dependencies between layers
 
 ### Database Features
 
@@ -297,7 +398,7 @@ The API is defined using **Protobuf** as the Single Source of Truth:
 ### SQL Development
 
 ```bash
-# Modify SQL queries in internal/storage/sql/queries/*.sql
+# Modify SQL queries in internal/infrastructure/persistence/postgres/queries/*.sql
 make gen-sqlc
 
 # Create a new migration
