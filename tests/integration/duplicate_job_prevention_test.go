@@ -17,15 +17,7 @@ import (
 // TestWorker_DuplicateJobPrevention verifies that calling RunScheduleOnce multiple
 // times does not create duplicate jobs for templates that already have pending/running jobs.
 //
-// BUG SCENARIO:
-// Previously, RunScheduleOnce would unconditionally create a new job for each template
-// where last_generated_until < now+window. If the worker was slow processing jobs or
-// experienced a backlog, each scheduler tick would create duplicate jobs for the same
-// template with the same date range. When processed, these duplicate jobs would generate
-// duplicate tasks.
-//
-// FIX:
-// RunScheduleOnce now checks HasPendingOrRunningJob before creating a new job.
+// RunScheduleOnce checks HasPendingOrRunningJob before creating a new job.
 // If a pending or running job already exists for the template, no new job is created.
 func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")

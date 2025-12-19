@@ -196,7 +196,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 
 		keyParts, _ := keygen.ParseAPIKey(targetKey)
 
-		// Load all keys (simulating old O(n) approach)
+		// Load all keys for comparison
 		allKeys, err := store.Queries().ListActiveAPIKeys(ctx)
 		if err != nil {
 			b.Fatalf("Failed to list keys: %v", err)

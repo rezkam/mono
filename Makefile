@@ -61,7 +61,7 @@ gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
 	@echo "Generating sqlc code..."
 	sqlc generate
 	@echo "Fixing sqlc imports (removing legacy pgtype)..."
-	for file in internal/storage/sql/sqlcgen/*.go; do \
+	for file in internal/infrastructure/persistence/postgres/sqlcgen/*.go; do \
 		sed -i.bak -e '/"github.com\/jackc\/pgtype"/d' "$$file"; \
 		rm "$$file.bak"; \
 	done
@@ -208,7 +208,7 @@ db-migrate-up: ## Run migrations (usage: DB_URL=... make db-migrate-up)
 		echo "   or: DB_URL='./data.db' make db-migrate-up"; \
 		exit 1; \
 	fi
-	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations $(DB_DRIVER) "$(DB_URL)" up
+	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/infrastructure/persistence/postgres/migrations $(DB_DRIVER) "$(DB_URL)" up
 
 db-migrate-down: ## Rollback migration (usage: DB_URL=... make db-migrate-down)
 	@echo "Rolling back migration..."
@@ -217,7 +217,7 @@ db-migrate-down: ## Rollback migration (usage: DB_URL=... make db-migrate-down)
 		echo "   or: DB_URL='./data.db' make db-migrate-down"; \
 		exit 1; \
 	fi
-	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations $(DB_DRIVER) "$(DB_URL)" down
+	go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest -dir internal/infrastructure/persistence/postgres/migrations $(DB_DRIVER) "$(DB_URL)" down
 
 db-migrate-create: ## Create migration (usage: NAME=create_users make db-migrate-create)
 	@if [ -z "$(NAME)" ]; then \
@@ -226,11 +226,11 @@ db-migrate-create: ## Create migration (usage: NAME=create_users make db-migrate
 		exit 1; \
 	fi
 	@echo "Creating new migration: $(NAME)"
-	go run github.com/pressly/goose/v3/cmd/goose@latest -dir internal/storage/sql/migrations create $(NAME) sql
+	go run github.com/pressly/goose/v3/cmd/goose@latest -dir internal/infrastructure/persistence/postgres/migrations create $(NAME) sql
 
 test-sql: ## Run SQL storage tests (requires running database)
 	@echo "Running SQL integration tests..."
-	go test -v ./internal/storage/sql/...
+	go test -v ./internal/infrastructure/persistence/postgres/...
 
 test-integration-up: ## [TEST DB] Start test database (port 5433)
 	@echo "Starting PostgreSQL test database..."
@@ -247,7 +247,7 @@ test-integration-up: ## [TEST DB] Start test database (port 5433)
 	@echo "Running migrations..."
 	@TEST_POSTGRES_URL="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
 		go run github.com/pressly/goose/v3/cmd/goose@latest \
-		-dir internal/storage/sql/migrations \
+		-dir internal/infrastructure/persistence/postgres/migrations \
 		postgres \
 		"postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
 		up

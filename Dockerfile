@@ -36,7 +36,7 @@ WORKDIR /app
 COPY --from=builder /app/mono-server .
 
 # Copy migration files (if needed for runtime migration)
-COPY --from=builder /app/internal/storage/sql/migrations ./migrations
+COPY --from=builder /app/internal/infrastructure/persistence/postgres/migrations ./migrations
 
 # Use non-root user
 USER appuser

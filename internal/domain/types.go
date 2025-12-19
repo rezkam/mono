@@ -4,9 +4,6 @@ import "time"
 
 // ListTasksParams contains parameters for listing tasks with filtering, sorting, and pagination.
 //
-// ACCESS PATTERN: Used by FindItems() to implement efficient database-level operations.
-// All filtering, sorting, and pagination happens in PostgreSQL, not in application memory.
-//
 // Common use cases:
 //   - "My overdue tasks": DueBefore=now(), OrderBy="due_time"
 //   - "Tasks in list X": ListID=X, default ordering

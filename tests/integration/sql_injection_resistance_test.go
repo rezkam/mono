@@ -141,7 +141,7 @@ Flow:
 				Offset:  0,
 			}
 
-			// Execute query (simulating storage layer receiving unvalidated input)
+			// Execute query with malicious input
 			result, err := store.FindItems(ctx, params)
 
 			// CRITICAL ASSERTIONS PROVING SAFETY

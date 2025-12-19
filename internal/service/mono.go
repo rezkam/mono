@@ -131,8 +131,7 @@ func (s *MonoService) UpdateItem(ctx context.Context, req *monov1.UpdateItemRequ
 		return nil, status.Error(codes.InvalidArgument, "list_id is required")
 	}
 
-	// O(1) lookup: Fetch only the item being updated, not the entire list
-	// This replaces the previous O(N) approach that loaded all items in the list
+	// Fetch only the item being updated, not the entire list
 	item, err := s.service.GetItem(ctx, req.Item.Id)
 	if err != nil {
 		return nil, mapError(err)
@@ -444,7 +443,7 @@ func decodePageToken(token string) (int, error) {
 // Returns empty strings if invalid.
 //
 // This validation provides clear error messages to API users (UX), not security.
-// Security against SQL injection is guaranteed by parameterized queries in the storage layer.
+// Security against SQL injection is guaranteed by parameterized queries.
 // See tests/integration/sql_injection_resistance_test.go for proof that even with direct
 // assignment (params.OrderBy = req.OrderBy) and no validation, SQL injection is impossible.
 func parseOrderByField(orderBy string) (field string, direction string) {
@@ -594,8 +593,8 @@ func protoToTodoItem(req *monov1.CreateItemRequest) (*domain.TodoItem, error) {
 //
 // PROTOCOL-LEVEL CONCERN:
 // Field masks are a protobuf/gRPC optimization, not business logic.
-// They stay in the handler layer (not application layer) because:
-//   - Application layer works with complete domain models
+// They stay in handlers because:
+//   - Business logic works with complete domain models
 //   - Field mask logic is protocol-specific (gRPC/protobuf concept)
 //   - Different protocols may have different partial update mechanisms
 func applyItemFieldMask(item *domain.TodoItem, protoItem *monov1.TodoItem, mask *fieldmaskpb.FieldMask) error {

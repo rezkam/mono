@@ -125,8 +125,7 @@ type Querier interface {
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	//
-	// Eliminates two-query anti-pattern: Previously required GET to fetch retry_count, then UPDATE
-	// Now: retry_count preserved automatically (not in SET clause), single query updates status
+	// retry_count is preserved automatically (not in SET clause)
 	// Critical for worker: Detects if job was deleted/claimed by another worker between operations
 	UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected

@@ -24,13 +24,7 @@ import (
 // TestListTasks_NegativeOffset verifies that a crafted page token encoding a negative
 // offset returns InvalidArgument (400) instead of Internal (500).
 //
-// BUG SCENARIO:
-// A malicious client could craft a page token like "LTU" (base64 for "-5") that decodes
-// to a negative offset. Without validation, this flows to Postgres which rejects it with
-// "OFFSET must not be negative", causing a 500 Internal error instead of 400 InvalidArgument.
-//
-// FIX:
-// The decodePageToken function now validates that offset >= 0 and returns an error
+// The decodePageToken function validates that offset >= 0 and returns an error
 // for negative values, which the service layer maps to InvalidArgument.
 func TestListTasks_NegativeOffset(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
@@ -133,12 +127,7 @@ func TestListTasks_NegativeOffset(t *testing.T) {
 // TestListTasks_OverflowOffset verifies that a crafted page token encoding an offset
 // that exceeds int32 max returns InvalidArgument (400) instead of causing overflow.
 //
-// BUG SCENARIO:
-// The repository layer casts offset to int32 for the database. An offset like
-// 9999999999999 exceeds int32 max and could cause undefined behavior or database errors.
-//
-// FIX:
-// The decodePageToken function now validates that offset <= int32 max and returns
+// The decodePageToken function validates that offset <= int32 max and returns
 // an error for values that exceed this limit.
 func TestListTasks_OverflowOffset(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")

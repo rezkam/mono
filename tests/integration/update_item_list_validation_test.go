@@ -21,15 +21,8 @@ import (
 
 // TestUpdateItem_ValidatesListOwnership verifies that UpdateItem prevents
 // cross-list updates by validating the item belongs to the specified list.
-//
-// SECURITY ISSUE:
-// Previously, UpdateItem only checked item.id and ignored list_id.
-// A malicious user could update any item if they knew/guessed its ID,
-// even if it belonged to a different list.
-//
-// FIX:
-// The SQL UPDATE now includes `WHERE id = $1 AND list_id = $2`, ensuring
-// that the update only succeeds if the item belongs to the specified list.
+// The SQL UPDATE includes `WHERE id = $1 AND list_id = $2` to ensure
+// updates only succeed if the item belongs to the specified list.
 func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
 	if pgURL == "" {

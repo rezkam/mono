@@ -15,22 +15,10 @@ import (
 )
 
 // TestPrioritySorting_SemanticOrder verifies that priority sorting uses semantic
-// order (LOW < MEDIUM < HIGH < URGENT) instead of lexical/alphabetical order.
+// order (LOW < MEDIUM < HIGH < URGENT) not alphabetical order.
 //
-// BUG SCENARIO:
-// Previously, the SQL query sorted priorities alphabetically:
-//   - ASC yielded: HIGH, LOW, MEDIUM, URGENT (alphabetical)
-//   - DESC yielded: URGENT, MEDIUM, LOW, HIGH (reverse alphabetical)
-//
-// This did not match the semantic severity order defined in the proto enum:
-//   - TASK_PRIORITY_LOW = 1
-//   - TASK_PRIORITY_MEDIUM = 2
-//   - TASK_PRIORITY_HIGH = 3
-//   - TASK_PRIORITY_URGENT = 4
-//
-// FIX:
-// The SQL query now uses a CASE expression to convert priority strings to
-// numeric weights (LOW=1, MEDIUM=2, HIGH=3, URGENT=4) before sorting.
+// The SQL query uses a CASE expression to convert priority strings to
+// numeric weights (LOW=1, MEDIUM=2, HIGH=3, URGENT=4) for sorting.
 func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
 	if pgURL == "" {
@@ -182,8 +170,8 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	})
 }
 
-// TestPrioritySorting_NotAlphabetical explicitly verifies the fix by checking
-// that HIGH does NOT come before LOW in ascending order (which it would alphabetically).
+// TestPrioritySorting_NotAlphabetical verifies that HIGH does NOT come before LOW
+// in ascending order (which would happen with alphabetical sorting).
 func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
 	if pgURL == "" {

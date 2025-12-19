@@ -4,13 +4,9 @@ import "time"
 
 // TodoList is an aggregate root representing a collection of tasks.
 //
-// ACCESS PATTERNS:
-//  1. LIST VIEW (dashboard): Use FindAllLists() with counts, Items will be empty slice
-//  2. DETAIL VIEW (single list): Use FindListByID() which populates Items array
-//
-// The separation of concerns allows efficient queries:
-//   - List view: SELECT with aggregation, no item loading
-//   - Detail view: SELECT with JOIN to load full item details
+// Items may be populated or empty depending on the query:
+//  - List view (dashboard): counts populated, Items empty
+//  - Detail view: Items populated with full details
 type TodoList struct {
 	ID         string
 	Title      string
@@ -136,12 +132,11 @@ type GenerationJob struct {
 // APIKey is an aggregate root representing an API key for authentication.
 //
 // API keys use a split-token pattern:
-//   - ShortToken: Indexed, used for O(1) lookup
-//   - LongSecretHash: BLAKE2b-256 hash, used for verification
-//   - FullKey: Only shown once at creation (short + long)
+//   - ShortToken: indexed portion for lookup
+//   - LongSecretHash: cryptographic hash for verification
+//   - FullKey: only shown once at creation (short + long)
 //
 // This design provides:
-//   - Fast lookups via short token index
 //   - Secure verification via constant-time hash comparison
 //   - No storage of plaintext secrets
 type APIKey struct {

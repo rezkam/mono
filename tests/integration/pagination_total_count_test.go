@@ -15,21 +15,9 @@ import (
 )
 
 // TestFindItems_TotalCount_ReturnsActualTotal tests that TotalCount returns the actual
-// total number of matching items across all pages, not just offset + len(items).
+// total number of matching items across all pages.
 //
-// BUG SCENARIO:
-// When there are 50 tasks and client requests page 1 with limit=10:
-//   - Expected TotalCount: 50 (actual total matching items)
-//   - Bug TotalCount: 10 (offset=0 + len=10)
-//
-// This breaks pagination UI because clients cannot calculate total pages.
-//
-// ROOT CAUSE:
-// Implementation uses `totalCount := params.Offset + len(items)` as a heuristic
-// instead of querying the actual count from the database.
-//
-// FIX:
-// Use COUNT(*) OVER() window function to get total count with each row,
+// Uses COUNT(*) OVER() window function to get total count with each row,
 // or run a separate count query.
 func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")

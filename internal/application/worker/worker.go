@@ -148,10 +148,10 @@ func (w *Worker) RunScheduleOnce(ctx context.Context) error {
 
 		target := time.Now().AddDate(0, 0, template.GenerationWindowDays)
 
-		// Compare at the date level since last_generated_until is stored as DATE in the database.
-		// The database column only stores year/month/day, so we need to truncate both values
-		// to dates for a fair comparison. Without this, a stored date of "2026-06-16" would
-		// be read as midnight UTC, while target calculated as "2026-06-16 22:30" would appear
+		// Compare at the date level since last_generated_until stores only year/month/day.
+		// We need to truncate both values to dates for a fair comparison.
+		// Without this, a stored date of "2026-06-16" would be read as midnight UTC,
+		// while target calculated as "2026-06-16 22:30" would appear
 		// to need generation.
 		startDate := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
 		targetDate := time.Date(target.Year(), target.Month(), target.Day(), 0, 0, 0, 0, time.UTC)

@@ -154,7 +154,6 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 }
 
 // GetItem retrieves a single todo item by ID.
-// O(1) lookup - use this instead of GetList when only one item is needed.
 func (s *Service) GetItem(ctx context.Context, id string) (*domain.TodoItem, error) {
 	if id == "" {
 		return nil, fmt.Errorf("id is required")

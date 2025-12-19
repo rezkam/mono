@@ -16,15 +16,7 @@ import (
 
 // TestListTasksPaginationExactMultiple tests pagination when total items is exact multiple of page size.
 //
-// BUG SCENARIO:
-// When total items = limit (e.g., 10 items, limit=10), HasMore incorrectly returns true,
-// causing clients to request an empty next page.
-//
-// ROOT CAUSE:
-// Implementation uses `hasMore := len(items) == params.Limit` instead of limit+1 pattern.
-//
-// FIX:
-// Use limit+1 pattern: fetch Limit+1 rows, check if we got more than Limit, trim to Limit.
+// Implementation uses limit+1 pattern: fetch Limit+1 rows, check if we got more than Limit, trim to Limit.
 func TestListTasksPaginationExactMultiple(t *testing.T) {
 	pgURL := os.Getenv("TEST_POSTGRES_URL")
 	if pgURL == "" {

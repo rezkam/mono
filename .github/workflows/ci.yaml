@@ -63,7 +63,7 @@ jobs:
       - name: Verify sqlc Generated Code
         run: |
           make gen-sqlc
-          git diff --exit-code internal/storage/sql/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
+          git diff --exit-code internal/infrastructure/persistence/postgres/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
 
       - name: Run Tests (without SQL integration)
         run: make test
@@ -76,7 +76,7 @@ jobs:
 
       - name: Run PostgreSQL Integration Tests
         run: |
-          TEST_POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" go test -v ./internal/storage/sql/repository/...
+          TEST_POSTGRES_URL="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" go test -v ./tests/integration/...
 
       - name: Stop PostgreSQL
         run: docker compose down

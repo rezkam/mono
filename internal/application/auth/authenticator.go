@@ -185,7 +185,6 @@ func (a *Authenticator) Shutdown(ctx context.Context) error {
 }
 
 // validateAPIKey checks if the API key is valid and updates last_used_at.
-// Uses O(1) indexed lookup via short_token instead of O(n) iteration.
 func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error {
 	// Parse API key into components
 	keyParts, err := keygen.ParseAPIKey(apiKey)
@@ -193,7 +192,6 @@ func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error
 		return fmt.Errorf("invalid API key format: %w", err)
 	}
 
-	// O(1) indexed lookup by short_token
 	key, err := a.repo.FindByShortToken(ctx, keyParts.ShortToken)
 	if err != nil {
 		return fmt.Errorf("API key not found")
