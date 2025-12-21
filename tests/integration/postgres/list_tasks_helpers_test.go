@@ -8,16 +8,14 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // listTasksTestEnv bundles the common wiring required for the ListTasks suites.
 type listTasksTestEnv struct {
 	ctx     context.Context
 	store   *postgres.Store
-	service *service.MonoService
+	service *todo.Service
 	cleanup func()
 }
 
@@ -32,13 +30,12 @@ func newListTasksTestEnv(t *testing.T) *listTasksTestEnv {
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	env := &listTasksTestEnv{
 		ctx:     ctx,
 		store:   store,
-		service: svc,
+		service: todoService,
 		cleanup: func() {
 			store.Close()
 			dbCleanup()
@@ -60,12 +57,16 @@ func (e *listTasksTestEnv) Context() context.Context {
 	return e.ctx
 }
 
-func (e *listTasksTestEnv) Service() *service.MonoService {
+func (e *listTasksTestEnv) Service() *todo.Service {
 	return e.service
 }
 
 func (e *listTasksTestEnv) Store() *postgres.Store {
 	return e.store
+}
+
+func getTestDSN(t *testing.T) string {
+	return GetTestStorageDSN(t)
 }
 
 func ptrTaskPriority(p domain.TaskPriority) *domain.TaskPriority {
@@ -74,8 +75,4 @@ func ptrTaskPriority(p domain.TaskPriority) *domain.TaskPriority {
 
 func ptrTime(t time.Time) *time.Time {
 	return &t
-}
-
-func timestampProto(t time.Time) *timestamppb.Timestamp {
-	return timestamppb.New(t)
 }

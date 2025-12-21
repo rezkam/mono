@@ -154,7 +154,7 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 			id, list_id, title, status, priority,
 			estimated_duration, create_time, updated_at, due_time, tags
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, itemID, listID, "Fix Auth Bug", "TODO", "URGENT",
+	`, itemID, listID, "Fix Auth Bug", "todo", "urgent",
 		"3 hours", time.Now(), time.Now(), dueTime, tags)
 	require.NoError(t, err)
 
@@ -176,8 +176,8 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "Fix Auth Bug", title)
-	assert.Equal(t, "TODO", status)
-	assert.Equal(t, "URGENT", priority.String)
+	assert.Equal(t, "todo", status)
+	assert.Equal(t, "urgent", priority.String)
 	assert.True(t, estimatedDuration.Valid)
 	assert.Contains(t, estimatedDuration.String, "03:00:00")
 
@@ -207,7 +207,7 @@ func TestTrigger_AutoUpdateTimestamp(t *testing.T) {
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, itemID, listID, "Test", "TODO", now, now)
+	`, itemID, listID, "Test", "todo", now, now)
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
@@ -245,7 +245,7 @@ func TestTrigger_StatusHistory(t *testing.T) {
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, itemID, listID, "Test", "TODO", time.Now(), time.Now())
+	`, itemID, listID, "Test", "todo", time.Now(), time.Now())
 	require.NoError(t, err)
 
 	// Verify initial status was recorded
@@ -261,12 +261,12 @@ func TestTrigger_StatusHistory(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, initialFromStatus.Valid, "initial from_status should be NULL")
-	assert.Equal(t, "TODO", initialToStatus)
+	assert.Equal(t, "todo", initialToStatus)
 
 	// Change status - should create history entry
 	_, err = db.ExecContext(ctx, `
 		UPDATE todo_items SET status = $1 WHERE id = $2
-	`, "IN_PROGRESS", itemID)
+	`, "in_progress", itemID)
 	require.NoError(t, err)
 
 	// Verify transition history
@@ -281,13 +281,13 @@ func TestTrigger_StatusHistory(t *testing.T) {
 	`, itemID).Scan(&fromStatus, &toStatus)
 	require.NoError(t, err)
 
-	assert.Equal(t, "TODO", fromStatus.String)
-	assert.Equal(t, "IN_PROGRESS", toStatus)
+	assert.Equal(t, "todo", fromStatus.String)
+	assert.Equal(t, "in_progress", toStatus)
 
 	// Change again
 	_, err = db.ExecContext(ctx, `
 		UPDATE todo_items SET status = $1 WHERE id = $2
-	`, "DONE", itemID)
+	`, "done", itemID)
 	require.NoError(t, err)
 
 	// Count history entries (should be 3: initial + 2 transitions)
@@ -318,11 +318,11 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 		status   string
 		priority string
 	}{
-		{"550e8400-e29b-41d4-a716-446655440100", "TODO", "HIGH"},
-		{"550e8400-e29b-41d4-a716-446655440101", "TODO", "LOW"},
-		{"550e8400-e29b-41d4-a716-446655440102", "IN_PROGRESS", "HIGH"},
-		{"550e8400-e29b-41d4-a716-446655440103", "DONE", "HIGH"},
-		{"550e8400-e29b-41d4-a716-446655440104", "ARCHIVED", "HIGH"},
+		{"550e8400-e29b-41d4-a716-446655440100", "todo", "high"},
+		{"550e8400-e29b-41d4-a716-446655440101", "todo", "low"},
+		{"550e8400-e29b-41d4-a716-446655440102", "in_progress", "high"},
+		{"550e8400-e29b-41d4-a716-446655440103", "done", "high"},
+		{"550e8400-e29b-41d4-a716-446655440104", "archived", "high"},
 	}
 
 	for _, item := range testItems {
@@ -333,12 +333,12 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Query: Active (not DONE/ARCHIVED/CANCELLED) + HIGH priority
+	// Query: Active (not done/archived/CANCELLED) + high priority
 	rows, err := db.QueryContext(ctx, `
 		SELECT id FROM todo_items
 		WHERE list_id = $1
-		  AND status NOT IN ('DONE', 'ARCHIVED', 'CANCELLED')
-		  AND priority = 'HIGH'
+		  AND status NOT IN ('done', 'archived', 'CANCELLED')
+		  AND priority = 'high'
 		ORDER BY status
 	`, listID)
 	require.NoError(t, err)
@@ -352,7 +352,7 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 
-	assert.Equal(t, 2, len(results), "should find 2 active HIGH priority items")
+	assert.Equal(t, 2, len(results), "should find 2 active high priority items")
 }
 
 func TestQuery_TagsWithJSONB(t *testing.T) {
@@ -382,7 +382,7 @@ func TestQuery_TagsWithJSONB(t *testing.T) {
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at, tags)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, tc.id, listID, "Task", "TODO", time.Now(), time.Now(), tc.tags)
+		`, tc.id, listID, "Task", "todo", time.Now(), time.Now(), tc.tags)
 		require.NoError(t, err)
 	}
 
@@ -424,7 +424,7 @@ func TestRecurringTemplate_Create(t *testing.T) {
 			due_offset, is_active, created_at, updated_at,
 			last_generated_until, generation_window_days
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, templateID, listID, "Daily Standup", "WEEKLY", config,
+	`, templateID, listID, "Daily Standup", "weekly", config,
 		"2 hours", true, time.Now(), time.Now(), time.Now(), 30)
 	require.NoError(t, err)
 
@@ -438,7 +438,7 @@ func TestRecurringTemplate_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "Daily Standup", title)
-	assert.Equal(t, "WEEKLY", pattern)
+	assert.Equal(t, "weekly", pattern)
 
 	var parsedConfig map[string]interface{}
 	require.NoError(t, json.Unmarshal(configJSON, &parsedConfig))
@@ -465,7 +465,7 @@ func TestFunction_ClaimGenerationJob(t *testing.T) {
 			id, list_id, title, recurrence_pattern, recurrence_config,
 			is_active, created_at, updated_at, last_generated_until, generation_window_days
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, templateID, listID, "Template", "DAILY", `{}`,
+	`, templateID, listID, "Template", "daily", `{}`,
 		true, time.Now(), time.Now(), time.Now(), 30)
 	require.NoError(t, err)
 
@@ -513,7 +513,7 @@ func TestCascadeDelete(t *testing.T) {
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, itemID, listID, "Test", "TODO", time.Now(), time.Now())
+	`, itemID, listID, "Test", "todo", time.Now(), time.Now())
 	require.NoError(t, err)
 
 	// Delete list - should cascade

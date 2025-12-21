@@ -26,9 +26,6 @@ import (
 // - The directions are NOT the same (proving the direction is honored)
 func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -171,9 +168,6 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 // TestOrderByDirection_DueTime verifies due_time sorting honors direction.
 func TestOrderByDirection_DueTime(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -265,9 +259,6 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 // TestOrderByDirection_Priority verifies priority sorting honors direction.
 func TestOrderByDirection_Priority(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)

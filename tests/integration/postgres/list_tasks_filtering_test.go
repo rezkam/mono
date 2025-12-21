@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,11 +14,9 @@ import (
 func TestListTasks_FilteringAndOrdering(t *testing.T) {
 	env := newListTasksTestEnv(t)
 
-	createListResp, err := env.Service().CreateList(env.Context(), &monov1.CreateListRequest{
-		Title: "Combined Filter Test List",
-	})
+	list, err := env.Service().CreateList(env.Context(), "Combined Filter Test List")
 	require.NoError(t, err)
-	listID := createListResp.List.Id
+	listID := list.ID
 
 	now := time.Now().UTC()
 	items := []struct {
@@ -54,50 +51,59 @@ func TestListTasks_FilteringAndOrdering(t *testing.T) {
 	}
 
 	t.Run("filter_by_status_order_by_priority", func(t *testing.T) {
-		resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-			Parent:  listID,
-			Filter:  "status:TODO",
-			OrderBy: "priority desc",
-		})
+		status := domain.TaskStatusTodo
+		params := domain.ListTasksParams{
+			ListID:   &listID,
+			Status:   &status,
+			OrderBy:  "priority",
+			OrderDir: "desc",
+		}
+		result, err := env.Service().ListTasks(env.Context(), params)
 		require.NoError(t, err)
 
-		assert.Equal(t, 3, len(resp.Items))
-		for _, item := range resp.Items {
-			assert.Equal(t, monov1.TaskStatus_TASK_STATUS_TODO, item.Status)
+		assert.Equal(t, 3, len(result.Items))
+		for _, item := range result.Items {
+			assert.Equal(t, domain.TaskStatusTodo, item.Status)
 		}
-		assert.Equal(t, monov1.TaskPriority_TASK_PRIORITY_HIGH, resp.Items[0].Priority)
-		assert.Equal(t, monov1.TaskPriority_TASK_PRIORITY_HIGH, resp.Items[1].Priority)
-		assert.Equal(t, monov1.TaskPriority_TASK_PRIORITY_LOW, resp.Items[2].Priority)
+		assert.Equal(t, domain.TaskPriorityHigh, *result.Items[0].Priority)
+		assert.Equal(t, domain.TaskPriorityHigh, *result.Items[1].Priority)
+		assert.Equal(t, domain.TaskPriorityLow, *result.Items[2].Priority)
 	})
 
 	t.Run("filter_by_tag_order_by_due_time", func(t *testing.T) {
-		resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-			Parent:  listID,
-			Filter:  "tags:work",
-			OrderBy: "due_time asc",
-		})
+		tag := "work"
+		params := domain.ListTasksParams{
+			ListID:   &listID,
+			Tag:      &tag,
+			OrderBy:  "due_time",
+			OrderDir: "asc",
+		}
+		result, err := env.Service().ListTasks(env.Context(), params)
 		require.NoError(t, err)
 
-		assert.Equal(t, 4, len(resp.Items))
-		for i := 0; i < len(resp.Items)-1; i++ {
-			assert.True(t, resp.Items[i].DueTime.AsTime().Before(resp.Items[i+1].DueTime.AsTime()),
+		assert.Equal(t, 4, len(result.Items))
+		for i := 0; i < len(result.Items)-1; i++ {
+			assert.True(t, result.Items[i].DueTime.Before(*result.Items[i+1].DueTime),
 				"Items should be ordered by due_time ascending")
-			assert.Contains(t, resp.Items[i].Tags, "work")
+			assert.Contains(t, result.Items[i].Tags, "work")
 		}
-		assert.Contains(t, resp.Items[len(resp.Items)-1].Tags, "work")
+		assert.Contains(t, result.Items[len(result.Items)-1].Tags, "work")
 	})
 
 	t.Run("filter_by_priority_order_by_updated_at", func(t *testing.T) {
-		resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-			Parent:  listID,
-			Filter:  "priority:HIGH",
-			OrderBy: "updated_at desc",
-		})
+		priority := domain.TaskPriorityHigh
+		params := domain.ListTasksParams{
+			ListID:   &listID,
+			Priority: &priority,
+			OrderBy:  "updated_at",
+			OrderDir: "desc",
+		}
+		result, err := env.Service().ListTasks(env.Context(), params)
 		require.NoError(t, err)
 
-		assert.Equal(t, 3, len(resp.Items))
-		for _, item := range resp.Items {
-			assert.Equal(t, monov1.TaskPriority_TASK_PRIORITY_HIGH, item.Priority)
+		assert.Equal(t, 3, len(result.Items))
+		for _, item := range result.Items {
+			assert.Equal(t, domain.TaskPriorityHigh, *item.Priority)
 		}
 	})
 }

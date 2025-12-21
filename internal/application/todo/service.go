@@ -3,7 +3,7 @@
 // ARCHITECTURE DECISION: Application Layer
 //
 // This layer contains ALL business logic and use case orchestration.
-// It is protocol-agnostic - no knowledge of gRPC, HTTP, CLI, or any delivery mechanism.
+// It is protocol-agnostic - no knowledge of HTTP, CLI, or any delivery mechanism.
 //
 // RESPONSIBILITIES:
 //   - Business logic and validation
@@ -12,17 +12,17 @@
 //   - Returning domain models and domain errors
 //
 // WHAT DOES NOT BELONG HERE:
-//   - Protocol-specific code (protobuf, HTTP headers, gRPC status codes)
+//   - Protocol-specific code (HTTP headers, status codes, request/response formats)
 //   - Database implementation details (SQL queries, connection management)
 //   - Infrastructure concerns (caching, logging, metrics)
 //
 // LAYER DEPENDENCIES:
 //   - Domain models (internal/domain) - pure business entities
 //   - Repository interface (defined here, implemented in infrastructure layer)
-//   - NO dependencies on gRPC, HTTP, database drivers, or infrastructure
+//   - NO dependencies on HTTP, database drivers, or infrastructure
 //
 // This enables:
-//   - Same business logic used by gRPC handlers, REST endpoints, CLI commands, and workers
+//   - Same business logic used by HTTP handlers, CLI commands, and workers
 //   - Easy testing without infrastructure overhead
 //   - Clean separation of concerns
 package todo
@@ -36,23 +36,49 @@ import (
 	"github.com/rezkam/mono/internal/domain"
 )
 
+// Default configuration values.
+const (
+	DefaultPageSize = 25
+	MaxPageSize     = 100
+)
+
+// Config holds configuration for the Service.
+type Config struct {
+	DefaultPageSize int
+	MaxPageSize     int
+}
+
 // Service provides business logic for todo management.
 // It orchestrates operations using the Repository interface.
 type Service struct {
-	repo Repository
+	repo   Repository
+	config Config
 }
 
 // NewService creates a new todo service.
-func NewService(repo Repository) *Service {
+// Applies application defaults for zero or invalid config values.
+// Both DefaultPageSize and MaxPageSize must be > 0.
+func NewService(repo Repository, config Config) *Service {
+	// Apply defaults for zero or invalid values (must be > 0)
+	if config.DefaultPageSize <= 0 {
+		config.DefaultPageSize = DefaultPageSize
+	}
+	if config.MaxPageSize <= 0 {
+		config.MaxPageSize = MaxPageSize
+	}
+
 	return &Service{
-		repo: repo,
+		repo:   repo,
+		config: config,
 	}
 }
 
 // CreateList creates a new todo list.
-func (s *Service) CreateList(ctx context.Context, title string) (*domain.TodoList, error) {
-	if title == "" {
-		return nil, fmt.Errorf("title is required")
+func (s *Service) CreateList(ctx context.Context, titleStr string) (*domain.TodoList, error) {
+	// Validate title using value object
+	title, err := domain.NewTitle(titleStr)
+	if err != nil {
+		return nil, err // Returns domain error (ErrTitleRequired or ErrTitleTooLong)
 	}
 
 	idObj, err := uuid.NewV7()
@@ -62,7 +88,7 @@ func (s *Service) CreateList(ctx context.Context, title string) (*domain.TodoLis
 
 	list := &domain.TodoList{
 		ID:         idObj.String(),
-		Title:      title,
+		Title:      title.String(),
 		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
@@ -77,12 +103,12 @@ func (s *Service) CreateList(ctx context.Context, title string) (*domain.TodoLis
 // GetList retrieves a todo list by ID.
 func (s *Service) GetList(ctx context.Context, id string) (*domain.TodoList, error) {
 	if id == "" {
-		return nil, fmt.Errorf("id is required")
+		return nil, domain.ErrListNotFound
 	}
 
 	list, err := s.repo.FindListByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get list: %w", err)
+		return nil, err // Repository returns domain errors
 	}
 
 	return list, nil
@@ -101,11 +127,20 @@ func (s *Service) ListLists(ctx context.Context) ([]*domain.TodoList, error) {
 // UpdateList updates an existing todo list.
 func (s *Service) UpdateList(ctx context.Context, list *domain.TodoList) error {
 	if list.ID == "" {
-		return fmt.Errorf("list ID is required")
+		return domain.ErrListNotFound
+	}
+
+	// Validate title if being updated
+	if list.Title != "" {
+		title, err := domain.NewTitle(list.Title)
+		if err != nil {
+			return err
+		}
+		list.Title = title.String()
 	}
 
 	if err := s.repo.UpdateList(ctx, list); err != nil {
-		return fmt.Errorf("failed to update list: %w", err)
+		return err // Repository returns domain errors
 	}
 
 	return nil
@@ -114,11 +149,15 @@ func (s *Service) UpdateList(ctx context.Context, list *domain.TodoList) error {
 // CreateItem creates a new todo item in a list.
 func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) (*domain.TodoItem, error) {
 	if listID == "" {
-		return nil, fmt.Errorf("list_id is required")
+		return nil, domain.ErrListNotFound
 	}
-	if item.Title == "" {
-		return nil, fmt.Errorf("title is required")
+
+	// Validate title using value object
+	title, err := domain.NewTitle(item.Title)
+	if err != nil {
+		return nil, err // Returns domain error (ErrTitleRequired or ErrTitleTooLong)
 	}
+	item.Title = title.String()
 
 	// Generate ID if not provided
 	if item.ID == "" {
@@ -156,12 +195,12 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 // GetItem retrieves a single todo item by ID.
 func (s *Service) GetItem(ctx context.Context, id string) (*domain.TodoItem, error) {
 	if id == "" {
-		return nil, fmt.Errorf("id is required")
+		return nil, domain.ErrItemNotFound
 	}
 
 	item, err := s.repo.FindItemByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get item: %w", err)
+		return nil, err // Repository returns domain errors
 	}
 
 	return item, nil
@@ -171,10 +210,19 @@ func (s *Service) GetItem(ctx context.Context, id string) (*domain.TodoItem, err
 // Validates that the item belongs to the specified list.
 func (s *Service) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
 	if item.ID == "" {
-		return fmt.Errorf("item ID is required")
+		return domain.ErrItemNotFound
 	}
 	if listID == "" {
-		return fmt.Errorf("list ID is required")
+		return domain.ErrListNotFound
+	}
+
+	// Validate title if being updated
+	if item.Title != "" {
+		title, err := domain.NewTitle(item.Title)
+		if err != nil {
+			return err
+		}
+		item.Title = title.String()
 	}
 
 	// Validate timezone if provided
@@ -188,7 +236,7 @@ func (s *Service) UpdateItem(ctx context.Context, listID string, item *domain.To
 	item.UpdatedAt = time.Now().UTC()
 
 	if err := s.repo.UpdateItem(ctx, listID, item); err != nil {
-		return fmt.Errorf("failed to update item: %w", err)
+		return err // Repository returns domain errors
 	}
 
 	return nil
@@ -196,6 +244,16 @@ func (s *Service) UpdateItem(ctx context.Context, listID string, item *domain.To
 
 // ListTasks searches for tasks with filtering, sorting, and pagination.
 func (s *Service) ListTasks(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
+	// Apply default limit if not specified or negative
+	if params.Limit <= 0 {
+		params.Limit = s.config.DefaultPageSize
+	}
+
+	// Enforce maximum page size
+	if params.Limit > s.config.MaxPageSize {
+		params.Limit = s.config.MaxPageSize
+	}
+
 	// Validate order_by field
 	if params.OrderBy != "" {
 		validFields := map[string]bool{
@@ -220,11 +278,15 @@ func (s *Service) ListTasks(ctx context.Context, params domain.ListTasksParams) 
 // CreateRecurringTemplate creates a new recurring task template.
 func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	if template.ListID == "" {
-		return nil, fmt.Errorf("list_id is required")
+		return nil, domain.ErrListNotFound
 	}
-	if template.Title == "" {
-		return nil, fmt.Errorf("title is required")
+
+	// Validate title using value object
+	title, err := domain.NewTitle(template.Title)
+	if err != nil {
+		return nil, err
 	}
+	template.Title = title.String()
 
 	// Generate ID if not provided
 	if template.ID == "" {
@@ -257,12 +319,12 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 // GetRecurringTemplate retrieves a recurring template by ID.
 func (s *Service) GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	if id == "" {
-		return nil, fmt.Errorf("id is required")
+		return nil, domain.ErrTemplateNotFound
 	}
 
 	template, err := s.repo.FindRecurringTemplate(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get template: %w", err)
+		return nil, err // Repository returns domain errors
 	}
 
 	return template, nil
@@ -271,14 +333,23 @@ func (s *Service) GetRecurringTemplate(ctx context.Context, id string) (*domain.
 // UpdateRecurringTemplate updates an existing recurring template.
 func (s *Service) UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
 	if template.ID == "" {
-		return fmt.Errorf("template ID is required")
+		return domain.ErrTemplateNotFound
+	}
+
+	// Validate title if being updated
+	if template.Title != "" {
+		title, err := domain.NewTitle(template.Title)
+		if err != nil {
+			return err
+		}
+		template.Title = title.String()
 	}
 
 	// Update timestamp
 	template.UpdatedAt = time.Now().UTC()
 
 	if err := s.repo.UpdateRecurringTemplate(ctx, template); err != nil {
-		return fmt.Errorf("failed to update template: %w", err)
+		return err // Repository returns domain errors
 	}
 
 	return nil
@@ -287,11 +358,11 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, template *domain.
 // DeleteRecurringTemplate deletes a recurring template.
 func (s *Service) DeleteRecurringTemplate(ctx context.Context, id string) error {
 	if id == "" {
-		return fmt.Errorf("id is required")
+		return domain.ErrTemplateNotFound
 	}
 
 	if err := s.repo.DeleteRecurringTemplate(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete template: %w", err)
+		return err // Repository returns domain errors
 	}
 
 	return nil
@@ -300,12 +371,12 @@ func (s *Service) DeleteRecurringTemplate(ctx context.Context, id string) error 
 // ListRecurringTemplates lists recurring templates for a list.
 func (s *Service) ListRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
 	if listID == "" {
-		return nil, fmt.Errorf("list_id is required")
+		return nil, domain.ErrListNotFound
 	}
 
 	templates, err := s.repo.FindRecurringTemplates(ctx, listID, activeOnly)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list templates: %w", err)
+		return nil, err // Repository returns domain errors
 	}
 
 	return templates, nil

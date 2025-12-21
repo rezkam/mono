@@ -129,22 +129,22 @@ ORDER BY
     -- due_time: default ASC
     CASE WHEN $9::text IN ('due_time', 'due_time_asc') THEN due_time END ASC NULLS LAST,
     CASE WHEN $9::text = 'due_time_desc' THEN due_time END DESC NULLS LAST,
-    -- priority: default ASC (semantic order: LOW=1 < MEDIUM=2 < HIGH=3 < URGENT=4)
+    -- priority: default ASC (semantic order: low=1 < medium=2 < high=3 < urgent=4)
     -- Uses numeric weights instead of lexical ordering to match proto enum semantics
     CASE WHEN $9::text IN ('priority', 'priority_asc') THEN
         CASE priority
-            WHEN 'LOW' THEN 1
-            WHEN 'MEDIUM' THEN 2
-            WHEN 'HIGH' THEN 3
-            WHEN 'URGENT' THEN 4
+            WHEN 'low' THEN 1
+            WHEN 'medium' THEN 2
+            WHEN 'high' THEN 3
+            WHEN 'urgent' THEN 4
         END
     END ASC NULLS LAST,
     CASE WHEN $9::text = 'priority_desc' THEN
         CASE priority
-            WHEN 'LOW' THEN 1
-            WHEN 'MEDIUM' THEN 2
-            WHEN 'HIGH' THEN 3
-            WHEN 'URGENT' THEN 4
+            WHEN 'low' THEN 1
+            WHEN 'medium' THEN 2
+            WHEN 'high' THEN 3
+            WHEN 'urgent' THEN 4
         END
     END DESC NULLS LAST,
     -- created_at: default DESC

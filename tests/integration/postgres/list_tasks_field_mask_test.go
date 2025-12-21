@@ -5,22 +5,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // TestFieldMask_MultipleFields verifies that multiple fields can be updated at once with a field mask.
 func TestFieldMask_MultipleFields(t *testing.T) {
 	env := newListTasksTestEnv(t)
 
-	createListResp, err := env.Service().CreateList(env.Context(), &monov1.CreateListRequest{
-		Title: "Multi-Field Update Test",
-	})
+	list, err := env.Service().CreateList(env.Context(), "Multi-Field Update Test")
 	require.NoError(t, err)
-	listID := createListResp.List.Id
+	listID := list.ID
 
 	itemUUID, err := uuid.NewV7()
 	require.NoError(t, err)
@@ -43,28 +39,32 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 	}
 	require.NoError(t, env.Store().CreateItem(env.Context(), listID, item))
 
-	newDueTime := time.Now().Add(72 * time.Hour).UTC()
-	resp, err := env.Service().UpdateItem(env.Context(), &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:       itemID,
-			Title:    "Updated Title",
-			Status:   monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
-			Priority: monov1.TaskPriority_TASK_PRIORITY_HIGH,
-			Tags:     []string{"new-tag-1", "new-tag-2"},
-			DueTime:  timestampProto(newDueTime),
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"title", "status", "priority", "tags", "due_time"},
-		},
-	})
+	// Update multiple fields by fetching, modifying, then updating
+	existingItem, err := env.Service().GetItem(env.Context(), itemID)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Updated Title", resp.Item.Title)
-	assert.Equal(t, monov1.TaskStatus_TASK_STATUS_IN_PROGRESS, resp.Item.Status)
-	assert.Equal(t, monov1.TaskPriority_TASK_PRIORITY_HIGH, resp.Item.Priority)
-	assert.ElementsMatch(t, []string{"new-tag-1", "new-tag-2"}, resp.Item.Tags)
-	assert.Equal(t, newDueTime.Unix(), resp.Item.DueTime.AsTime().Unix())
+	newDueTime := time.Now().Add(72 * time.Hour).UTC()
+	priorityHigh := domain.TaskPriorityHigh
+	existingItem.Title = "Updated Title"
+	existingItem.Status = domain.TaskStatusInProgress
+	existingItem.Priority = &priorityHigh
+	existingItem.Tags = []string{"new-tag-1", "new-tag-2"}
+	existingItem.DueTime = &newDueTime
+
+	err = env.Service().UpdateItem(env.Context(), listID, existingItem)
+	require.NoError(t, err)
+
+	// Verify updated fields
+	updatedItem, err := env.Service().GetItem(env.Context(), itemID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Updated Title", updatedItem.Title)
+	assert.Equal(t, domain.TaskStatusInProgress, updatedItem.Status)
+	require.NotNil(t, updatedItem.Priority)
+	assert.Equal(t, domain.TaskPriorityHigh, *updatedItem.Priority)
+	assert.ElementsMatch(t, []string{"new-tag-1", "new-tag-2"}, updatedItem.Tags)
+	require.NotNil(t, updatedItem.DueTime)
+	assert.Equal(t, newDueTime.Unix(), updatedItem.DueTime.Unix())
 
 	fetchedItem, err := env.Store().FindItemByID(env.Context(), itemID)
 	require.NoError(t, err)

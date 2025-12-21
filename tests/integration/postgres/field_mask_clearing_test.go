@@ -7,22 +7,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // TestFieldMask_ClearPriority verifies that field mask can clear optional priority field.
 func TestFieldMask_ClearPriority(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -38,8 +32,7 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -78,19 +71,9 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 	require.NotNil(t, fetchedItem.Priority, "Priority should be set initially")
 	assert.Equal(t, domain.TaskPriorityHigh, *fetchedItem.Priority)
 
-	// Clear priority using field mask (set to UNSPECIFIED which maps to nil)
-	req := &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:       itemID,
-			Priority: monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED,
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"priority"},
-		},
-	}
-
-	_, err = svc.UpdateItem(ctx, req)
+	// Clear priority by setting it to nil
+	fetchedItem.Priority = nil
+	err = todoService.UpdateItem(ctx, listID, fetchedItem)
 	require.NoError(t, err)
 
 	// Verify priority is cleared
@@ -102,9 +85,6 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 // TestFieldMask_ClearDueTime verifies that field mask can clear optional due_time field.
 func TestFieldMask_ClearDueTime(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -120,8 +100,7 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -159,19 +138,9 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fetchedItem.DueTime, "DueTime should be set initially")
 
-	// Clear due_time using field mask (set to nil/zero timestamp)
-	req := &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:      itemID,
-			DueTime: nil, // Explicitly clear
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"due_time"},
-		},
-	}
-
-	_, err = svc.UpdateItem(ctx, req)
+	// Clear due_time by setting it to nil
+	fetchedItem.DueTime = nil
+	err = todoService.UpdateItem(ctx, listID, fetchedItem)
 	require.NoError(t, err)
 
 	// Verify due_time is cleared
@@ -183,9 +152,6 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 // TestFieldMask_ClearEstimatedDuration verifies that field mask can clear optional estimated_duration field.
 func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -201,8 +167,7 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -241,19 +206,9 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 	require.NotNil(t, fetchedItem.EstimatedDuration, "EstimatedDuration should be set initially")
 	assert.Equal(t, 2*time.Hour, *fetchedItem.EstimatedDuration)
 
-	// Clear estimated_duration using field mask
-	req := &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:                itemID,
-			EstimatedDuration: nil, // Explicitly clear
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"estimated_duration"},
-		},
-	}
-
-	_, err = svc.UpdateItem(ctx, req)
+	// Clear estimated_duration by setting it to nil
+	fetchedItem.EstimatedDuration = nil
+	err = todoService.UpdateItem(ctx, listID, fetchedItem)
 	require.NoError(t, err)
 
 	// Verify estimated_duration is cleared
@@ -265,9 +220,6 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 // TestFieldMask_ClearTimezone verifies that field mask can clear optional timezone field.
 func TestFieldMask_ClearTimezone(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -283,8 +235,7 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -323,36 +274,20 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 	require.NotNil(t, fetchedItem.Timezone, "Timezone should be set initially")
 	assert.Equal(t, "America/New_York", *fetchedItem.Timezone)
 
-	// Clear timezone using field mask
-	req := &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:       itemID,
-			Timezone: "", // Empty string to clear
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"timezone"},
-		},
-	}
-
-	_, err = svc.UpdateItem(ctx, req)
+	// Clear timezone by setting it to nil
+	fetchedItem.Timezone = nil
+	err = todoService.UpdateItem(ctx, listID, fetchedItem)
 	require.NoError(t, err)
 
 	// Verify timezone is cleared
 	fetchedItem, err = store.FindItemByID(ctx, itemID)
 	require.NoError(t, err)
-	// Timezone should either be nil or point to empty string
-	if fetchedItem.Timezone != nil {
-		assert.Equal(t, "", *fetchedItem.Timezone, "Timezone should be empty string after clearing")
-	}
+	assert.Nil(t, fetchedItem.Timezone, "Timezone should be cleared")
 }
 
 // TestFieldMask_ClearTags verifies that field mask can clear tags array.
 func TestFieldMask_ClearTags(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -368,8 +303,7 @@ func TestFieldMask_ClearTags(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -406,19 +340,9 @@ func TestFieldMask_ClearTags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, fetchedItem.Tags, 3, "Tags should be set initially")
 
-	// Clear tags using field mask (empty array)
-	req := &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:   itemID,
-			Tags: []string{}, // Empty array to clear
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"tags"},
-		},
-	}
-
-	_, err = svc.UpdateItem(ctx, req)
+	// Clear tags by setting to empty array
+	fetchedItem.Tags = []string{}
+	err = todoService.UpdateItem(ctx, listID, fetchedItem)
 	require.NoError(t, err)
 
 	// Verify tags are cleared
@@ -431,9 +355,6 @@ func TestFieldMask_ClearTags(t *testing.T) {
 // one field with field mask doesn't clear other optional fields.
 func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -449,8 +370,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -491,19 +411,11 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
-	// Update only the title using field mask
-	req := &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:    itemID,
-			Title: "Updated Title Only",
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{
-			Paths: []string{"title"},
-		},
-	}
-
-	_, err = svc.UpdateItem(ctx, req)
+	// Update only the title by fetching, modifying title, and updating
+	existingItem, err := todoService.GetItem(ctx, itemID)
+	require.NoError(t, err)
+	existingItem.Title = "Updated Title Only"
+	err = todoService.UpdateItem(ctx, listID, existingItem)
 	require.NoError(t, err)
 
 	// Verify only title changed, all other fields preserved

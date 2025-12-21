@@ -4,10 +4,9 @@ import (
 	"context"
 	"testing"
 
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,91 +23,82 @@ func TestTagFiltering(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
-	createListResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Tag Test List"})
+	list, err := todoService.CreateList(ctx, "Tag Test List")
 	require.NoError(t, err)
-	listID := createListResp.List.Id
+	listID := list.ID
 
 	// Create items with different tags
-	item1, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listID,
-		Title:  "Item 1",
-		Tags:   []string{"urgent", "work"},
+	item1, err := todoService.CreateItem(ctx, listID, &domain.TodoItem{
+		Title: "Item 1",
+		Tags:  []string{"urgent", "work"},
 	})
 	require.NoError(t, err)
 
-	item2, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listID,
-		Title:  "Item 2",
-		Tags:   []string{"personal"},
+	item2, err := todoService.CreateItem(ctx, listID, &domain.TodoItem{
+		Title: "Item 2",
+		Tags:  []string{"personal"},
 	})
 	require.NoError(t, err)
 
-	item3, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listID,
-		Title:  "Item 3",
-		Tags:   []string{"urgent", "personal"},
+	item3, err := todoService.CreateItem(ctx, listID, &domain.TodoItem{
+		Title: "Item 3",
+		Tags:  []string{"urgent", "personal"},
 	})
 	require.NoError(t, err)
 
-	item4, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listID,
-		Title:  "Item 4 (no tags)",
+	item4, err := todoService.CreateItem(ctx, listID, &domain.TodoItem{
+		Title: "Item 4 (no tags)",
 	})
 	require.NoError(t, err)
 	_ = item4
 
 	// First, verify items were created by getting the list
-	getListResp, err := svc.GetList(ctx, &monov1.GetListRequest{Id: listID})
+	fetchedList, err := todoService.GetList(ctx, listID)
 	require.NoError(t, err)
-	t.Logf("Total items in list: %d", len(getListResp.List.Items))
-	for _, item := range getListResp.List.Items {
+	t.Logf("Total items in list: %d", len(fetchedList.Items))
+	for _, item := range fetchedList.Items {
 		t.Logf("  - %s: tags=%v", item.Title, item.Tags)
 	}
-	require.Len(t, getListResp.List.Items, 4, "should have 4 items in the list")
+	require.Len(t, fetchedList.Items, 4, "should have 4 items in the list")
 
 	// Test 1: Filter by "urgent" tag
-	resp, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
-		Filter: "tags:urgent",
-	})
+	tag := "urgent"
+	result, err := todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
 	require.NoError(t, err)
-	t.Logf("Items with 'urgent' tag: %d", len(resp.Items))
-	assert.Len(t, resp.Items, 2, "should return 2 items with 'urgent' tag")
+	t.Logf("Items with 'urgent' tag: %d", len(result.Items))
+	assert.Len(t, result.Items, 2, "should return 2 items with 'urgent' tag")
 	// Verify the correct items are returned
-	ids := []string{resp.Items[0].Id, resp.Items[1].Id}
-	assert.Contains(t, ids, item1.Item.Id)
-	assert.Contains(t, ids, item3.Item.Id)
+	ids := []string{result.Items[0].ID, result.Items[1].ID}
+	assert.Contains(t, ids, item1.ID)
+	assert.Contains(t, ids, item3.ID)
 
 	// Test 2: Filter by "personal" tag
-	resp, err = svc.ListTasks(ctx, &monov1.ListTasksRequest{
-		Filter: "tags:personal",
-	})
+	tag = "personal"
+	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
 	require.NoError(t, err)
-	assert.Len(t, resp.Items, 2, "should return 2 items with 'personal' tag")
-	ids = []string{resp.Items[0].Id, resp.Items[1].Id}
-	assert.Contains(t, ids, item2.Item.Id)
-	assert.Contains(t, ids, item3.Item.Id)
+	assert.Len(t, result.Items, 2, "should return 2 items with 'personal' tag")
+	ids = []string{result.Items[0].ID, result.Items[1].ID}
+	assert.Contains(t, ids, item2.ID)
+	assert.Contains(t, ids, item3.ID)
 
 	// Test 3: Filter by "work" tag
-	resp, err = svc.ListTasks(ctx, &monov1.ListTasksRequest{
-		Filter: "tags:work",
-	})
+	tag = "work"
+	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
 	require.NoError(t, err)
-	assert.Len(t, resp.Items, 1, "should return 1 item with 'work' tag")
-	assert.Equal(t, item1.Item.Id, resp.Items[0].Id)
+	assert.Len(t, result.Items, 1, "should return 1 item with 'work' tag")
+	assert.Equal(t, item1.ID, result.Items[0].ID)
 
 	// Test 4: Filter by non-existent tag
-	resp, err = svc.ListTasks(ctx, &monov1.ListTasksRequest{
-		Filter: "tags:nonexistent",
-	})
+	tag = "nonexistent"
+	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
 	require.NoError(t, err)
-	assert.Len(t, resp.Items, 0, "should return 0 items with 'nonexistent' tag")
+	assert.Len(t, result.Items, 0, "should return 0 items with 'nonexistent' tag")
 
 	// Test 5: No filter (returns all items)
-	resp, err = svc.ListTasks(ctx, &monov1.ListTasksRequest{})
+	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{})
 	require.NoError(t, err)
-	assert.Len(t, resp.Items, 4, "should return all 4 items when no filter is applied")
+	assert.Len(t, result.Items, 4, "should return all 4 items when no filter is applied")
 }

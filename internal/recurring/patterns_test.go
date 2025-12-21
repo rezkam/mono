@@ -179,10 +179,10 @@ func TestGetCalculator(t *testing.T) {
 		pattern string
 		wantNil bool
 	}{
-		{"DAILY", "DAILY", false},
-		{"WEEKLY", "WEEKLY", false},
-		{"MONTHLY", "MONTHLY", false},
-		{"WEEKDAYS", "WEEKDAYS", false},
+		{"daily", "daily", false},
+		{"weekly", "weekly", false},
+		{"monthly", "monthly", false},
+		{"weekdays", "weekdays", false},
 		{"INVALID", "INVALID", true},
 	}
 

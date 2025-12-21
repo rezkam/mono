@@ -19,9 +19,6 @@ import (
 // setupWorkerTest initializes a test environment with storage and worker.
 func setupWorkerTest(t *testing.T) (*postgres.Store, *worker.Worker, func()) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping worker tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -670,8 +667,8 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		statusHistory = append(statusHistory, status)
 	}
 
-	assert.Equal(t, []string{"TODO", "IN_PROGRESS", "DONE"}, statusHistory,
-		"Status history should show progression: TODO → IN_PROGRESS → DONE")
+	assert.Equal(t, []string{"todo", "in_progress", "done"}, statusHistory,
+		"Status history should show progression: todo → in_progress → done")
 
 	t.Logf("✓ Existing task preserved with %d history entries", historyCountAfter)
 	t.Logf("✓ Generated %d new recurring tasks", foundRecurring)

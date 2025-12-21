@@ -18,9 +18,6 @@ import (
 // Implementation uses limit+1 pattern: fetch Limit+1 rows, check if we got more than Limit, trim to Limit.
 func TestListTasksPaginationExactMultiple(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)

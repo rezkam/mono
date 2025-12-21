@@ -7,12 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/config"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 )
 
 // getBenchmarkStorage creates a real PostgreSQL storage connection for benchmarking.
@@ -116,11 +114,11 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 }
 
 // BenchmarkListTasks tests ListTasks performance at different scales using real PostgreSQL.
-// Set BENCHMARK_POSTGRES_URL environment variable to run these benchmarks.
+// Set MONO_STORAGE_DSN environment variable to run these benchmarks.
 //
 // Example:
 //
-//	BENCHMARK_POSTGRES_URL="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" go test -bench=BenchmarkListTasks -benchmem ./internal/service/...
+//	MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" go test -bench=BenchmarkListTasks -benchmem ./tests/integration/postgres/...
 //
 // Note: These benchmarks use b.Loop() which automatically handles timer management.
 // See: https://go.dev/blog/testing-b-loop
@@ -150,14 +148,13 @@ func BenchmarkListTasks(b *testing.B) {
 			// Clean up after benchmark
 			defer cleanupBenchmarkData(b, storage)
 
-			todoService := todo.NewService(storage)
-			svc := service.NewMonoService(todoService, 50, 100)
+			todoService := todo.NewService(storage, todo.Config{})
 			ctx := context.Background()
 
 			b.Run("NoFilter", func(b *testing.B) {
-				req := &monov1.ListTasksRequest{}
+				params := domain.ListTasksParams{}
 				for b.Loop() {
-					_, err := svc.ListTasks(ctx, req)
+					_, err := todoService.ListTasks(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -166,11 +163,12 @@ func BenchmarkListTasks(b *testing.B) {
 
 			b.Run("Filter_Tags_HighSelectivity", func(b *testing.B) {
 				// "tag-1" is present in 1/100 items (1%)
-				req := &monov1.ListTasksRequest{
-					Filter: "tags:tag-1",
+				tag := "tag-1"
+				params := domain.ListTasksParams{
+					Tag: &tag,
 				}
 				for b.Loop() {
-					_, err := svc.ListTasks(ctx, req)
+					_, err := todoService.ListTasks(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -178,11 +176,11 @@ func BenchmarkListTasks(b *testing.B) {
 			})
 
 			b.Run("Sort_DueTime", func(b *testing.B) {
-				req := &monov1.ListTasksRequest{
+				params := domain.ListTasksParams{
 					OrderBy: "due_time",
 				}
 				for b.Loop() {
-					_, err := svc.ListTasks(ctx, req)
+					_, err := todoService.ListTasks(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -190,12 +188,13 @@ func BenchmarkListTasks(b *testing.B) {
 			})
 
 			b.Run("Combined_FilterTag_SortTime", func(b *testing.B) {
-				req := &monov1.ListTasksRequest{
-					Filter:  "tags:tag-1",
+				tag := "tag-1"
+				params := domain.ListTasksParams{
+					Tag:     &tag,
 					OrderBy: "due_time",
 				}
 				for b.Loop() {
-					_, err := svc.ListTasks(ctx, req)
+					_, err := todoService.ListTasks(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -211,14 +210,11 @@ func BenchmarkCreateList(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(storage, todo.Config{})
 	ctx := context.Background()
 
 	for b.Loop() {
-		_, err := svc.CreateList(ctx, &monov1.CreateListRequest{
-			Title: "Benchmark List",
-		})
+		_, err := todoService.CreateList(ctx, "Benchmark List")
 		if err != nil {
 			b.Fatalf("failed: %v", err)
 		}
@@ -231,23 +227,20 @@ func BenchmarkCreateItem(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(storage, todo.Config{})
 	ctx := context.Background()
 
 	// Create a list to add items to
-	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{
-		Title: "Benchmark List",
-	})
+	list, err := todoService.CreateList(ctx, "Benchmark List")
 	if err != nil {
 		b.Fatalf("failed to create list: %v", err)
 	}
 
 	for b.Loop() {
-		_, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-			ListId: listResp.List.Id,
-			Title:  "Benchmark Item",
-		})
+		item := &domain.TodoItem{
+			Title: "Benchmark Item",
+		}
+		_, err := todoService.CreateItem(ctx, list.ID, item)
 		if err != nil {
 			b.Fatalf("failed: %v", err)
 		}
@@ -260,28 +253,23 @@ func BenchmarkUpdateItem(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(storage, todo.Config{})
 	ctx := context.Background()
 
 	// Create list and item
-	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{
-		Title: "Benchmark List",
-	})
-	itemResp, _ := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listResp.List.Id,
-		Title:  "Original Title",
-	})
+	list, _ := todoService.CreateList(ctx, "Benchmark List")
+	item := &domain.TodoItem{
+		Title: "Original Title",
+	}
+	createdItem, _ := todoService.CreateItem(ctx, list.ID, item)
 
 	for b.Loop() {
-		_, err := svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-			ListId: listResp.List.Id,
-			Item: &monov1.TodoItem{
-				Id:     itemResp.Item.Id,
-				Title:  "Updated Title",
-				Status: monov1.TaskStatus_TASK_STATUS_DONE,
-			},
-		})
+		updateItem := &domain.TodoItem{
+			ID:     createdItem.ID,
+			Title:  "Updated Title",
+			Status: domain.TaskStatusDone,
+		}
+		err := todoService.UpdateItem(ctx, list.ID, updateItem)
 		if err != nil {
 			b.Fatalf("failed: %v", err)
 		}
@@ -294,27 +282,22 @@ func BenchmarkGetList(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(storage, todo.Config{})
 	ctx := context.Background()
 
 	// Create a list with items
-	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{
-		Title: "Benchmark List",
-	})
+	list, _ := todoService.CreateList(ctx, "Benchmark List")
 
 	// Add some items
 	for i := 0; i < 100; i++ {
-		svc.CreateItem(ctx, &monov1.CreateItemRequest{
-			ListId: listResp.List.Id,
-			Title:  fmt.Sprintf("Item %d", i),
-		})
+		item := &domain.TodoItem{
+			Title: fmt.Sprintf("Item %d", i),
+		}
+		todoService.CreateItem(ctx, list.ID, item)
 	}
 
 	for b.Loop() {
-		_, err := svc.GetList(ctx, &monov1.GetListRequest{
-			Id: listResp.List.Id,
-		})
+		_, err := todoService.GetList(ctx, list.ID)
 		if err != nil {
 			b.Fatalf("failed: %v", err)
 		}
@@ -338,25 +321,22 @@ func BenchmarkListLists(b *testing.B) {
 			defer storage.Close()
 			defer cleanupBenchmarkData(b, storage)
 
-			todoService := todo.NewService(storage)
-			svc := service.NewMonoService(todoService, 50, 100)
+			todoService := todo.NewService(storage, todo.Config{})
 			ctx := context.Background()
 
 			// Create N lists, each with 10 items
 			for i := 0; i < count; i++ {
-				listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{
-					Title: fmt.Sprintf("List %d", i),
-				})
+				list, _ := todoService.CreateList(ctx, fmt.Sprintf("List %d", i))
 				for j := 0; j < 10; j++ {
-					svc.CreateItem(ctx, &monov1.CreateItemRequest{
-						ListId: listResp.List.Id,
-						Title:  fmt.Sprintf("Item %d", j),
-					})
+					item := &domain.TodoItem{
+						Title: fmt.Sprintf("Item %d", j),
+					}
+					todoService.CreateItem(ctx, list.ID, item)
 				}
 			}
 
 			for b.Loop() {
-				_, err := svc.ListLists(ctx, &monov1.ListListsRequest{})
+				_, err := todoService.ListLists(ctx)
 				if err != nil {
 					b.Fatalf("failed: %v", err)
 				}
@@ -365,13 +345,18 @@ func BenchmarkListLists(b *testing.B) {
 	}
 }
 
+// NOTE: BenchmarkRecurringTemplates and BenchmarkAccessPatterns are commented out
+// as they were testing gRPC-specific patterns. These can be re-implemented with
+// REST API patterns if needed for performance benchmarking.
+
+/*
 // BenchmarkRecurringTemplates benchmarks recurring template operations.
 func BenchmarkRecurringTemplates(b *testing.B) {
 	storage := getBenchmarkStorage(b)
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage)
+	todoService := todo.NewService(storage, todo.Config{})
 	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
@@ -470,13 +455,13 @@ func BenchmarkRecurringTemplates(b *testing.B) {
 //
 // Run with real database:
 //
-//	BENCHMARK_POSTGRES_URL="postgres://..." go test -bench=BenchmarkAccessPatterns -benchmem
+//	MONO_STORAGE_DSN="postgres://..." go test -bench=BenchmarkAccessPatterns -benchmem ./tests/integration/postgres/...
 func BenchmarkAccessPatterns(b *testing.B) {
 	storage := getBenchmarkStorage(b)
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage)
+	todoService := todo.NewService(storage, todo.Config{})
 	svc := service.NewMonoService(todoService, 50, 100)
 	ctx := context.Background()
 
@@ -626,3 +611,4 @@ func BenchmarkAccessPatterns(b *testing.B) {
 		}
 	})
 }
+*/

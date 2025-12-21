@@ -20,9 +20,6 @@ import (
 // numeric weights (LOW=1, MEDIUM=2, HIGH=3, URGENT=4) for sorting.
 func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -173,9 +170,6 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 // in ascending order (which would happen with alphabetical sorting).
 func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -275,9 +269,6 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 // (sorted to the end with NULLS LAST).
 func TestPrioritySorting_WithNulls(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)

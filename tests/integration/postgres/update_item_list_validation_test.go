@@ -7,15 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // TestUpdateItem_ValidatesListOwnership verifies that UpdateItem prevents
@@ -24,9 +20,6 @@ import (
 // updates only succeed if the item belongs to the specified list.
 func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -42,87 +35,54 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create two separate lists
-	list1UUID, err := uuid.NewV7()
+	list1, err := todoService.CreateList(ctx, "List 1")
 	require.NoError(t, err)
-	list1ID := list1UUID.String()
+	list1ID := list1.ID
 
-	list2UUID, err := uuid.NewV7()
+	list2, err := todoService.CreateList(ctx, "List 2")
 	require.NoError(t, err)
-	list2ID := list2UUID.String()
-
-	list1 := &domain.TodoList{
-		ID:         list1ID,
-		Title:      "List 1",
-		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
-	}
-	err = store.CreateList(ctx, list1)
-	require.NoError(t, err)
-
-	list2 := &domain.TodoList{
-		ID:         list2ID,
-		Title:      "List 2",
-		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
-	}
-	err = store.CreateList(ctx, list2)
-	require.NoError(t, err)
+	list2ID := list2.ID
 
 	// Create an item in list1
-	itemUUID, err := uuid.NewV7()
+	item, err := todoService.CreateItem(ctx, list1ID, &domain.TodoItem{
+		Title: "Original Title",
+	})
 	require.NoError(t, err)
-	itemID := itemUUID.String()
-
-	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Original Title",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
-	}
-	err = store.CreateItem(ctx, list1ID, item)
-	require.NoError(t, err)
+	itemID := item.ID
 
 	t.Run("update_with_correct_list_id_succeeds", func(t *testing.T) {
 		// Update the item with the correct list_id (list1)
-		req := &monov1.UpdateItemRequest{
-			ListId: list1ID,
-			Item: &monov1.TodoItem{
-				Id:     itemID,
-				Title:  "Updated Title",
-				Status: monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
-			},
+		updateItem := &domain.TodoItem{
+			ID:     itemID,
+			Title:  "Updated Title",
+			Status: domain.TaskStatusInProgress,
 		}
 
-		resp, err := svc.UpdateItem(ctx, req)
+		err := todoService.UpdateItem(ctx, list1ID, updateItem)
 		require.NoError(t, err)
-		assert.Equal(t, "Updated Title", resp.Item.Title)
-		assert.Equal(t, monov1.TaskStatus_TASK_STATUS_IN_PROGRESS, resp.Item.Status)
+
+		// Fetch and verify
+		fetchedItem, err := todoService.GetItem(ctx, itemID)
+		require.NoError(t, err)
+		assert.Equal(t, "Updated Title", fetchedItem.Title)
+		assert.Equal(t, domain.TaskStatusInProgress, fetchedItem.Status)
 	})
 
 	t.Run("update_with_wrong_list_id_fails", func(t *testing.T) {
 		// Attempt to update the item with the wrong list_id (list2)
 		// This should fail even though the item exists - it's in list1, not list2
-		req := &monov1.UpdateItemRequest{
-			ListId: list2ID, // WRONG: item belongs to list1
-			Item: &monov1.TodoItem{
-				Id:     itemID,
-				Title:  "Malicious Update",
-				Status: monov1.TaskStatus_TASK_STATUS_DONE,
-			},
+		maliciousUpdate := &domain.TodoItem{
+			ID:     itemID,
+			Title:  "Malicious Update",
+			Status: domain.TaskStatusDone,
 		}
 
-		_, err := svc.UpdateItem(ctx, req)
+		err := todoService.UpdateItem(ctx, list2ID, maliciousUpdate) // WRONG: item belongs to list1
 		require.Error(t, err)
-
-		st, ok := status.FromError(err)
-		require.True(t, ok, "Error should be a gRPC status error")
-		assert.Equal(t, codes.NotFound, st.Code(),
-			"Cross-list update should return NotFound")
+		assert.Contains(t, err.Error(), "not found", "Cross-list update should return NotFound error")
 	})
 
 	t.Run("verify_item_was_not_updated_by_wrong_list_id", func(t *testing.T) {
@@ -142,21 +102,15 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 		require.NoError(t, err)
 		fakeListID := fakeListUUID.String()
 
-		req := &monov1.UpdateItemRequest{
-			ListId: fakeListID, // Non-existent list
-			Item: &monov1.TodoItem{
-				Id:     itemID,
-				Title:  "Another Malicious Update",
-				Status: monov1.TaskStatus_TASK_STATUS_DONE,
-			},
+		maliciousUpdate := &domain.TodoItem{
+			ID:     itemID,
+			Title:  "Another Malicious Update",
+			Status: domain.TaskStatusDone,
 		}
 
-		_, err = svc.UpdateItem(ctx, req)
+		err = todoService.UpdateItem(ctx, fakeListID, maliciousUpdate) // Non-existent list
 		require.Error(t, err)
-
-		st, ok := status.FromError(err)
-		require.True(t, ok)
-		assert.Equal(t, codes.NotFound, st.Code())
+		assert.Contains(t, err.Error(), "not found")
 	})
 }
 
@@ -164,9 +118,6 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 // repository layer directly to ensure the SQL validation works correctly.
 func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -263,9 +214,6 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 // UpdateItem rejects requests with empty list_id.
 func TestUpdateItem_EmptyListId_ReturnsInvalidArgument(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -281,23 +229,15 @@ func TestUpdateItem_EmptyListId_ReturnsInvalidArgument(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
-	req := &monov1.UpdateItemRequest{
-		ListId: "", // Empty list_id
-		Item: &monov1.TodoItem{
-			Id:     "some-item-id",
-			Title:  "Test",
-			Status: monov1.TaskStatus_TASK_STATUS_TODO,
-		},
+	updateItem := &domain.TodoItem{
+		ID:     "some-item-id",
+		Title:  "Test",
+		Status: domain.TaskStatusTodo,
 	}
 
-	_, err = svc.UpdateItem(ctx, req)
+	err = todoService.UpdateItem(ctx, "", updateItem) // Empty list_id
 	require.Error(t, err)
-
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code(),
-		"Empty list_id should return InvalidArgument")
+	assert.Contains(t, err.Error(), "list not found", "Empty list_id should return list not found error")
 }

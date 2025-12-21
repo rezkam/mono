@@ -78,7 +78,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 	dbList, err := s.queries.GetTodoList(ctx, listUUID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("%w: list %s", domain.ErrNotFound, id)
+			return nil, fmt.Errorf("%w: list %s", domain.ErrListNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get list: %w", err)
 	}

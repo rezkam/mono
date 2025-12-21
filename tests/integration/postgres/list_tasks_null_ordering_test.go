@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,11 +14,9 @@ import (
 func TestOrderBy_WithNullValues(t *testing.T) {
 	env := newListTasksTestEnv(t)
 
-	createListResp, err := env.Service().CreateList(env.Context(), &monov1.CreateListRequest{
-		Title: "Null Values Test List",
-	})
+	list, err := env.Service().CreateList(env.Context(), "Null Values Test List")
 	require.NoError(t, err)
-	listID := createListResp.List.Id
+	listID := list.ID
 
 	now := time.Now().UTC()
 	items := []struct {
@@ -51,17 +48,19 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 	}
 
 	t.Run("order_by_priority_asc_nulls_last", func(t *testing.T) {
-		resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-			Parent:  listID,
-			OrderBy: "priority asc",
-		})
+		params := domain.ListTasksParams{
+			ListID:   &listID,
+			OrderBy:  "priority",
+			OrderDir: "asc",
+		}
+		result, err := env.Service().ListTasks(env.Context(), params)
 		require.NoError(t, err)
-		assert.Equal(t, 5, len(resp.Items))
+		assert.Equal(t, 5, len(result.Items))
 
 		priorityCount := 0
 		nullCount := 0
-		for _, item := range resp.Items {
-			if item.Priority != monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
+		for _, item := range result.Items {
+			if item.Priority != nil {
 				priorityCount++
 			} else {
 				nullCount++
@@ -72,17 +71,19 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 	})
 
 	t.Run("order_by_due_time_asc_nulls_last", func(t *testing.T) {
-		resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-			Parent:  listID,
-			OrderBy: "due_time asc",
-		})
+		params := domain.ListTasksParams{
+			ListID:   &listID,
+			OrderBy:  "due_time",
+			OrderDir: "asc",
+		}
+		result, err := env.Service().ListTasks(env.Context(), params)
 		require.NoError(t, err)
-		assert.Equal(t, 5, len(resp.Items))
+		assert.Equal(t, 5, len(result.Items))
 
 		var withDueTime []string
 		var withoutDueTime []string
 
-		for _, item := range resp.Items {
+		for _, item := range result.Items {
 			if item.DueTime != nil {
 				withDueTime = append(withDueTime, item.Title)
 			} else {
@@ -95,16 +96,18 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 	})
 
 	t.Run("order_by_priority_desc_nulls_last", func(t *testing.T) {
-		resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-			Parent:  listID,
-			OrderBy: "priority desc",
-		})
+		params := domain.ListTasksParams{
+			ListID:   &listID,
+			OrderBy:  "priority",
+			OrderDir: "desc",
+		}
+		result, err := env.Service().ListTasks(env.Context(), params)
 		require.NoError(t, err)
-		assert.Equal(t, 5, len(resp.Items))
+		assert.Equal(t, 5, len(result.Items))
 
 		foundNull := false
-		for _, item := range resp.Items {
-			if item.Priority == monov1.TaskPriority_TASK_PRIORITY_UNSPECIFIED {
+		for _, item := range result.Items {
+			if item.Priority == nil {
 				foundNull = true
 			} else if foundNull {
 				t.Error("Found non-null priority after null priority - ordering is incorrect")

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,11 +14,9 @@ import (
 func TestListTasks_LargePageSize(t *testing.T) {
 	env := newListTasksTestEnv(t)
 
-	createListResp, err := env.Service().CreateList(env.Context(), &monov1.CreateListRequest{
-		Title: "Page Size Test List",
-	})
+	list, err := env.Service().CreateList(env.Context(), "Page Size Test List")
 	require.NoError(t, err)
-	listID := createListResp.List.Id
+	listID := list.ID
 
 	// Seed 150 items so multiple pages are required.
 	for i := 0; i < 150; i++ {
@@ -53,33 +50,34 @@ func TestListTasks_LargePageSize(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-				Parent:   listID,
-				PageSize: tc.requestPageSize,
-			})
+			params := domain.ListTasksParams{
+				ListID: &listID,
+				Limit:  int(tc.requestPageSize),
+				Offset: 0,
+			}
+			result, err := env.Service().ListTasks(env.Context(), params)
 			require.NoError(t, err)
 
-			assert.LessOrEqual(t, len(resp.Items), tc.expectedMaxItems,
+			assert.LessOrEqual(t, len(result.Items), tc.expectedMaxItems,
 				"Response should not exceed expected max items")
 
-			totalReturned := len(resp.Items)
-			nextToken := resp.NextPageToken
+			totalReturned := len(result.Items)
+			hasMore := result.HasMore
 
 			// Any scenario with fewer than 150 items per page should yield more pages.
 			if tc.expectedMaxItems < 150 {
-				assert.NotEmpty(t, nextToken, "Should expose a next_page_token when more results exist")
+				assert.True(t, hasMore, "Should have more results when page size < total items")
 			}
 
-			for nextToken != "" {
-				resp, err = env.Service().ListTasks(env.Context(), &monov1.ListTasksRequest{
-					Parent:    listID,
-					PageSize:  tc.requestPageSize,
-					PageToken: nextToken,
-				})
+			offset := len(result.Items)
+			for hasMore {
+				params.Offset = offset
+				result, err = env.Service().ListTasks(env.Context(), params)
 				require.NoError(t, err)
 
-				totalReturned += len(resp.Items)
-				nextToken = resp.NextPageToken
+				totalReturned += len(result.Items)
+				offset += len(result.Items)
+				hasMore = result.HasMore
 			}
 
 			assert.Equal(t, 150, totalReturned, "Should page through all items")

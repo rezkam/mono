@@ -16,9 +16,6 @@ import (
 // setupSQLInjectionTest initializes test environment for SQL injection testing
 func setupSQLInjectionTest(t *testing.T) (*postgres.Store, func()) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping integration tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)

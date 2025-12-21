@@ -20,9 +20,6 @@ import (
 // or run a separate count query.
 func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -133,9 +130,6 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 // TestFindItems_TotalCount_WithFilters tests that TotalCount reflects filtered results.
 func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)

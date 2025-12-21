@@ -20,9 +20,6 @@ import (
 // If a pending or running job already exists for the template, no new job is created.
 func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping worker tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -152,9 +149,6 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 // RUNNING jobs also don't get duplicate jobs created.
 func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping worker tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -237,9 +231,6 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 // duplicate prevention works independently for each template.
 func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping worker tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)

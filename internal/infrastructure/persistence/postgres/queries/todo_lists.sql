@@ -38,12 +38,12 @@ ORDER BY create_time DESC;
 -- 
 -- This query uses LEFT JOIN to ensure lists with zero items still appear with count=0.
 -- The FILTER clause efficiently counts only active items in a single pass.
-SELECT 
+SELECT
     tl.id,
     tl.title,
     tl.create_time,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
-    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status IN ('TODO', 'IN_PROGRESS', 'BLOCKED')), 0)::int AS undone_items
+    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status IN ('todo', 'in_progress', 'blocked')), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 GROUP BY tl.id, tl.title, tl.create_time

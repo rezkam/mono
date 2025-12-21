@@ -5,21 +5,12 @@ import (
 	"testing"
 	"time"
 
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func getTestDSN(t *testing.T) string {
-	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set")
-	}
-	return pgURL
-}
 
 // TestStatusHistoryPreservation verifies that status history is preserved
 // when updating items through the service layer.
@@ -35,23 +26,20 @@ func TestStatusHistoryPreservation(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
-	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{
-		Title: "Test List",
-	})
+	list, err := todoService.CreateList(ctx, "Test List")
 	require.NoError(t, err)
-	listID := listResp.List.Id
+	listID := list.ID
 
 	// Create an item (status: TODO by default)
-	itemResp, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listID,
-		Title:  "Test Task",
-	})
+	item := &domain.TodoItem{
+		Title: "Test Task",
+	}
+	createdItem, err := todoService.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
-	itemID := itemResp.Item.Id
+	itemID := createdItem.ID
 
 	// Give database triggers time to execute
 	time.Sleep(100 * time.Millisecond)
@@ -66,13 +54,8 @@ func TestStatusHistoryPreservation(t *testing.T) {
 	assert.Equal(t, 1, initialHistoryCount, "Should have 1 initial status history entry")
 
 	// Update the item's status from TODO to IN_PROGRESS
-	_, err = svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:     itemID,
-			Status: monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
-		},
-	})
+	createdItem.Status = domain.TaskStatusInProgress
+	err = todoService.UpdateItem(ctx, listID, createdItem)
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
@@ -112,14 +95,14 @@ func TestStatusHistoryPreservation(t *testing.T) {
 
 	require.Len(t, entries, 2, "Should have exactly 2 history entries")
 
-	// First entry should be initial creation (NULL -> TODO)
+	// First entry should be initial creation (NULL -> todo)
 	assert.Nil(t, entries[0].FromStatus, "First entry should have NULL from_status")
-	assert.Equal(t, "TODO", entries[0].ToStatus)
+	assert.Equal(t, "todo", entries[0].ToStatus)
 
-	// Second entry should be the transition (TODO -> IN_PROGRESS)
+	// Second entry should be the transition (todo -> in_progress)
 	require.NotNil(t, entries[1].FromStatus)
-	assert.Equal(t, "TODO", *entries[1].FromStatus)
-	assert.Equal(t, "IN_PROGRESS", entries[1].ToStatus)
+	assert.Equal(t, "todo", *entries[1].FromStatus)
+	assert.Equal(t, "in_progress", entries[1].ToStatus)
 }
 
 // TestStatusHistoryPreservationMultipleUpdates verifies that status history
@@ -135,36 +118,30 @@ func TestStatusHistoryPreservationMultipleUpdates(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create list and item
-	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+	list, err := todoService.CreateList(ctx, "Test List")
 	require.NoError(t, err)
 
-	itemResp, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listResp.List.Id,
-		Title:  "Task",
-	})
+	item := &domain.TodoItem{Title: "Task"}
+	createdItem, err := todoService.CreateItem(ctx, list.ID, item)
 	require.NoError(t, err)
-	itemID := itemResp.Item.Id
+	itemID := createdItem.ID
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Transition through multiple statuses: TODO -> IN_PROGRESS -> DONE
-	statuses := []monov1.TaskStatus{
-		monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
-		monov1.TaskStatus_TASK_STATUS_DONE,
+	// Transition through multiple statuses: todo -> in_progress -> done
+	statuses := []domain.TaskStatus{
+		domain.TaskStatusInProgress,
+		domain.TaskStatusDone,
 	}
 
 	for _, status := range statuses {
-		_, err = svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-			ListId: listResp.List.Id,
-			Item: &monov1.TodoItem{
-				Id:     itemID,
-				Status: status,
-			},
-		})
+		existingItem, err := todoService.GetItem(ctx, itemID)
+		require.NoError(t, err)
+		existingItem.Status = status
+		err = todoService.UpdateItem(ctx, list.ID, existingItem)
 		require.NoError(t, err)
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -193,30 +170,22 @@ func TestCreateItemDoesNotWipeOtherItemsHistory(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create list and first item
-	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+	list, err := todoService.CreateList(ctx, "Test List")
 	require.NoError(t, err)
 
-	item1Resp, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listResp.List.Id,
-		Title:  "Task 1",
-	})
+	item1 := &domain.TodoItem{Title: "Task 1"}
+	createdItem1, err := todoService.CreateItem(ctx, list.ID, item1)
 	require.NoError(t, err)
-	item1ID := item1Resp.Item.Id
+	item1ID := createdItem1.ID
 
 	time.Sleep(100 * time.Millisecond)
 
 	// Update first item's status
-	_, err = svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-		ListId: listResp.List.Id,
-		Item: &monov1.TodoItem{
-			Id:     item1ID,
-			Status: monov1.TaskStatus_TASK_STATUS_DONE,
-		},
-	})
+	createdItem1.Status = domain.TaskStatusDone
+	err = todoService.UpdateItem(ctx, list.ID, createdItem1)
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
@@ -230,10 +199,8 @@ func TestCreateItemDoesNotWipeOtherItemsHistory(t *testing.T) {
 	assert.Equal(t, 2, item1HistoryCount, "Item 1 should have 2 history entries before adding item 2")
 
 	// Create second item in the same list
-	_, err = svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listResp.List.Id,
-		Title:  "Task 2",
-	})
+	item2 := &domain.TodoItem{Title: "Task 2"}
+	_, err = todoService.CreateItem(ctx, list.ID, item2)
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)

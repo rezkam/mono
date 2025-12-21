@@ -5,17 +5,12 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/keygen"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 // lastUsedUpdate holds information for updating an API key's last_used_at timestamp.
@@ -52,55 +47,6 @@ func NewAuthenticator(ctx context.Context, repo Repository, operationTimeout tim
 	go a.processLastUsedUpdates()
 
 	return a
-}
-
-// UnaryInterceptor is a gRPC unary interceptor for API key authentication.
-func (a *Authenticator) UnaryInterceptor(
-	ctx context.Context,
-	req any,
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (any, error) {
-	// Extract API key from metadata
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing metadata")
-	}
-
-	authHeaders := md.Get("authorization")
-	if len(authHeaders) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "missing authorization header")
-	}
-
-	// Extract Bearer token
-	authHeader := authHeaders[0]
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return nil, status.Error(codes.Unauthenticated, "invalid authorization header format")
-	}
-
-	apiKey := strings.TrimPrefix(authHeader, "Bearer ")
-	if apiKey == "" {
-		return nil, status.Error(codes.Unauthenticated, "empty API key")
-	}
-
-	// Validate API key
-	if err := a.validateAPIKey(ctx, apiKey); err != nil {
-		// Log detailed error internally for debugging and security monitoring
-		// DO NOT expose detailed error to client - prevents information disclosure attacks
-		slog.WarnContext(ctx, "Authentication failed",
-			slog.String("key_prefix", keygen.MaskAPIKey(apiKey)),
-			slog.String("error", err.Error()))
-
-		// Return generic error (same message for all failure types)
-		// This prevents attackers from:
-		// - Enumerating valid short tokens
-		// - Distinguishing between "not found" vs "wrong secret"
-		// - Identifying expired keys
-		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
-	}
-
-	// Call the handler
-	return handler(ctx, req)
 }
 
 // processLastUsedUpdates is a background worker that processes last_used_at updates
@@ -165,28 +111,34 @@ func (a *Authenticator) Shutdown(ctx context.Context) error {
 	}
 }
 
-// validateAPIKey checks if the API key is valid and updates last_used_at.
-func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error {
+// ValidateAPIKey validates an API key and returns the key information if valid.
+// Returns domain.ErrUnauthorized if the key is invalid, expired, or not found.
+// This is the public method for HTTP middleware and other transport layers.
+func (a *Authenticator) ValidateAPIKey(ctx context.Context, apiKey string) (*domain.APIKey, error) {
 	// Parse API key into components
 	keyParts, err := keygen.ParseAPIKey(apiKey)
 	if err != nil {
-		return fmt.Errorf("invalid API key format: %w", err)
+		return nil, domain.ErrUnauthorized
 	}
 
-	key, err := a.repo.FindByShortToken(ctx, keyParts.ShortToken)
+	// Create timeout context for storage operation
+	opCtx, cancel := context.WithTimeout(ctx, a.operationTimeout)
+	defer cancel()
+
+	key, err := a.repo.FindByShortToken(opCtx, keyParts.ShortToken)
 	if err != nil {
-		return fmt.Errorf("API key not found")
+		return nil, domain.ErrUnauthorized
 	}
 
 	// Verify the long secret using BLAKE2b-256 with constant-time comparison
 	providedHash := keygen.HashSecret(keyParts.LongSecret)
 	if subtle.ConstantTimeCompare([]byte(key.LongSecretHash), []byte(providedHash)) != 1 {
-		return fmt.Errorf("invalid API key")
+		return nil, domain.ErrUnauthorized
 	}
 
 	// Check expiration
 	if key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now().UTC()) {
-		return fmt.Errorf("API key expired")
+		return nil, domain.ErrUnauthorized
 	}
 
 	// Queue last_used_at update (non-blocking, processed by background worker)
@@ -203,7 +155,7 @@ func (a *Authenticator) validateAPIKey(ctx context.Context, apiKey string) error
 			slog.String("key_id", key.ID))
 	}
 
-	return nil // Authentication successful
+	return key, nil
 }
 
 // CreateAPIKey creates a new API key and returns the plain key (only shown once).

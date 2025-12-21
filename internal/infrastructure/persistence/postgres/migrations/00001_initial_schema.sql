@@ -21,10 +21,10 @@ CREATE TABLE todo_items (
     title TEXT NOT NULL,
 
     -- Status and priority
-    status TEXT NOT NULL DEFAULT 'TODO'
-        CHECK (status IN ('TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'ARCHIVED', 'CANCELLED')),
+    status TEXT NOT NULL DEFAULT 'todo'
+        CHECK (status IN ('todo', 'in_progress', 'blocked', 'done', 'archived', 'cancelled')),
     priority TEXT
-        CHECK (priority IS NULL OR priority IN ('LOW', 'MEDIUM', 'HIGH', 'URGENT')),
+        CHECK (priority IS NULL OR priority IN ('low', 'medium', 'high', 'urgent')),
 
     -- Time tracking
     estimated_duration INTERVAL,
@@ -95,7 +95,7 @@ CREATE TABLE task_status_history (
     task_id uuid NOT NULL,
     from_status TEXT,
     to_status TEXT NOT NULL
-        CHECK (to_status IN ('TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'ARCHIVED', 'CANCELLED')),
+        CHECK (to_status IN ('todo', 'in_progress', 'blocked', 'done', 'archived', 'cancelled')),
     changed_at timestamptz NOT NULL DEFAULT now(),
     notes TEXT,
 
@@ -120,12 +120,12 @@ CREATE TABLE recurring_task_templates (
     title TEXT NOT NULL,
     tags jsonb,
     priority TEXT
-        CHECK (priority IS NULL OR priority IN ('LOW', 'MEDIUM', 'HIGH', 'URGENT')),
+        CHECK (priority IS NULL OR priority IN ('low', 'medium', 'high', 'urgent')),
     estimated_duration INTERVAL,
 
     -- Recurrence pattern
     recurrence_pattern TEXT NOT NULL
-        CHECK (recurrence_pattern IN ('DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY', 'YEARLY', 'QUARTERLY', 'WEEKDAYS')),
+        CHECK (recurrence_pattern IN ('daily', 'weekly', 'biweekly', 'monthly', 'yearly', 'quarterly', 'weekdays')),
 
     -- Pattern-specific configuration (JSONB for flexibility)
     recurrence_config jsonb NOT NULL,

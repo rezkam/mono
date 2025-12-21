@@ -9,23 +9,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // TestConcurrentUpdateItem_MultipleGoroutines verifies that concurrent updates
 // to the same item complete successfully without data loss or corruption.
 func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -41,8 +35,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -86,17 +79,14 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			req := &monov1.UpdateItemRequest{
-				ListId: listID,
-				Item: &monov1.TodoItem{
-					Id:    itemID,
-					Title: fmt.Sprintf("Updated by goroutine %d", goroutineID),
-					// Each goroutine updates to a different status
-					Status: monov1.TaskStatus(monov1.TaskStatus_value[fmt.Sprintf("TASK_STATUS_%s", []string{"TODO", "IN_PROGRESS", "DONE"}[goroutineID%3])]),
-				},
+			item := &domain.TodoItem{
+				ID:    itemID,
+				Title: fmt.Sprintf("Updated by goroutine %d", goroutineID),
+				// Each goroutine updates to a different status
+				Status: domain.TaskStatus([]string{"todo", "in_progress", "done"}[goroutineID%3]),
 			}
 
-			_, err := svc.UpdateItem(ctx, req)
+			err := todoService.UpdateItem(ctx, listID, item)
 			if err != nil {
 				errors <- err
 			}
@@ -126,9 +116,6 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 // to different fields of the same item work correctly.
 func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -144,8 +131,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -185,17 +171,13 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		req := &monov1.UpdateItemRequest{
-			ListId: listID,
-			Item: &monov1.TodoItem{
-				Id:    itemID,
-				Title: "Updated Title",
-			},
-			UpdateMask: &fieldmaskpb.FieldMask{
-				Paths: []string{"title"},
-			},
+		existing, err := todoService.GetItem(ctx, itemID)
+		if err != nil {
+			errors <- fmt.Errorf("title update - get failed: %w", err)
+			return
 		}
-		_, err := svc.UpdateItem(ctx, req)
+		existing.Title = "Updated Title"
+		err = todoService.UpdateItem(ctx, listID, existing)
 		if err != nil {
 			errors <- fmt.Errorf("title update failed: %w", err)
 		}
@@ -205,17 +187,13 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		req := &monov1.UpdateItemRequest{
-			ListId: listID,
-			Item: &monov1.TodoItem{
-				Id:     itemID,
-				Status: monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
-			},
-			UpdateMask: &fieldmaskpb.FieldMask{
-				Paths: []string{"status"},
-			},
+		existing, err := todoService.GetItem(ctx, itemID)
+		if err != nil {
+			errors <- fmt.Errorf("status update - get failed: %w", err)
+			return
 		}
-		_, err := svc.UpdateItem(ctx, req)
+		existing.Status = domain.TaskStatusInProgress
+		err = todoService.UpdateItem(ctx, listID, existing)
 		if err != nil {
 			errors <- fmt.Errorf("status update failed: %w", err)
 		}
@@ -225,17 +203,13 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		req := &monov1.UpdateItemRequest{
-			ListId: listID,
-			Item: &monov1.TodoItem{
-				Id:   itemID,
-				Tags: []string{"updated", "concurrent"},
-			},
-			UpdateMask: &fieldmaskpb.FieldMask{
-				Paths: []string{"tags"},
-			},
+		existing, err := todoService.GetItem(ctx, itemID)
+		if err != nil {
+			errors <- fmt.Errorf("tags update - get failed: %w", err)
+			return
 		}
-		_, err := svc.UpdateItem(ctx, req)
+		existing.Tags = []string{"updated", "concurrent"}
+		err = todoService.UpdateItem(ctx, listID, existing)
 		if err != nil {
 			errors <- fmt.Errorf("tags update failed: %w", err)
 		}
@@ -267,9 +241,6 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 // timestamp is properly managed during concurrent updates.
 func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -285,8 +256,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -333,14 +303,12 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 		goroutineID := i
 		go func() {
 			defer wg.Done()
-			req := &monov1.UpdateItemRequest{
-				ListId: listID,
-				Item: &monov1.TodoItem{
-					Id:    itemID,
-					Title: fmt.Sprintf("Update %d", goroutineID),
-				},
+			item := &domain.TodoItem{
+				ID:     itemID,
+				Title:  fmt.Sprintf("Update %d", goroutineID),
+				Status: domain.TaskStatusTodo,
 			}
-			svc.UpdateItem(ctx, req)
+			todoService.UpdateItem(ctx, listID, item)
 		}()
 	}
 
@@ -365,9 +333,6 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 // to different items don't interfere with each other.
 func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
-	if pgURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set, skipping PostgreSQL tests")
-	}
 
 	ctx := context.Background()
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
@@ -383,8 +348,7 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -428,15 +392,12 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 		itemIndex := i
 		go func() {
 			defer wg.Done()
-			req := &monov1.UpdateItemRequest{
-				ListId: listID,
-				Item: &monov1.TodoItem{
-					Id:     itemIDs[itemIndex],
-					Title:  fmt.Sprintf("Updated Item %d", itemIndex),
-					Status: monov1.TaskStatus_TASK_STATUS_DONE,
-				},
+			item := &domain.TodoItem{
+				ID:     itemIDs[itemIndex],
+				Title:  fmt.Sprintf("Updated Item %d", itemIndex),
+				Status: domain.TaskStatusDone,
 			}
-			_, err := svc.UpdateItem(ctx, req)
+			err := todoService.UpdateItem(ctx, listID, item)
 			if err != nil {
 				errors <- fmt.Errorf("item %d update failed: %w", itemIndex, err)
 			}

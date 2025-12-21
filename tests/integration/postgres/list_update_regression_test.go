@@ -6,11 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	monov1 "github.com/rezkam/mono/api/proto/mono/v1"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -137,19 +135,19 @@ func TestUpdateItem_PreservesCreateTime(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create list and item
-	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Test List"})
+	list, err := todoService.CreateList(ctx, "Test List")
 	require.NoError(t, err)
+	listID := list.ID
 
-	itemResp, err := svc.CreateItem(ctx, &monov1.CreateItemRequest{
-		ListId: listResp.List.Id,
-		Title:  "Original Task",
-	})
+	item := &domain.TodoItem{
+		Title: "Original Task",
+	}
+	createdItem, err := todoService.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
-	itemID := itemResp.Item.Id
+	itemID := createdItem.ID
 
 	// Get original create_time
 	var originalCreateTime time.Time
@@ -160,14 +158,11 @@ func TestUpdateItem_PreservesCreateTime(t *testing.T) {
 	require.False(t, originalCreateTime.IsZero())
 
 	// Update the item
-	_, err = svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-		ListId: listResp.List.Id,
-		Item: &monov1.TodoItem{
-			Id:     itemID,
-			Title:  "Updated Task",
-			Status: monov1.TaskStatus_TASK_STATUS_IN_PROGRESS,
-		},
-	})
+	existingItem, err := todoService.GetItem(ctx, itemID)
+	require.NoError(t, err)
+	existingItem.Title = "Updated Task"
+	existingItem.Status = domain.TaskStatusInProgress
+	err = todoService.UpdateItem(ctx, listID, existingItem)
 	require.NoError(t, err)
 
 	// Verify create_time unchanged
@@ -194,64 +189,59 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store)
-	svc := service.NewMonoService(todoService, 50, 100)
+	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
-	listResp, err := svc.CreateList(ctx, &monov1.CreateListRequest{Title: "Count Test"})
+	list, err := todoService.CreateList(ctx, "Count Test")
 	require.NoError(t, err)
-	listID := listResp.List.Id
+	listID := list.ID
 
 	// Add 3 items
 	for i := 0; i < 3; i++ {
-		_, err = svc.CreateItem(ctx, &monov1.CreateItemRequest{
-			ListId: listID,
-			Title:  "Task",
-		})
+		item := &domain.TodoItem{
+			Title: "Task",
+		}
+		_, err = todoService.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
 	// Verify counts via ListLists (which includes TotalItems/UndoneItems)
-	listsResp, err := svc.ListLists(ctx, &monov1.ListListsRequest{})
+	lists, err := todoService.ListLists(ctx)
 	require.NoError(t, err)
 
-	var targetList *monov1.TodoList
-	for _, l := range listsResp.Lists {
-		if l.Id == listID {
+	var targetList *domain.TodoList
+	for _, l := range lists {
+		if l.ID == listID {
 			targetList = l
 			break
 		}
 	}
 	require.NotNil(t, targetList)
 
-	assert.Equal(t, int32(3), targetList.TotalItems, "Should have 3 total items")
-	assert.Equal(t, int32(3), targetList.UndoneItems, "All 3 items should be undone")
+	assert.Equal(t, 3, targetList.TotalItems, "Should have 3 total items")
+	assert.Equal(t, 3, targetList.UndoneItems, "All 3 items should be undone")
 
 	// Mark one item as DONE
-	getResp, err := svc.GetList(ctx, &monov1.GetListRequest{Id: listID})
+	fetchedList, err := todoService.GetList(ctx, listID)
 	require.NoError(t, err)
-	require.Len(t, getResp.List.Items, 3)
+	require.Len(t, fetchedList.Items, 3)
 
-	_, err = svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-		ListId: listID,
-		Item: &monov1.TodoItem{
-			Id:     getResp.List.Items[0].Id,
-			Status: monov1.TaskStatus_TASK_STATUS_DONE,
-		},
-	})
+	firstItem := &fetchedList.Items[0]
+	firstItem.Status = domain.TaskStatusDone
+	err = todoService.UpdateItem(ctx, listID, firstItem)
 	require.NoError(t, err)
 
 	// Verify counts updated correctly
-	listsResp, err = svc.ListLists(ctx, &monov1.ListListsRequest{})
+	lists, err = todoService.ListLists(ctx)
 	require.NoError(t, err)
 
-	for _, l := range listsResp.Lists {
-		if l.Id == listID {
+	for _, l := range lists {
+		if l.ID == listID {
 			targetList = l
 			break
 		}
 	}
 
-	assert.Equal(t, int32(3), targetList.TotalItems, "Should still have 3 total items")
-	assert.Equal(t, int32(2), targetList.UndoneItems, "Should have 2 undone items after marking one DONE")
+	assert.Equal(t, 3, targetList.TotalItems, "Should still have 3 total items")
+	assert.Equal(t, 2, targetList.UndoneItems, "Should have 2 undone items after marking one DONE")
 }
