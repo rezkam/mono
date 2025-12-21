@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/wire"
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
@@ -16,6 +17,7 @@ import (
 	"github.com/rezkam/mono/internal/http/handler"
 	"github.com/rezkam/mono/internal/http/middleware"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"os"
 	"time"
 )
 
@@ -28,7 +30,7 @@ func InitializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
 		return nil, nil, err
 	}
 	storageConfig := &serverConfig.StorageConfig
-	store, err := provideStore(ctx, storageConfig)
+	store, cleanup, err := provideStore(ctx, storageConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -36,11 +38,17 @@ func InitializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
 	service := todo.NewService(store, todoConfig)
 	server := handler.NewServer(service)
 	duration := _wireDurationValue
-	authenticator := auth.NewAuthenticator(ctx, store, duration)
-	middlewareAuth := middleware.NewAuth(authenticator)
-	mux := http.NewRouter(server, middlewareAuth)
-	httpServer := NewHTTPServer(mux, serverConfig)
+	authenticator, cleanup2, err := provideAuthenticator(ctx, store, duration)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	auth := middleware.NewAuth(authenticator)
+	mux := http.NewRouter(server, auth)
+	httpServer := provideHTTPServer(mux, serverConfig)
 	return httpServer, func() {
+		cleanup2()
+		cleanup()
 	}, nil
 }
 
@@ -64,8 +72,20 @@ var DatabaseSet = wire.NewSet(
 )
 
 // provideStore creates a postgres.Store from StorageConfig.
-func provideStore(ctx context.Context, cfg *config.StorageConfig) (*postgres.Store, error) {
-	return postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+// Returns the store and a cleanup function that closes the database connection pool.
+func provideStore(ctx context.Context, cfg *config.StorageConfig) (*postgres.Store, func(), error) {
+	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cleanup := func() {
+		if err := store.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close database: %v\n", err)
+		}
+	}
+
+	return store, cleanup, nil
 }
 
 // provideTodoConfig reads pagination config from environment.
@@ -82,8 +102,26 @@ func provideTodoConfig() todo.Config {
 // ServiceSet provides application services.
 var ServiceSet = wire.NewSet(todo.NewService, provideTodoConfig)
 
+// provideAuthenticator creates an Authenticator and returns a cleanup function
+// that gracefully shuts down the background worker.
+func provideAuthenticator(ctx context.Context, repo auth.Repository, timeout time.Duration) (*auth.Authenticator, func(), error) {
+	authenticator := auth.NewAuthenticator(ctx, repo, timeout)
+
+	cleanup := func() {
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := authenticator.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown authenticator: %v\n", err)
+		}
+	}
+
+	return authenticator, cleanup, nil
+}
+
 // AuthSet provides authentication components.
-var AuthSet = wire.NewSet(wire.Value(time.Duration(5*time.Second)), auth.NewAuthenticator)
+var AuthSet = wire.NewSet(wire.Value(time.Duration(5*time.Second)), provideAuthenticator)
 
 // HTTPSet provides HTTP layer components.
 var HTTPSet = wire.NewSet(handler.NewServer, middleware.NewAuth, http.NewRouter)

@@ -5,7 +5,8 @@ package main
 
 import (
 	"context"
-	"io"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/wire"
@@ -35,12 +36,24 @@ var DatabaseSet = wire.NewSet(
 	provideStore,
 	wire.Bind(new(todo.Repository), new(*postgres.Store)),
 	wire.Bind(new(auth.Repository), new(*postgres.Store)),
-	wire.Bind(new(io.Closer), new(*postgres.Store)),
 )
 
 // provideStore creates a postgres.Store from StorageConfig.
-func provideStore(ctx context.Context, cfg *config.StorageConfig) (*postgres.Store, error) {
-	return postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+// Returns the store and a cleanup function that closes the database connection pool.
+func provideStore(ctx context.Context, cfg *config.StorageConfig) (*postgres.Store, func(), error) {
+	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cleanup := func() {
+		if err := store.Close(); err != nil {
+			// Log error but don't fail cleanup
+			fmt.Fprintf(os.Stderr, "failed to close database: %v\n", err)
+		}
+	}
+
+	return store, cleanup, nil
 }
 
 // provideTodoConfig reads pagination config from environment.
@@ -60,12 +73,30 @@ var ServiceSet = wire.NewSet(
 	provideTodoConfig,
 )
 
+// provideAuthenticator creates an Authenticator and returns a cleanup function
+// that gracefully shuts down the background worker.
+func provideAuthenticator(ctx context.Context, repo auth.Repository, timeout time.Duration) (*auth.Authenticator, func(), error) {
+	authenticator := auth.NewAuthenticator(ctx, repo, timeout)
+
+	cleanup := func() {
+		// Use a background context with timeout for shutdown
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := authenticator.Shutdown(shutdownCtx); err != nil {
+			// Log error but don't fail cleanup
+			fmt.Fprintf(os.Stderr, "failed to shutdown authenticator: %v\n", err)
+		}
+	}
+
+	return authenticator, cleanup, nil
+}
+
 // AuthSet provides authentication components.
 var AuthSet = wire.NewSet(
 	// Provide operation timeout for authenticator
 	wire.Value(time.Duration(5*time.Second)),
-	auth.NewAuthenticator,
-	wire.Bind(new(shutdowner), new(*auth.Authenticator)),
+	provideAuthenticator,
 )
 
 // HTTPSet provides HTTP layer components.
