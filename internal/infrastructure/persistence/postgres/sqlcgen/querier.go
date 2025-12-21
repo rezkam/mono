@@ -6,15 +6,16 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	// Counts total matching items for pagination (used when main query returns empty page).
 	// Uses same WHERE clause as ListTasksWithFilters for consistency.
 	CountTasksWithFilters(ctx context.Context, arg CountTasksWithFiltersParams) (int64, error)
+	// Count total matching lists for pagination (same filters as FindTodoListsWithFilters).
+	CountTodoListsWithFilters(ctx context.Context, arg CountTodoListsWithFiltersParams) (int32, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error
 	// Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
 	// to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
@@ -28,42 +29,57 @@ type Querier interface {
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Revokes API key with existence check in single operation
-	DeactivateAPIKey(ctx context.Context, id uuid.UUID) (int64, error)
+	DeactivateAPIKey(ctx context.Context, id pgtype.UUID) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Soft delete with existence detection in single operation
 	DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error)
-	DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.NullTime) error
+	DeleteCompletedGenerationJobs(ctx context.Context, completedAt pgtype.Timestamptz) error
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Hard delete with built-in existence verification
-	DeleteRecurringTemplate(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteRecurringTemplate(ctx context.Context, id pgtype.UUID) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Single-query delete with existence detection built-in
-	DeleteTodoItem(ctx context.Context, id uuid.UUID) (int64, error)
-	DeleteTodoItemsByListId(ctx context.Context, listID uuid.UUID) error
+	DeleteTodoItem(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteTodoItemsByListId(ctx context.Context, listID pgtype.UUID) error
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Efficient detection of non-existent records without separate SELECT query
-	DeleteTodoList(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteTodoList(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Advanced list query with filtering, sorting, and pagination.
+	// Supports AIP-160-style filtering and AIP-132-style sorting.
+	//
+	// Parameters use nullable types for optional filters:
+	//   - title_contains: Filters by title substring (case-insensitive)
+	//   - create_time_after: Filters lists created after this time
+	//   - create_time_before: Filters lists created before this time
+	//   - order_by: Column to sort by ("create_time" or "title")
+	//   - order_dir: Sort direction ("asc" or "desc")
+	//   - page_limit: Maximum number of results to return
+	//   - page_offset: Number of results to skip
+	FindTodoListsWithFilters(ctx context.Context, arg FindTodoListsWithFiltersParams) ([]FindTodoListsWithFiltersRow, error)
 	GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error)
 	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
-	GetGenerationJob(ctx context.Context, id uuid.UUID) (RecurringGenerationJob, error)
-	GetRecurringTemplate(ctx context.Context, id uuid.UUID) (RecurringTaskTemplate, error)
-	GetTaskStatusHistory(ctx context.Context, taskID uuid.UUID) ([]TaskStatusHistory, error)
+	GetGenerationJob(ctx context.Context, id pgtype.UUID) (RecurringGenerationJob, error)
+	GetRecurringTemplate(ctx context.Context, id pgtype.UUID) (RecurringTaskTemplate, error)
+	GetTaskStatusHistory(ctx context.Context, taskID pgtype.UUID) ([]TaskStatusHistory, error)
 	GetTaskStatusHistoryByDateRange(ctx context.Context, arg GetTaskStatusHistoryByDateRangeParams) ([]TaskStatusHistory, error)
-	GetTodoItem(ctx context.Context, id uuid.UUID) (TodoItem, error)
-	GetTodoItemsByListId(ctx context.Context, listID uuid.UUID) ([]TodoItem, error)
-	GetTodoList(ctx context.Context, id uuid.UUID) (TodoList, error)
+	GetTodoItem(ctx context.Context, id pgtype.UUID) (TodoItem, error)
+	GetTodoItemsByListId(ctx context.Context, listID pgtype.UUID) ([]TodoItem, error)
+	GetTodoList(ctx context.Context, id pgtype.UUID) (TodoList, error)
+	// Returns a single list by ID with item counts (for detail view).
+	// undone_statuses parameter: domain layer defines which statuses count as "undone".
+	GetTodoListWithCounts(ctx context.Context, arg GetTodoListWithCountsParams) (GetTodoListWithCountsRow, error)
 	// Checks if a template already has a pending or running job to prevent duplicates.
 	// Returns true if such a job exists, false otherwise.
-	HasPendingOrRunningJob(ctx context.Context, templateID uuid.UUID) (bool, error)
+	HasPendingOrRunningJob(ctx context.Context, templateID pgtype.UUID) (bool, error)
 	ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListAllActiveRecurringTemplates(ctx context.Context) ([]RecurringTaskTemplate, error)
-	ListAllRecurringTemplatesByList(ctx context.Context, listID uuid.UUID) ([]RecurringTaskTemplate, error)
+	ListAllRecurringTemplatesByList(ctx context.Context, listID pgtype.UUID) ([]RecurringTaskTemplate, error)
 	ListPendingGenerationJobs(ctx context.Context, arg ListPendingGenerationJobsParams) ([]RecurringGenerationJob, error)
-	ListRecurringTemplates(ctx context.Context, listID uuid.UUID) ([]RecurringTaskTemplate, error)
+	ListRecurringTemplates(ctx context.Context, listID pgtype.UUID) ([]RecurringTaskTemplate, error)
 	// Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
 	// Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
 	// Use case: Task search, filtered views, "My Tasks" views, pagination through large result sets.
@@ -113,11 +129,11 @@ type Querier interface {
 	//
 	// Returns:
 	//   - total_items: Total count of all items in the list
-	//   - undone_items: Count of active items (TODO, IN_PROGRESS, BLOCKED)
+	//   - undone_items: Count of items matching provided statuses (domain defines "undone")
 	//
 	// This query uses LEFT JOIN to ensure lists with zero items still appear with count=0.
-	// The FILTER clause efficiently counts only active items in a single pass.
-	ListTodoListsWithCounts(ctx context.Context) ([]ListTodoListsWithCountsRow, error)
+	// The FILTER clause efficiently counts only matching items in a single pass.
+	ListTodoListsWithCounts(ctx context.Context, undoneStatuses []string) ([]ListTodoListsWithCountsRow, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Updates last access timestamp with existence detection in single query
@@ -147,10 +163,12 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Critical for worker: Detects if template was deleted between job claim and generation
 	UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error)
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-	// Single database round-trip prevents race conditions and reduces latency
+	// DATA ACCESS PATTERN: Optimistic locking with version check
+	// :execrows returns (int64, error) - Repository checks rowsAffected:
+	//   0 → Either item doesn't exist, belongs to different list, OR version mismatch (concurrent update)
+	//   1 → Success, version incremented
 	// SECURITY: Validates item belongs to the specified list to prevent cross-list updates
+	// CONCURRENCY: Version check prevents lost updates in race conditions
 	UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound

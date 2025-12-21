@@ -7,13 +7,8 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sqlc-dev/pqtype"
 )
 
 const createRecurringTemplate = `-- name: CreateRecurringTemplate :exec
@@ -33,24 +28,24 @@ INSERT INTO recurring_task_templates (
 `
 
 type CreateRecurringTemplateParams struct {
-	ID                   uuid.UUID             `json:"id"`
-	ListID               uuid.UUID             `json:"list_id"`
-	Title                string                `json:"title"`
-	Tags                 pqtype.NullRawMessage `json:"tags"`
-	Priority             sql.NullString        `json:"priority"`
-	EstimatedDuration    pgtype.Interval       `json:"estimated_duration"`
-	RecurrencePattern    string                `json:"recurrence_pattern"`
-	RecurrenceConfig     json.RawMessage       `json:"recurrence_config"`
-	DueOffset            pgtype.Interval       `json:"due_offset"`
-	IsActive             bool                  `json:"is_active"`
-	CreatedAt            time.Time             `json:"created_at"`
-	UpdatedAt            time.Time             `json:"updated_at"`
-	LastGeneratedUntil   time.Time             `json:"last_generated_until"`
-	GenerationWindowDays int32                 `json:"generation_window_days"`
+	ID                   pgtype.UUID        `json:"id"`
+	ListID               pgtype.UUID        `json:"list_id"`
+	Title                string             `json:"title"`
+	Tags                 []byte             `json:"tags"`
+	Priority             *string            `json:"priority"`
+	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
+	RecurrencePattern    string             `json:"recurrence_pattern"`
+	RecurrenceConfig     []byte             `json:"recurrence_config"`
+	DueOffset            pgtype.Interval    `json:"due_offset"`
+	IsActive             bool               `json:"is_active"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	LastGeneratedUntil   pgtype.Date        `json:"last_generated_until"`
+	GenerationWindowDays int32              `json:"generation_window_days"`
 }
 
 func (q *Queries) CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) error {
-	_, err := q.db.ExecContext(ctx, createRecurringTemplate,
+	_, err := q.db.Exec(ctx, createRecurringTemplate,
 		arg.ID,
 		arg.ListID,
 		arg.Title,
@@ -77,19 +72,19 @@ WHERE id = $2
 `
 
 type DeactivateRecurringTemplateParams struct {
-	UpdatedAt time.Time `json:"updated_at"`
-	ID        uuid.UUID `json:"id"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Soft delete with existence detection in single operation
 func (q *Queries) DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deactivateRecurringTemplate, arg.UpdatedAt, arg.ID)
+	result, err := q.db.Exec(ctx, deactivateRecurringTemplate, arg.UpdatedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
 
 const deleteRecurringTemplate = `-- name: DeleteRecurringTemplate :execrows
@@ -100,12 +95,12 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Hard delete with built-in existence verification
-func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteRecurringTemplate, id)
+func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRecurringTemplate, id)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
 
 const getRecurringTemplate = `-- name: GetRecurringTemplate :one
@@ -113,8 +108,8 @@ SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_patter
 WHERE id = $1
 `
 
-func (q *Queries) GetRecurringTemplate(ctx context.Context, id uuid.UUID) (RecurringTaskTemplate, error) {
-	row := q.db.QueryRowContext(ctx, getRecurringTemplate, id)
+func (q *Queries) GetRecurringTemplate(ctx context.Context, id pgtype.UUID) (RecurringTaskTemplate, error) {
+	row := q.db.QueryRow(ctx, getRecurringTemplate, id)
 	var i RecurringTaskTemplate
 	err := row.Scan(
 		&i.ID,
@@ -142,7 +137,7 @@ ORDER BY created_at DESC
 `
 
 func (q *Queries) ListAllActiveRecurringTemplates(ctx context.Context) ([]RecurringTaskTemplate, error) {
-	rows, err := q.db.QueryContext(ctx, listAllActiveRecurringTemplates)
+	rows, err := q.db.Query(ctx, listAllActiveRecurringTemplates)
 	if err != nil {
 		return nil, err
 	}
@@ -169,9 +164,6 @@ func (q *Queries) ListAllActiveRecurringTemplates(ctx context.Context) ([]Recurr
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -185,8 +177,8 @@ WHERE list_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListAllRecurringTemplatesByList(ctx context.Context, listID uuid.UUID) ([]RecurringTaskTemplate, error) {
-	rows, err := q.db.QueryContext(ctx, listAllRecurringTemplatesByList, listID)
+func (q *Queries) ListAllRecurringTemplatesByList(ctx context.Context, listID pgtype.UUID) ([]RecurringTaskTemplate, error) {
+	rows, err := q.db.Query(ctx, listAllRecurringTemplatesByList, listID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,9 +205,6 @@ func (q *Queries) ListAllRecurringTemplatesByList(ctx context.Context, listID uu
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -229,8 +218,8 @@ WHERE list_id = $1 AND is_active = true
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListRecurringTemplates(ctx context.Context, listID uuid.UUID) ([]RecurringTaskTemplate, error) {
-	rows, err := q.db.QueryContext(ctx, listRecurringTemplates, listID)
+func (q *Queries) ListRecurringTemplates(ctx context.Context, listID pgtype.UUID) ([]RecurringTaskTemplate, error) {
+	rows, err := q.db.Query(ctx, listRecurringTemplates, listID)
 	if err != nil {
 		return nil, err
 	}
@@ -257,9 +246,6 @@ func (q *Queries) ListRecurringTemplates(ctx context.Context, listID uuid.UUID) 
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -281,15 +267,15 @@ WHERE id = $9
 `
 
 type UpdateRecurringTemplateParams struct {
-	Title             string                `json:"title"`
-	Tags              pqtype.NullRawMessage `json:"tags"`
-	Priority          sql.NullString        `json:"priority"`
-	EstimatedDuration pgtype.Interval       `json:"estimated_duration"`
-	RecurrencePattern string                `json:"recurrence_pattern"`
-	RecurrenceConfig  json.RawMessage       `json:"recurrence_config"`
-	DueOffset         pgtype.Interval       `json:"due_offset"`
-	UpdatedAt         time.Time             `json:"updated_at"`
-	ID                uuid.UUID             `json:"id"`
+	Title             string             `json:"title"`
+	Tags              []byte             `json:"tags"`
+	Priority          *string            `json:"priority"`
+	EstimatedDuration pgtype.Interval    `json:"estimated_duration"`
+	RecurrencePattern string             `json:"recurrence_pattern"`
+	RecurrenceConfig  []byte             `json:"recurrence_config"`
+	DueOffset         pgtype.Interval    `json:"due_offset"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ID                pgtype.UUID        `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
@@ -308,7 +294,7 @@ type UpdateRecurringTemplateParams struct {
 //	- Race condition window between queries
 //	- Doubled network latency
 func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateRecurringTemplate,
+	result, err := q.db.Exec(ctx, updateRecurringTemplate,
 		arg.Title,
 		arg.Tags,
 		arg.Priority,
@@ -322,7 +308,7 @@ func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurri
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
 
 const updateRecurringTemplateGenerationWindow = `-- name: UpdateRecurringTemplateGenerationWindow :execrows
@@ -333,18 +319,18 @@ WHERE id = $3
 `
 
 type UpdateRecurringTemplateGenerationWindowParams struct {
-	LastGeneratedUntil time.Time `json:"last_generated_until"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	ID                 uuid.UUID `json:"id"`
+	LastGeneratedUntil pgtype.Date        `json:"last_generated_until"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID                 pgtype.UUID        `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Critical for worker: Detects if template was deleted between job claim and generation
 func (q *Queries) UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateRecurringTemplateGenerationWindow, arg.LastGeneratedUntil, arg.UpdatedAt, arg.ID)
+	result, err := q.db.Exec(ctx, updateRecurringTemplateGenerationWindow, arg.LastGeneratedUntil, arg.UpdatedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }

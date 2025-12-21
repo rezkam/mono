@@ -7,12 +7,8 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/sqlc-dev/pqtype"
 )
 
 const countTasksWithFilters = `-- name: CountTasksWithFilters :one
@@ -29,20 +25,20 @@ WHERE
 `
 
 type CountTasksWithFiltersParams struct {
-	Column1 uuid.UUID `json:"column_1"`
-	Column2 string    `json:"column_2"`
-	Column3 string    `json:"column_3"`
-	Column4 string    `json:"column_4"`
-	Column5 time.Time `json:"column_5"`
-	Column6 time.Time `json:"column_6"`
-	Column7 time.Time `json:"column_7"`
-	Column8 time.Time `json:"column_8"`
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 string             `json:"column_2"`
+	Column3 string             `json:"column_3"`
+	Column4 string             `json:"column_4"`
+	Column5 pgtype.Timestamptz `json:"column_5"`
+	Column6 pgtype.Timestamptz `json:"column_6"`
+	Column7 pgtype.Timestamptz `json:"column_7"`
+	Column8 pgtype.Timestamptz `json:"column_8"`
 }
 
 // Counts total matching items for pagination (used when main query returns empty page).
 // Uses same WHERE clause as ListTasksWithFilters for consistency.
 func (q *Queries) CountTasksWithFilters(ctx context.Context, arg CountTasksWithFiltersParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countTasksWithFilters,
+	row := q.db.QueryRow(ctx, countTasksWithFilters,
 		arg.Column1,
 		arg.Column2,
 		arg.Column3,
@@ -62,34 +58,36 @@ INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
     create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone
+    recurring_template_id, instance_date, timezone,
+    version
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7,
     $8, $9, $10, $11,
-    $12, $13, $14
+    $12, $13, $14,
+    1
 )
 `
 
 type CreateTodoItemParams struct {
-	ID                  uuid.UUID             `json:"id"`
-	ListID              uuid.UUID             `json:"list_id"`
-	Title               string                `json:"title"`
-	Status              string                `json:"status"`
-	Priority            sql.NullString        `json:"priority"`
-	EstimatedDuration   pgtype.Interval       `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval       `json:"actual_duration"`
-	CreateTime          time.Time             `json:"create_time"`
-	UpdatedAt           time.Time             `json:"updated_at"`
-	DueTime             sql.NullTime          `json:"due_time"`
-	Tags                pqtype.NullRawMessage `json:"tags"`
-	RecurringTemplateID uuid.NullUUID         `json:"recurring_template_id"`
-	InstanceDate        sql.NullTime          `json:"instance_date"`
-	Timezone            sql.NullString        `json:"timezone"`
+	ID                  pgtype.UUID        `json:"id"`
+	ListID              pgtype.UUID        `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            *string            `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreateTime          pgtype.Timestamptz `json:"create_time"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	DueTime             pgtype.Timestamptz `json:"due_time"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID pgtype.UUID        `json:"recurring_template_id"`
+	InstanceDate        pgtype.Date        `json:"instance_date"`
+	Timezone            *string            `json:"timezone"`
 }
 
 func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) error {
-	_, err := q.db.ExecContext(ctx, createTodoItem,
+	_, err := q.db.Exec(ctx, createTodoItem,
 		arg.ID,
 		arg.ListID,
 		arg.Title,
@@ -116,12 +114,12 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Single-query delete with existence detection built-in
-func (q *Queries) DeleteTodoItem(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteTodoItem, id)
+func (q *Queries) DeleteTodoItem(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTodoItem, id)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
 
 const deleteTodoItemsByListId = `-- name: DeleteTodoItemsByListId :exec
@@ -129,18 +127,18 @@ DELETE FROM todo_items
 WHERE list_id = $1
 `
 
-func (q *Queries) DeleteTodoItemsByListId(ctx context.Context, listID uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteTodoItemsByListId, listID)
+func (q *Queries) DeleteTodoItemsByListId(ctx context.Context, listID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTodoItemsByListId, listID)
 	return err
 }
 
 const getAllTodoItems = `-- name: GetAllTodoItems :many
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone FROM todo_items
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version FROM todo_items
 ORDER BY list_id, create_time ASC
 `
 
 func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
-	rows, err := q.db.QueryContext(ctx, getAllTodoItems)
+	rows, err := q.db.Query(ctx, getAllTodoItems)
 	if err != nil {
 		return nil, err
 	}
@@ -163,13 +161,11 @@ func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
 			&i.RecurringTemplateID,
 			&i.InstanceDate,
 			&i.Timezone,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -178,12 +174,12 @@ func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
 }
 
 const getTodoItem = `-- name: GetTodoItem :one
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone FROM todo_items
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version FROM todo_items
 WHERE id = $1
 `
 
-func (q *Queries) GetTodoItem(ctx context.Context, id uuid.UUID) (TodoItem, error) {
-	row := q.db.QueryRowContext(ctx, getTodoItem, id)
+func (q *Queries) GetTodoItem(ctx context.Context, id pgtype.UUID) (TodoItem, error) {
+	row := q.db.QueryRow(ctx, getTodoItem, id)
 	var i TodoItem
 	err := row.Scan(
 		&i.ID,
@@ -200,18 +196,19 @@ func (q *Queries) GetTodoItem(ctx context.Context, id uuid.UUID) (TodoItem, erro
 		&i.RecurringTemplateID,
 		&i.InstanceDate,
 		&i.Timezone,
+		&i.Version,
 	)
 	return i, err
 }
 
 const getTodoItemsByListId = `-- name: GetTodoItemsByListId :many
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone FROM todo_items
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version FROM todo_items
 WHERE list_id = $1
 ORDER BY create_time ASC
 `
 
-func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID uuid.UUID) ([]TodoItem, error) {
-	rows, err := q.db.QueryContext(ctx, getTodoItemsByListId, listID)
+func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID pgtype.UUID) ([]TodoItem, error) {
+	rows, err := q.db.Query(ctx, getTodoItemsByListId, listID)
 	if err != nil {
 		return nil, err
 	}
@@ -234,13 +231,11 @@ func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID uuid.UUID) ([
 			&i.RecurringTemplateID,
 			&i.InstanceDate,
 			&i.Timezone,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -249,7 +244,7 @@ func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID uuid.UUID) ([
 }
 
 const listTasksWithFilters = `-- name: ListTasksWithFilters :many
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, COUNT(*) OVER() AS total_count FROM todo_items
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version, COUNT(*) OVER() AS total_count FROM todo_items
 WHERE
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
     ($2::text = '' OR status = $2) AND
@@ -294,35 +289,36 @@ OFFSET $11
 `
 
 type ListTasksWithFiltersParams struct {
-	Column1 uuid.UUID `json:"column_1"`
-	Column2 string    `json:"column_2"`
-	Column3 string    `json:"column_3"`
-	Column4 string    `json:"column_4"`
-	Column5 time.Time `json:"column_5"`
-	Column6 time.Time `json:"column_6"`
-	Column7 time.Time `json:"column_7"`
-	Column8 time.Time `json:"column_8"`
-	Column9 string    `json:"column_9"`
-	Limit   int32     `json:"limit"`
-	Offset  int32     `json:"offset"`
+	Column1 pgtype.UUID        `json:"column_1"`
+	Column2 string             `json:"column_2"`
+	Column3 string             `json:"column_3"`
+	Column4 string             `json:"column_4"`
+	Column5 pgtype.Timestamptz `json:"column_5"`
+	Column6 pgtype.Timestamptz `json:"column_6"`
+	Column7 pgtype.Timestamptz `json:"column_7"`
+	Column8 pgtype.Timestamptz `json:"column_8"`
+	Column9 string             `json:"column_9"`
+	Limit   int32              `json:"limit"`
+	Offset  int32              `json:"offset"`
 }
 
 type ListTasksWithFiltersRow struct {
-	ID                  uuid.UUID             `json:"id"`
-	ListID              uuid.UUID             `json:"list_id"`
-	Title               string                `json:"title"`
-	Status              string                `json:"status"`
-	Priority            sql.NullString        `json:"priority"`
-	EstimatedDuration   pgtype.Interval       `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval       `json:"actual_duration"`
-	CreateTime          time.Time             `json:"create_time"`
-	UpdatedAt           time.Time             `json:"updated_at"`
-	DueTime             sql.NullTime          `json:"due_time"`
-	Tags                pqtype.NullRawMessage `json:"tags"`
-	RecurringTemplateID uuid.NullUUID         `json:"recurring_template_id"`
-	InstanceDate        sql.NullTime          `json:"instance_date"`
-	Timezone            sql.NullString        `json:"timezone"`
-	TotalCount          int64                 `json:"total_count"`
+	ID                  pgtype.UUID        `json:"id"`
+	ListID              pgtype.UUID        `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            *string            `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreateTime          pgtype.Timestamptz `json:"create_time"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	DueTime             pgtype.Timestamptz `json:"due_time"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID pgtype.UUID        `json:"recurring_template_id"`
+	InstanceDate        pgtype.Date        `json:"instance_date"`
+	Timezone            *string            `json:"timezone"`
+	Version             int32              `json:"version"`
+	TotalCount          int64              `json:"total_count"`
 }
 
 // Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
@@ -367,7 +363,7 @@ type ListTasksWithFiltersRow struct {
 //   - "High priority items": filter by priority=HIGH, order by due_time_asc
 //   - "Tasks tagged 'urgent'": filter by tag=urgent (uses GIN index)
 func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]ListTasksWithFiltersRow, error) {
-	rows, err := q.db.QueryContext(ctx, listTasksWithFilters,
+	rows, err := q.db.Query(ctx, listTasksWithFilters,
 		arg.Column1,
 		arg.Column2,
 		arg.Column3,
@@ -402,14 +398,12 @@ func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFil
 			&i.RecurringTemplateID,
 			&i.InstanceDate,
 			&i.Timezone,
+			&i.Version,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -427,30 +421,38 @@ SET title = $1,
     updated_at = $6,
     due_time = $7,
     tags = $8,
-    timezone = $9
-WHERE id = $10 AND list_id = $11
+    timezone = $9,
+    version = version + 1
+WHERE id = $10
+  AND list_id = $11
+  AND version = $12
 `
 
 type UpdateTodoItemParams struct {
-	Title             string                `json:"title"`
-	Status            string                `json:"status"`
-	Priority          sql.NullString        `json:"priority"`
-	EstimatedDuration pgtype.Interval       `json:"estimated_duration"`
-	ActualDuration    pgtype.Interval       `json:"actual_duration"`
-	UpdatedAt         time.Time             `json:"updated_at"`
-	DueTime           sql.NullTime          `json:"due_time"`
-	Tags              pqtype.NullRawMessage `json:"tags"`
-	Timezone          sql.NullString        `json:"timezone"`
-	ID                uuid.UUID             `json:"id"`
-	ListID            uuid.UUID             `json:"list_id"`
+	Title             string             `json:"title"`
+	Status            string             `json:"status"`
+	Priority          *string            `json:"priority"`
+	EstimatedDuration pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration    pgtype.Interval    `json:"actual_duration"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	DueTime           pgtype.Timestamptz `json:"due_time"`
+	Tags              []byte             `json:"tags"`
+	Timezone          *string            `json:"timezone"`
+	ID                pgtype.UUID        `json:"id"`
+	ListID            pgtype.UUID        `json:"list_id"`
+	Version           int32              `json:"version"`
 }
 
-// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-// Single database round-trip prevents race conditions and reduces latency
+// DATA ACCESS PATTERN: Optimistic locking with version check
+// :execrows returns (int64, error) - Repository checks rowsAffected:
+//
+//	0 → Either item doesn't exist, belongs to different list, OR version mismatch (concurrent update)
+//	1 → Success, version incremented
+//
 // SECURITY: Validates item belongs to the specified list to prevent cross-list updates
+// CONCURRENCY: Version check prevents lost updates in race conditions
 func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateTodoItem,
+	result, err := q.db.Exec(ctx, updateTodoItem,
 		arg.Title,
 		arg.Status,
 		arg.Priority,
@@ -462,11 +464,12 @@ func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) 
 		arg.Timezone,
 		arg.ID,
 		arg.ListID,
+		arg.Version,
 	)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
 
 const updateTodoItemStatus = `-- name: UpdateTodoItemStatus :execrows
@@ -476,18 +479,18 @@ WHERE id = $3
 `
 
 type UpdateTodoItemStatusParams struct {
-	Status    string    `json:"status"`
-	UpdatedAt time.Time `json:"updated_at"`
-	ID        uuid.UUID `json:"id"`
+	Status    string             `json:"status"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Efficient status updates without separate existence check
 func (q *Queries) UpdateTodoItemStatus(ctx context.Context, arg UpdateTodoItemStatusParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateTodoItemStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	result, err := q.db.Exec(ctx, updateTodoItemStatus, arg.Status, arg.UpdatedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }

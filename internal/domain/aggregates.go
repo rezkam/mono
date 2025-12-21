@@ -70,6 +70,9 @@ type TodoItem struct {
 	// nil/empty = floating time (9am stays 9am in user's current timezone)
 	// non-empty = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
 	Timezone *string
+
+	// Optimistic locking version for concurrent update protection
+	Version int
 }
 
 // RecurringTemplate is an aggregate root representing a template for generating recurring task instances.

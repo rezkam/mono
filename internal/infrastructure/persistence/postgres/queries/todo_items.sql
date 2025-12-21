@@ -3,12 +3,14 @@ INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
     create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone
+    recurring_template_id, instance_date, timezone,
+    version
 ) VALUES (
     sqlc.arg(id), sqlc.arg(list_id), sqlc.arg(title), sqlc.arg(status), sqlc.arg(priority),
     sqlc.narg('estimated_duration'), sqlc.narg('actual_duration'),
     sqlc.arg(create_time), sqlc.arg(updated_at), sqlc.narg(due_time), sqlc.arg(tags),
-    sqlc.narg(recurring_template_id), sqlc.narg(instance_date), sqlc.narg(timezone)
+    sqlc.narg(recurring_template_id), sqlc.narg(instance_date), sqlc.narg(timezone),
+    1
 );
 
 -- name: GetTodoItem :one
@@ -25,10 +27,12 @@ SELECT * FROM todo_items
 ORDER BY list_id, create_time ASC;
 
 -- name: UpdateTodoItem :execrows
--- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
--- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
--- Single database round-trip prevents race conditions and reduces latency
+-- DATA ACCESS PATTERN: Optimistic locking with version check
+-- :execrows returns (int64, error) - Repository checks rowsAffected:
+--   0 → Either item doesn't exist, belongs to different list, OR version mismatch (concurrent update)
+--   1 → Success, version incremented
 -- SECURITY: Validates item belongs to the specified list to prevent cross-list updates
+-- CONCURRENCY: Version check prevents lost updates in race conditions
 UPDATE todo_items
 SET title = sqlc.arg(title),
     status = sqlc.arg(status),
@@ -38,8 +42,11 @@ SET title = sqlc.arg(title),
     updated_at = sqlc.arg(updated_at),
     due_time = sqlc.narg(due_time),
     tags = sqlc.arg(tags),
-    timezone = sqlc.narg(timezone)
-WHERE id = sqlc.arg(id) AND list_id = sqlc.arg(list_id);
+    timezone = sqlc.narg(timezone),
+    version = version + 1
+WHERE id = sqlc.arg(id)
+  AND list_id = sqlc.arg(list_id)
+  AND version = sqlc.arg(version);
 
 -- name: UpdateTodoItemStatus :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected

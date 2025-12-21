@@ -7,10 +7,32 @@ package sqlcgen
 
 import (
 	"context"
-	"time"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countTodoListsWithFilters = `-- name: CountTodoListsWithFilters :one
+SELECT COUNT(DISTINCT tl.id)::int AS total_count
+FROM todo_lists tl
+WHERE
+    ($1::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || $1 || '%'))
+    AND ($2::timestamptz IS NULL OR tl.create_time > $2)
+    AND ($3::timestamptz IS NULL OR tl.create_time < $3)
+`
+
+type CountTodoListsWithFiltersParams struct {
+	TitleContains    string             `json:"title_contains"`
+	CreateTimeAfter  pgtype.Timestamptz `json:"create_time_after"`
+	CreateTimeBefore pgtype.Timestamptz `json:"create_time_before"`
+}
+
+// Count total matching lists for pagination (same filters as FindTodoListsWithFilters).
+func (q *Queries) CountTodoListsWithFilters(ctx context.Context, arg CountTodoListsWithFiltersParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countTodoListsWithFilters, arg.TitleContains, arg.CreateTimeAfter, arg.CreateTimeBefore)
+	var total_count int32
+	err := row.Scan(&total_count)
+	return total_count, err
+}
 
 const createTodoList = `-- name: CreateTodoList :exec
 INSERT INTO todo_lists (id, title, create_time)
@@ -18,13 +40,13 @@ VALUES ($1, $2, $3)
 `
 
 type CreateTodoListParams struct {
-	ID         uuid.UUID `json:"id"`
-	Title      string    `json:"title"`
-	CreateTime time.Time `json:"create_time"`
+	ID         pgtype.UUID        `json:"id"`
+	Title      string             `json:"title"`
+	CreateTime pgtype.Timestamptz `json:"create_time"`
 }
 
 func (q *Queries) CreateTodoList(ctx context.Context, arg CreateTodoListParams) error {
-	_, err := q.db.ExecContext(ctx, createTodoList, arg.ID, arg.Title, arg.CreateTime)
+	_, err := q.db.Exec(ctx, createTodoList, arg.ID, arg.Title, arg.CreateTime)
 	return err
 }
 
@@ -36,12 +58,110 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Efficient detection of non-existent records without separate SELECT query
-func (q *Queries) DeleteTodoList(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteTodoList, id)
+func (q *Queries) DeleteTodoList(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTodoList, id)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
+}
+
+const findTodoListsWithFilters = `-- name: FindTodoListsWithFilters :many
+SELECT
+    tl.id,
+    tl.title,
+    tl.create_time,
+    COALESCE(COUNT(ti.id), 0)::int AS total_items,
+    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
+FROM todo_lists tl
+LEFT JOIN todo_items ti ON tl.id = ti.list_id
+WHERE
+    ($2::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || $2 || '%'))
+    AND ($3::timestamptz IS NULL OR tl.create_time > $3)
+    AND ($4::timestamptz IS NULL OR tl.create_time < $4)
+GROUP BY tl.id, tl.title, tl.create_time
+ORDER BY
+    CASE
+        WHEN $5 = 'title' AND $6 = 'asc' THEN tl.title
+    END ASC,
+    CASE
+        WHEN $5 = 'title' AND $6 = 'desc' THEN tl.title
+    END DESC,
+    CASE
+        WHEN $5 = 'create_time' AND $6 = 'asc' THEN tl.create_time
+        WHEN ($5 IS NULL OR $5 = '') AND ($6 IS NULL OR $6 = '' OR $6 = 'asc') THEN tl.create_time
+    END ASC,
+    CASE
+        WHEN $5 = 'create_time' AND $6 = 'desc' THEN tl.create_time
+        WHEN ($5 IS NULL OR $5 = '') AND $6 = 'desc' THEN tl.create_time
+    END DESC
+LIMIT $8
+OFFSET $7
+`
+
+type FindTodoListsWithFiltersParams struct {
+	UndoneStatuses   []string           `json:"undone_statuses"`
+	TitleContains    string             `json:"title_contains"`
+	CreateTimeAfter  pgtype.Timestamptz `json:"create_time_after"`
+	CreateTimeBefore pgtype.Timestamptz `json:"create_time_before"`
+	OrderBy          interface{}        `json:"order_by"`
+	OrderDir         interface{}        `json:"order_dir"`
+	PageOffset       int32              `json:"page_offset"`
+	PageLimit        int32              `json:"page_limit"`
+}
+
+type FindTodoListsWithFiltersRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Title       string             `json:"title"`
+	CreateTime  pgtype.Timestamptz `json:"create_time"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
+}
+
+// Advanced list query with filtering, sorting, and pagination.
+// Supports AIP-160-style filtering and AIP-132-style sorting.
+//
+// Parameters use nullable types for optional filters:
+//   - title_contains: Filters by title substring (case-insensitive)
+//   - create_time_after: Filters lists created after this time
+//   - create_time_before: Filters lists created before this time
+//   - order_by: Column to sort by ("create_time" or "title")
+//   - order_dir: Sort direction ("asc" or "desc")
+//   - page_limit: Maximum number of results to return
+//   - page_offset: Number of results to skip
+func (q *Queries) FindTodoListsWithFilters(ctx context.Context, arg FindTodoListsWithFiltersParams) ([]FindTodoListsWithFiltersRow, error) {
+	rows, err := q.db.Query(ctx, findTodoListsWithFilters,
+		arg.UndoneStatuses,
+		arg.TitleContains,
+		arg.CreateTimeAfter,
+		arg.CreateTimeBefore,
+		arg.OrderBy,
+		arg.OrderDir,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FindTodoListsWithFiltersRow{}
+	for rows.Next() {
+		var i FindTodoListsWithFiltersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.CreateTime,
+			&i.TotalItems,
+			&i.UndoneItems,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTodoList = `-- name: GetTodoList :one
@@ -49,10 +169,51 @@ SELECT id, title, create_time FROM todo_lists
 WHERE id = $1
 `
 
-func (q *Queries) GetTodoList(ctx context.Context, id uuid.UUID) (TodoList, error) {
-	row := q.db.QueryRowContext(ctx, getTodoList, id)
+func (q *Queries) GetTodoList(ctx context.Context, id pgtype.UUID) (TodoList, error) {
+	row := q.db.QueryRow(ctx, getTodoList, id)
 	var i TodoList
 	err := row.Scan(&i.ID, &i.Title, &i.CreateTime)
+	return i, err
+}
+
+const getTodoListWithCounts = `-- name: GetTodoListWithCounts :one
+SELECT
+    tl.id,
+    tl.title,
+    tl.create_time,
+    COALESCE(COUNT(ti.id), 0)::int AS total_items,
+    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
+FROM todo_lists tl
+LEFT JOIN todo_items ti ON tl.id = ti.list_id
+WHERE tl.id = $2
+GROUP BY tl.id, tl.title, tl.create_time
+`
+
+type GetTodoListWithCountsParams struct {
+	UndoneStatuses []string    `json:"undone_statuses"`
+	ID             pgtype.UUID `json:"id"`
+}
+
+type GetTodoListWithCountsRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Title       string             `json:"title"`
+	CreateTime  pgtype.Timestamptz `json:"create_time"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
+}
+
+// Returns a single list by ID with item counts (for detail view).
+// undone_statuses parameter: domain layer defines which statuses count as "undone".
+func (q *Queries) GetTodoListWithCounts(ctx context.Context, arg GetTodoListWithCountsParams) (GetTodoListWithCountsRow, error) {
+	row := q.db.QueryRow(ctx, getTodoListWithCounts, arg.UndoneStatuses, arg.ID)
+	var i GetTodoListWithCountsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.CreateTime,
+		&i.TotalItems,
+		&i.UndoneItems,
+	)
 	return i, err
 }
 
@@ -63,7 +224,7 @@ ORDER BY create_time DESC
 
 // Legacy query: Returns all lists without items (use ListTodoListsWithCounts for list views).
 func (q *Queries) ListTodoLists(ctx context.Context) ([]TodoList, error) {
-	rows, err := q.db.QueryContext(ctx, listTodoLists)
+	rows, err := q.db.Query(ctx, listTodoLists)
 	if err != nil {
 		return nil, err
 	}
@@ -75,9 +236,6 @@ func (q *Queries) ListTodoLists(ctx context.Context) ([]TodoList, error) {
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -91,7 +249,7 @@ SELECT
     tl.title,
     tl.create_time,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
-    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status IN ('todo', 'in_progress', 'blocked')), 0)::int AS undone_items
+    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 GROUP BY tl.id, tl.title, tl.create_time
@@ -99,11 +257,11 @@ ORDER BY tl.create_time DESC
 `
 
 type ListTodoListsWithCountsRow struct {
-	ID          uuid.UUID `json:"id"`
-	Title       string    `json:"title"`
-	CreateTime  time.Time `json:"create_time"`
-	TotalItems  int32     `json:"total_items"`
-	UndoneItems int32     `json:"undone_items"`
+	ID          pgtype.UUID        `json:"id"`
+	Title       string             `json:"title"`
+	CreateTime  pgtype.Timestamptz `json:"create_time"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
 }
 
 // Optimized for LIST VIEW access pattern: Returns list metadata with item counts.
@@ -112,12 +270,12 @@ type ListTodoListsWithCountsRow struct {
 //
 // Returns:
 //   - total_items: Total count of all items in the list
-//   - undone_items: Count of active items (TODO, IN_PROGRESS, BLOCKED)
+//   - undone_items: Count of items matching provided statuses (domain defines "undone")
 //
 // This query uses LEFT JOIN to ensure lists with zero items still appear with count=0.
-// The FILTER clause efficiently counts only active items in a single pass.
-func (q *Queries) ListTodoListsWithCounts(ctx context.Context) ([]ListTodoListsWithCountsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listTodoListsWithCounts)
+// The FILTER clause efficiently counts only matching items in a single pass.
+func (q *Queries) ListTodoListsWithCounts(ctx context.Context, undoneStatuses []string) ([]ListTodoListsWithCountsRow, error) {
+	rows, err := q.db.Query(ctx, listTodoListsWithCounts, undoneStatuses)
 	if err != nil {
 		return nil, err
 	}
@@ -136,9 +294,6 @@ func (q *Queries) ListTodoListsWithCounts(ctx context.Context) ([]ListTodoListsW
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -152,8 +307,8 @@ WHERE id = $2
 `
 
 type UpdateTodoListParams struct {
-	Title string    `json:"title"`
-	ID    uuid.UUID `json:"id"`
+	Title string      `json:"title"`
+	ID    pgtype.UUID `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
@@ -161,9 +316,9 @@ type UpdateTodoListParams struct {
 // Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
 // NOTE: create_time is immutable after creation - only title can be updated
 func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateTodoList, arg.Title, arg.ID)
+	result, err := q.db.Exec(ctx, updateTodoList, arg.Title, arg.ID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }

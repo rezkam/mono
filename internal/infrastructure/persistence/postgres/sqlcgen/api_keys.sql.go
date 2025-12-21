@@ -7,10 +7,8 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createAPIKey = `-- name: CreateAPIKey :exec
@@ -19,20 +17,20 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateAPIKeyParams struct {
-	ID             uuid.UUID    `json:"id"`
-	KeyType        string       `json:"key_type"`
-	Service        string       `json:"service"`
-	Version        string       `json:"version"`
-	ShortToken     string       `json:"short_token"`
-	LongSecretHash string       `json:"long_secret_hash"`
-	Name           string       `json:"name"`
-	IsActive       bool         `json:"is_active"`
-	CreatedAt      time.Time    `json:"created_at"`
-	ExpiresAt      sql.NullTime `json:"expires_at"`
+	ID             pgtype.UUID        `json:"id"`
+	KeyType        string             `json:"key_type"`
+	Service        string             `json:"service"`
+	Version        string             `json:"version"`
+	ShortToken     string             `json:"short_token"`
+	LongSecretHash string             `json:"long_secret_hash"`
+	Name           string             `json:"name"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error {
-	_, err := q.db.ExecContext(ctx, createAPIKey,
+	_, err := q.db.Exec(ctx, createAPIKey,
 		arg.ID,
 		arg.KeyType,
 		arg.Service,
@@ -56,12 +54,12 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Revokes API key with existence check in single operation
-func (q *Queries) DeactivateAPIKey(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deactivateAPIKey, id)
+func (q *Queries) DeactivateAPIKey(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateAPIKey, id)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
 
 const getAPIKeyByShortToken = `-- name: GetAPIKeyByShortToken :one
@@ -70,7 +68,7 @@ WHERE short_token = $1 AND is_active = true
 `
 
 func (q *Queries) GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error) {
-	row := q.db.QueryRowContext(ctx, getAPIKeyByShortToken, shortToken)
+	row := q.db.QueryRow(ctx, getAPIKeyByShortToken, shortToken)
 	var i ApiKey
 	err := row.Scan(
 		&i.ID,
@@ -95,7 +93,7 @@ ORDER BY created_at DESC
 `
 
 func (q *Queries) ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error) {
-	rows, err := q.db.QueryContext(ctx, listActiveAPIKeys)
+	rows, err := q.db.Query(ctx, listActiveAPIKeys)
 	if err != nil {
 		return nil, err
 	}
@@ -120,9 +118,6 @@ func (q *Queries) ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error) {
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -136,17 +131,17 @@ WHERE id = $2
 `
 
 type UpdateAPIKeyLastUsedParams struct {
-	LastUsedAt sql.NullTime `json:"last_used_at"`
-	ID         uuid.UUID    `json:"id"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ID         pgtype.UUID        `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Updates last access timestamp with existence detection in single query
 func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateAPIKeyLastUsed, arg.LastUsedAt, arg.ID)
+	result, err := q.db.Exec(ctx, updateAPIKeyLastUsed, arg.LastUsedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }

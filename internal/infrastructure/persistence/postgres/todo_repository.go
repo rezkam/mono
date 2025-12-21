@@ -2,14 +2,13 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
@@ -67,34 +66,46 @@ func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) error {
 	return nil
 }
 
-// FindListByID retrieves a todo list by its ID, including all items.
+// FindListByID retrieves a todo list by its ID, including all items and counts.
 func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	listUUID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	// Get the list
-	dbList, err := s.queries.GetTodoList(ctx, listUUID)
+	// Get the list with counts (domain defines which statuses are "undone")
+	dbList, err := s.queries.GetTodoListWithCounts(ctx, sqlcgen.GetTodoListWithCountsParams{
+		ID:             uuidToPgtype(listUUID),
+		UndoneStatuses: domainStatusesToStrings(domain.UndoneStatuses()),
+	})
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: list %s", domain.ErrListNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get list: %w", err)
 	}
 
 	// Get all items for this list
-	dbItems, err := s.queries.GetTodoItemsByListId(ctx, listUUID)
+	dbItems, err := s.queries.GetTodoItemsByListId(ctx, uuidToPgtype(listUUID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get items: %w", err)
 	}
 
 	// Convert to domain model
-	list := dbTodoListToDomain(dbList)
-	list.Items = make([]domain.TodoItem, 0, len(dbItems))
+	list := &domain.TodoList{
+		ID:          pgtypeToUUIDString(dbList.ID),
+		Title:       dbList.Title,
+		CreateTime:  pgtypeToTime(dbList.CreateTime),
+		TotalItems:  int(dbList.TotalItems),
+		UndoneItems: int(dbList.UndoneItems),
+		Items:       make([]domain.TodoItem, 0, len(dbItems)),
+	}
 
 	for _, dbItem := range dbItems {
-		item := dbTodoItemToDomain(dbItem)
+		item, err := dbTodoItemToDomain(dbItem)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert item: %w", err)
+		}
 		list.Items = append(list.Items, item)
 	}
 
@@ -103,8 +114,8 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 
 // FindAllLists retrieves all todo lists with counts but without items.
 func (s *Store) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
-	// Get lists with counts using the SQL query that includes aggregation
-	dbListsWithCounts, err := s.queries.ListTodoListsWithCounts(ctx)
+	// Get lists with counts (domain defines which statuses are "undone")
+	dbListsWithCounts, err := s.queries.ListTodoListsWithCounts(ctx, domainStatusesToStrings(domain.UndoneStatuses()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list lists: %w", err)
 	}
@@ -112,10 +123,10 @@ func (s *Store) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
 	lists := make([]*domain.TodoList, 0, len(dbListsWithCounts))
 	for _, row := range dbListsWithCounts {
 		list := &domain.TodoList{
-			ID:          row.ID.String(),
+			ID:          pgtypeToUUIDString(row.ID),
 			Title:       row.Title,
 			Items:       []domain.TodoItem{}, // Empty by design
-			CreateTime:  row.CreateTime,
+			CreateTime:  pgtypeToTime(row.CreateTime),
 			TotalItems:  int(row.TotalItems),
 			UndoneItems: int(row.UndoneItems),
 		}
@@ -123,6 +134,80 @@ func (s *Store) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
 	}
 
 	return lists, nil
+}
+
+// FindLists retrieves todo lists with filtering, sorting, and pagination.
+func (s *Store) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+	// Build sqlc params from domain params
+	sqlcParams := sqlcgen.FindTodoListsWithFiltersParams{
+		UndoneStatuses: domainStatusesToStrings(domain.UndoneStatuses()),
+		PageLimit:      int32(params.Limit),
+		PageOffset:     int32(params.Offset),
+	}
+
+	// Apply optional filters
+	if params.TitleContains != nil {
+		sqlcParams.TitleContains = *params.TitleContains
+	}
+	if params.CreateTimeAfter != nil {
+		sqlcParams.CreateTimeAfter = timeToPgtype(*params.CreateTimeAfter)
+	}
+	if params.CreateTimeBefore != nil {
+		sqlcParams.CreateTimeBefore = timeToPgtype(*params.CreateTimeBefore)
+	}
+
+	// Apply sorting (defaults to create_time desc)
+	orderBy := params.OrderBy
+	if orderBy == "" {
+		orderBy = "create_time"
+	}
+	sqlcParams.OrderBy = orderBy
+
+	orderDir := params.OrderDir
+	if orderDir == "" {
+		orderDir = "desc"
+	}
+	sqlcParams.OrderDir = orderDir
+
+	// Execute the query
+	rows, err := s.queries.FindTodoListsWithFilters(ctx, sqlcParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find lists: %w", err)
+	}
+
+	// Convert to domain models
+	lists := make([]*domain.TodoList, 0, len(rows))
+	for _, row := range rows {
+		list := &domain.TodoList{
+			ID:          pgtypeToUUIDString(row.ID),
+			Title:       row.Title,
+			Items:       []domain.TodoItem{}, // Empty by design
+			CreateTime:  pgtypeToTime(row.CreateTime),
+			TotalItems:  int(row.TotalItems),
+			UndoneItems: int(row.UndoneItems),
+		}
+		lists = append(lists, list)
+	}
+
+	// Get total count for pagination
+	countParams := sqlcgen.CountTodoListsWithFiltersParams{
+		TitleContains:    sqlcParams.TitleContains,
+		CreateTimeAfter:  sqlcParams.CreateTimeAfter,
+		CreateTimeBefore: sqlcParams.CreateTimeBefore,
+	}
+	totalCount, err := s.queries.CountTodoListsWithFilters(ctx, countParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count lists: %w", err)
+	}
+
+	// Calculate if there are more results
+	hasMore := (params.Offset + params.Limit) < int(totalCount)
+
+	return &domain.PagedListResult{
+		Lists:      lists,
+		TotalCount: int(totalCount),
+		HasMore:    hasMore,
+	}, nil
 }
 
 // UpdateList updates an existing todo list metadata (title, etc).
@@ -133,7 +218,7 @@ func (s *Store) UpdateList(ctx context.Context, list *domain.TodoList) error {
 	}
 
 	params := sqlcgen.UpdateTodoListParams{
-		ID:    id,
+		ID:    uuidToPgtype(id),
 		Title: list.Title,
 	}
 
@@ -159,6 +244,9 @@ func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.Todo
 		if isForeignKeyViolation(err, "list_id") {
 			return fmt.Errorf("%w: %v", domain.ErrListNotFound, err)
 		}
+		if isForeignKeyViolation(err, "recurring_template_id") {
+			return fmt.Errorf("%w: %v", domain.ErrTemplateNotFound, err)
+		}
 		return fmt.Errorf("failed to create item: %w", err)
 	}
 
@@ -173,20 +261,24 @@ func (s *Store) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, 
 		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	dbItem, err := s.queries.GetTodoItem(ctx, itemUUID)
+	dbItem, err := s.queries.GetTodoItem(ctx, uuidToPgtype(itemUUID))
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: item %s", domain.ErrNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get item: %w", err)
 	}
 
-	item := dbTodoItemToDomain(dbItem)
+	item, err := dbTodoItemToDomain(dbItem)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert item: %w", err)
+	}
 	return &item, nil
 }
 
 // UpdateItem updates an existing todo item.
 // Validates that the item belongs to the specified list to prevent cross-list updates.
+// Returns domain.ErrVersionConflict if the item was modified concurrently.
 func (s *Store) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
 	params, err := domainTodoItemToUpdateParams(item)
 	if err != nil {
@@ -198,23 +290,50 @@ func (s *Store) UpdateItem(ctx context.Context, listID string, item *domain.Todo
 	if err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
-	params.ListID = listUUID
+	params.ListID = uuidToPgtype(listUUID)
 
-	// Single-query pattern: check rowsAffected to detect non-existent record or list mismatch
-	// Returns 0 rows if either the item doesn't exist OR it doesn't belong to the specified list
+	// Optimistic locking: rowsAffected == 0 means either:
+	// 1. Item doesn't exist
+	// 2. Item belongs to different list
+	// 3. Version mismatch (concurrent update)
 	rowsAffected, err := s.queries.UpdateTodoItem(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to update item: %w", err)
 	}
 
-	return checkRowsAffected(rowsAffected, "item", item.ID)
+	if rowsAffected == 0 {
+		// Distinguish between not-found and version-conflict
+		// Check if item exists with correct list_id
+		itemUUID, err := uuid.Parse(item.ID)
+		if err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		}
+
+		existingItem, err := s.queries.GetTodoItem(ctx, uuidToPgtype(itemUUID))
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("%w: item %s", domain.ErrNotFound, item.ID)
+			}
+			return fmt.Errorf("failed to check item existence: %w", err)
+		}
+
+		// Item exists - check if list ID matches
+		if pgtypeToUUIDString(existingItem.ListID) != listID {
+			return fmt.Errorf("%w: item %s", domain.ErrNotFound, item.ID)
+		}
+
+		// Item exists and belongs to correct list, so update failed due to version mismatch
+		return fmt.Errorf("%w: item was updated by another request (expected version %d, current version %d)",
+			domain.ErrVersionConflict, item.Version, existingItem.Version)
+	}
+
+	return nil
 }
 
 // FindItems searches for items with filtering, sorting, and pagination.
 func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
 	// Build the query parameters for sqlc - uses zero values to skip filters
 	var zeroUUID uuid.UUID
-	var zeroTime time.Time
 
 	// Column1: list_id (zero UUID to search all lists)
 	listUUID := zeroUUID
@@ -244,21 +363,15 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		tag = *params.Tag
 	}
 
-	// Column5: due_before (zero time to skip)
-	dueBefore := zeroTime
-	if params.DueBefore != nil {
-		dueBefore = *params.DueBefore
-	}
+	// Column5: due_before (zero time to skip filter)
+	dueBefore := timePtrToPgtypeForFilter(params.DueBefore)
 
-	// Column6: due_after (zero time to skip)
-	dueAfter := zeroTime
-	if params.DueAfter != nil {
-		dueAfter = *params.DueAfter
-	}
+	// Column6: due_after (zero time to skip filter)
+	dueAfter := timePtrToPgtypeForFilter(params.DueAfter)
 
-	// Column7, Column8: updated_at and created_at filters (zero time to skip)
-	updatedAt := zeroTime
-	createdAt := zeroTime
+	// Column7, Column8: updated_at and created_at filters (zero time to skip filter)
+	updatedAt := timePtrToPgtypeForFilter(nil)
+	createdAt := timePtrToPgtypeForFilter(nil)
 
 	// Column9: order_by combined with direction (e.g., "created_at_desc", "due_time_asc")
 	// If direction is specified, append it; otherwise use bare field name (SQL uses defaults)
@@ -268,7 +381,7 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 	}
 
 	sqlcParams := sqlcgen.ListTasksWithFiltersParams{
-		Column1: listUUID,
+		Column1: uuidToPgtype(listUUID),
 		Column2: status,
 		Column3: priority,
 		Column4: tag,
@@ -296,7 +409,7 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		// Empty page - need separate count query to know actual total
 		// This handles the case where offset >= total items
 		countParams := sqlcgen.CountTasksWithFiltersParams{
-			Column1: listUUID,
+			Column1: uuidToPgtype(listUUID),
 			Column2: status,
 			Column3: priority,
 			Column4: tag,
@@ -315,7 +428,11 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 	// Convert to domain items
 	items := make([]domain.TodoItem, len(dbItems))
 	for i, dbItem := range dbItems {
-		items[i] = dbListTasksRowToDomain(dbItem)
+		item, err := dbListTasksRowToDomain(dbItem)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert item: %w", err)
+		}
+		items[i] = item
 	}
 
 	// HasMore is true if there are more items beyond what we've returned
@@ -354,9 +471,9 @@ func (s *Store) FindRecurringTemplate(ctx context.Context, id string) (*domain.R
 		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, templateUUID)
+	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, uuidToPgtype(templateUUID))
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: template %s", domain.ErrNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get template: %w", err)
@@ -379,28 +496,25 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, template *domain.Re
 
 	// Build update parameters
 	params := sqlcgen.UpdateRecurringTemplateParams{
-		ID:                templateID,
+		ID:                uuidToPgtype(templateID),
 		Title:             template.Title,
 		RecurrencePattern: string(template.RecurrencePattern),
-		UpdatedAt:         template.UpdatedAt,
+		UpdatedAt:         timeToPgtype(template.UpdatedAt),
 	}
 
-	// Tags
+	// Tags (now []byte in pgx)
 	if len(template.Tags) > 0 {
 		tagsJSON, err := json.Marshal(template.Tags)
 		if err != nil {
 			return fmt.Errorf("failed to marshal tags: %w", err)
 		}
-		params.Tags.RawMessage = tagsJSON
-		params.Tags.Valid = true
+		params.Tags = tagsJSON
 	}
 
-	// Priority
+	// Priority (now *string in pgx)
 	if template.Priority != nil {
-		params.Priority = sql.NullString{
-			String: string(*template.Priority),
-			Valid:  true,
-		}
+		priority := string(*template.Priority)
+		params.Priority = &priority
 	}
 
 	// Estimated Duration
@@ -439,7 +553,7 @@ func (s *Store) DeleteRecurringTemplate(ctx context.Context, id string) error {
 	}
 
 	// Single-query pattern: check rowsAffected to detect non-existent record
-	rowsAffected, err := s.queries.DeleteRecurringTemplate(ctx, templateUUID)
+	rowsAffected, err := s.queries.DeleteRecurringTemplate(ctx, uuidToPgtype(templateUUID))
 	if err != nil {
 		return fmt.Errorf("failed to delete template: %w", err)
 	}
@@ -457,13 +571,13 @@ func (s *Store) FindRecurringTemplates(ctx context.Context, listID string, activ
 	var dbTemplates []sqlcgen.RecurringTaskTemplate
 	if activeOnly {
 		// Get active templates for this specific list (WHERE list_id = $1 AND is_active = true)
-		dbTemplates, err = s.queries.ListRecurringTemplates(ctx, listUUID)
+		dbTemplates, err = s.queries.ListRecurringTemplates(ctx, uuidToPgtype(listUUID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to list active templates: %w", err)
 		}
 	} else {
 		// Get all templates (active and inactive) for this list (WHERE list_id = $1)
-		dbTemplates, err = s.queries.ListAllRecurringTemplatesByList(ctx, listUUID)
+		dbTemplates, err = s.queries.ListAllRecurringTemplatesByList(ctx, uuidToPgtype(listUUID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to list templates: %w", err)
 		}

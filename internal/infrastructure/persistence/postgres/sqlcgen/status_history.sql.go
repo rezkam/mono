@@ -7,10 +7,8 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createStatusHistoryEntry = `-- name: CreateStatusHistoryEntry :exec
@@ -19,16 +17,16 @@ VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateStatusHistoryEntryParams struct {
-	ID         uuid.UUID      `json:"id"`
-	TaskID     uuid.UUID      `json:"task_id"`
-	FromStatus sql.NullString `json:"from_status"`
-	ToStatus   string         `json:"to_status"`
-	ChangedAt  time.Time      `json:"changed_at"`
-	Notes      sql.NullString `json:"notes"`
+	ID         pgtype.UUID        `json:"id"`
+	TaskID     pgtype.UUID        `json:"task_id"`
+	FromStatus *string            `json:"from_status"`
+	ToStatus   string             `json:"to_status"`
+	ChangedAt  pgtype.Timestamptz `json:"changed_at"`
+	Notes      *string            `json:"notes"`
 }
 
 func (q *Queries) CreateStatusHistoryEntry(ctx context.Context, arg CreateStatusHistoryEntryParams) error {
-	_, err := q.db.ExecContext(ctx, createStatusHistoryEntry,
+	_, err := q.db.Exec(ctx, createStatusHistoryEntry,
 		arg.ID,
 		arg.TaskID,
 		arg.FromStatus,
@@ -45,8 +43,8 @@ WHERE task_id = $1
 ORDER BY changed_at DESC
 `
 
-func (q *Queries) GetTaskStatusHistory(ctx context.Context, taskID uuid.UUID) ([]TaskStatusHistory, error) {
-	rows, err := q.db.QueryContext(ctx, getTaskStatusHistory, taskID)
+func (q *Queries) GetTaskStatusHistory(ctx context.Context, taskID pgtype.UUID) ([]TaskStatusHistory, error) {
+	rows, err := q.db.Query(ctx, getTaskStatusHistory, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,9 +63,6 @@ func (q *Queries) GetTaskStatusHistory(ctx context.Context, taskID uuid.UUID) ([
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -82,13 +77,13 @@ ORDER BY changed_at ASC
 `
 
 type GetTaskStatusHistoryByDateRangeParams struct {
-	TaskID      uuid.UUID `json:"task_id"`
-	ChangedAt   time.Time `json:"changed_at"`
-	ChangedAt_2 time.Time `json:"changed_at_2"`
+	TaskID      pgtype.UUID        `json:"task_id"`
+	ChangedAt   pgtype.Timestamptz `json:"changed_at"`
+	ChangedAt_2 pgtype.Timestamptz `json:"changed_at_2"`
 }
 
 func (q *Queries) GetTaskStatusHistoryByDateRange(ctx context.Context, arg GetTaskStatusHistoryByDateRangeParams) ([]TaskStatusHistory, error) {
-	rows, err := q.db.QueryContext(ctx, getTaskStatusHistoryByDateRange, arg.TaskID, arg.ChangedAt, arg.ChangedAt_2)
+	rows, err := q.db.Query(ctx, getTaskStatusHistoryByDateRange, arg.TaskID, arg.ChangedAt, arg.ChangedAt_2)
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +102,6 @@ func (q *Queries) GetTaskStatusHistoryByDateRange(ctx context.Context, arg GetTa
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

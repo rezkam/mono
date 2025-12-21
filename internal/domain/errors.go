@@ -27,4 +27,7 @@ var (
 	ErrItemNotFound     = errors.New("item not found")
 	ErrTemplateNotFound = errors.New("recurring template not found")
 	ErrUnauthorized     = errors.New("unauthorized")
+
+	// Concurrency errors
+	ErrVersionConflict = errors.New("resource was modified by another request")
 )

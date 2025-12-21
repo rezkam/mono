@@ -7,10 +7,8 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createGenerationJob = `-- name: CreateGenerationJob :exec
@@ -23,13 +21,13 @@ INSERT INTO recurring_generation_jobs (
 `
 
 type CreateGenerationJobParams struct {
-	ID            uuid.UUID   `json:"id"`
-	TemplateID    uuid.UUID   `json:"template_id"`
-	Column3       interface{} `json:"column_3"`
-	Status        string      `json:"status"`
-	GenerateFrom  time.Time   `json:"generate_from"`
-	GenerateUntil time.Time   `json:"generate_until"`
-	CreatedAt     time.Time   `json:"created_at"`
+	ID            pgtype.UUID        `json:"id"`
+	TemplateID    pgtype.UUID        `json:"template_id"`
+	Column3       interface{}        `json:"column_3"`
+	Status        string             `json:"status"`
+	GenerateFrom  pgtype.Date        `json:"generate_from"`
+	GenerateUntil pgtype.Date        `json:"generate_until"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 // Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
@@ -37,7 +35,7 @@ type CreateGenerationJobParams struct {
 // between the application and database from making jobs temporarily unclaimable.
 // For future scheduling, pass an explicit timestamp to override the default.
 func (q *Queries) CreateGenerationJob(ctx context.Context, arg CreateGenerationJobParams) error {
-	_, err := q.db.ExecContext(ctx, createGenerationJob,
+	_, err := q.db.Exec(ctx, createGenerationJob,
 		arg.ID,
 		arg.TemplateID,
 		arg.Column3,
@@ -54,8 +52,8 @@ DELETE FROM recurring_generation_jobs
 WHERE status = 'COMPLETED' AND completed_at < $1
 `
 
-func (q *Queries) DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.NullTime) error {
-	_, err := q.db.ExecContext(ctx, deleteCompletedGenerationJobs, completedAt)
+func (q *Queries) DeleteCompletedGenerationJobs(ctx context.Context, completedAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, deleteCompletedGenerationJobs, completedAt)
 	return err
 }
 
@@ -64,8 +62,8 @@ SELECT id, template_id, scheduled_for, started_at, completed_at, failed_at, stat
 WHERE id = $1
 `
 
-func (q *Queries) GetGenerationJob(ctx context.Context, id uuid.UUID) (RecurringGenerationJob, error) {
-	row := q.db.QueryRowContext(ctx, getGenerationJob, id)
+func (q *Queries) GetGenerationJob(ctx context.Context, id pgtype.UUID) (RecurringGenerationJob, error) {
+	row := q.db.QueryRow(ctx, getGenerationJob, id)
 	var i RecurringGenerationJob
 	err := row.Scan(
 		&i.ID,
@@ -93,8 +91,8 @@ SELECT EXISTS(
 
 // Checks if a template already has a pending or running job to prevent duplicates.
 // Returns true if such a job exists, false otherwise.
-func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID uuid.UUID) (bool, error) {
-	row := q.db.QueryRowContext(ctx, hasPendingOrRunningJob, templateID)
+func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingOrRunningJob, templateID)
 	var has_job bool
 	err := row.Scan(&has_job)
 	return has_job, err
@@ -108,12 +106,12 @@ LIMIT $2
 `
 
 type ListPendingGenerationJobsParams struct {
-	ScheduledFor time.Time `json:"scheduled_for"`
-	Limit        int32     `json:"limit"`
+	ScheduledFor pgtype.Timestamptz `json:"scheduled_for"`
+	Limit        int32              `json:"limit"`
 }
 
 func (q *Queries) ListPendingGenerationJobs(ctx context.Context, arg ListPendingGenerationJobsParams) ([]RecurringGenerationJob, error) {
-	rows, err := q.db.QueryContext(ctx, listPendingGenerationJobs, arg.ScheduledFor, arg.Limit)
+	rows, err := q.db.Query(ctx, listPendingGenerationJobs, arg.ScheduledFor, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +137,6 @@ func (q *Queries) ListPendingGenerationJobs(ctx context.Context, arg ListPending
 		}
 		items = append(items, i)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -159,10 +154,10 @@ WHERE id = $4
 `
 
 type UpdateGenerationJobStatusParams struct {
-	Status       string         `json:"status"`
-	StartedAt    sql.NullTime   `json:"started_at"`
-	ErrorMessage sql.NullString `json:"error_message"`
-	ID           uuid.UUID      `json:"id"`
+	Status       string             `json:"status"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	ErrorMessage *string            `json:"error_message"`
+	ID           pgtype.UUID        `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
@@ -171,7 +166,7 @@ type UpdateGenerationJobStatusParams struct {
 // retry_count is preserved automatically (not in SET clause)
 // Critical for worker: Detects if job was deleted/claimed by another worker between operations
 func (q *Queries) UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateGenerationJobStatus,
+	result, err := q.db.Exec(ctx, updateGenerationJobStatus,
 		arg.Status,
 		arg.StartedAt,
 		arg.ErrorMessage,
@@ -180,5 +175,5 @@ func (q *Queries) UpdateGenerationJobStatus(ctx context.Context, arg UpdateGener
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	return result.RowsAffected(), nil
 }
