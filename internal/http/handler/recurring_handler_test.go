@@ -148,6 +148,70 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	assert.Equal(t, 60, repo.capturedTemplate.GenerationWindowDays, "generation_window_days should be updated to 60")
 }
 
+// TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest tests that
+// invalid duration strings (estimated_duration, due_offset) return 400 Bad Request
+// instead of silently accepting 0.
+func TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest(t *testing.T) {
+	repo := &stubRepository{}
+	service := todo.NewService(repo, todo.Config{})
+	srv := NewServer(service)
+
+	listID := types.UUID(uuid.New())
+
+	tests := []struct {
+		name              string
+		estimatedDuration *string
+		dueOffset         *string
+		wantStatus        int
+	}{
+		{
+			name:              "invalid estimated_duration returns 400",
+			estimatedDuration: ptrString("invalid"),
+			dueOffset:         nil,
+			wantStatus:        http.StatusBadRequest,
+		},
+		{
+			name:              "invalid due_offset returns 400",
+			estimatedDuration: nil,
+			dueOffset:         ptrString("garbage"),
+			wantStatus:        http.StatusBadRequest,
+		},
+		{
+			name:              "empty string estimated_duration returns 400",
+			estimatedDuration: func() *string { s := ""; return &s }(),
+			dueOffset:         nil,
+			wantStatus:        http.StatusBadRequest,
+		},
+		{
+			name:              "number without unit returns 400",
+			estimatedDuration: ptrString("30"),
+			dueOffset:         nil,
+			wantStatus:        http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pattern := openapi.RecurrencePattern("daily")
+			reqBody := openapi.CreateRecurringTemplateRequest{
+				Title:             "Test Template",
+				RecurrencePattern: pattern,
+				EstimatedDuration: tt.estimatedDuration,
+				DueOffset:         tt.dueOffset,
+			}
+			body, _ := json.Marshal(reqBody)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/lists/"+listID.String()+"/recurring-templates", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			srv.CreateRecurringTemplate(w, req, listID)
+
+			assert.Equal(t, tt.wantStatus, w.Code, "expected status %d but got %d", tt.wantStatus, w.Code)
+		})
+	}
+}
+
 // TestMapTemplateToDTO_IncludesRecurrenceConfig tests that
 // MapTemplateToDTO includes recurrence_config in the response.
 func TestMapTemplateToDTO_IncludesRecurrenceConfig(t *testing.T) {

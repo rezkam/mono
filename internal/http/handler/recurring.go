@@ -43,12 +43,20 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	if req.EstimatedDuration != nil {
-		duration := parseDuration(*req.EstimatedDuration)
+		duration, err := parseDuration(*req.EstimatedDuration)
+		if err != nil {
+			response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+			return
+		}
 		template.EstimatedDuration = &duration
 	}
 
 	if req.DueOffset != nil {
-		duration := parseDuration(*req.DueOffset)
+		duration, err := parseDuration(*req.DueOffset)
+		if err != nil {
+			response.BadRequest(w, "invalid due_offset: "+err.Error())
+			return
+		}
 		template.DueOffset = &duration
 	}
 
@@ -145,11 +153,19 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 			existing.Priority = &priority
 		}
 		if req.Template.EstimatedDuration != nil {
-			duration := parseDuration(*req.Template.EstimatedDuration)
+			duration, err := parseDuration(*req.Template.EstimatedDuration)
+			if err != nil {
+				response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+				return
+			}
 			existing.EstimatedDuration = &duration
 		}
 		if req.Template.DueOffset != nil {
-			duration := parseDuration(*req.Template.DueOffset)
+			duration, err := parseDuration(*req.Template.DueOffset)
+			if err != nil {
+				response.BadRequest(w, "invalid due_offset: "+err.Error())
+				return
+			}
 			existing.DueOffset = &duration
 		}
 		if req.Template.RecurrencePattern != nil {
@@ -189,12 +205,20 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 				}
 			case "estimated_duration":
 				if req.Template.EstimatedDuration != nil {
-					duration := parseDuration(*req.Template.EstimatedDuration)
+					duration, err := parseDuration(*req.Template.EstimatedDuration)
+					if err != nil {
+						response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+						return
+					}
 					existing.EstimatedDuration = &duration
 				}
 			case "due_offset":
 				if req.Template.DueOffset != nil {
-					duration := parseDuration(*req.Template.DueOffset)
+					duration, err := parseDuration(*req.Template.DueOffset)
+					if err != nil {
+						response.BadRequest(w, "invalid due_offset: "+err.Error())
+						return
+					}
 					existing.DueOffset = &duration
 				}
 			case "recurrence_pattern":

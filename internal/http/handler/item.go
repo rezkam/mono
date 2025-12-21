@@ -129,11 +129,19 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			existing.Timezone = req.Item.Timezone
 		}
 		if req.Item.EstimatedDuration != nil {
-			duration := parseDuration(*req.Item.EstimatedDuration)
+			duration, err := parseDuration(*req.Item.EstimatedDuration)
+			if err != nil {
+				response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+				return
+			}
 			existing.EstimatedDuration = &duration
 		}
 		if req.Item.ActualDuration != nil {
-			duration := parseDuration(*req.Item.ActualDuration)
+			duration, err := parseDuration(*req.Item.ActualDuration)
+			if err != nil {
+				response.BadRequest(w, "invalid actual_duration: "+err.Error())
+				return
+			}
 			existing.ActualDuration = &duration
 		}
 	} else {
@@ -178,12 +186,20 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 				existing.Timezone = req.Item.Timezone
 			case "estimated_duration":
 				if req.Item.EstimatedDuration != nil {
-					duration := parseDuration(*req.Item.EstimatedDuration)
+					duration, err := parseDuration(*req.Item.EstimatedDuration)
+					if err != nil {
+						response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+						return
+					}
 					existing.EstimatedDuration = &duration
 				}
 			case "actual_duration":
 				if req.Item.ActualDuration != nil {
-					duration := parseDuration(*req.Item.ActualDuration)
+					duration, err := parseDuration(*req.Item.ActualDuration)
+					if err != nil {
+						response.BadRequest(w, "invalid actual_duration: "+err.Error())
+						return
+					}
 					existing.ActualDuration = &duration
 				}
 			}

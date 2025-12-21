@@ -27,34 +27,35 @@ import (
 
 // InitializeHTTPServer wires everything together for the HTTP server.
 func InitializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
+	bool2 := provideObservabilityEnabled()
+	logger, cleanup, err := provideObservability(ctx, bool2)
+	if err != nil {
+		return nil, nil, err
+	}
 	serverConfig, err := config.LoadServerConfig()
 	if err != nil {
+		cleanup()
 		return nil, nil, err
 	}
 	storageConfig := &serverConfig.StorageConfig
 	dbConfig := provideDBConfig()
-	store, cleanup, err := provideStore(ctx, storageConfig, dbConfig)
+	store, cleanup2, err := provideStore(ctx, logger, storageConfig, dbConfig)
 	if err != nil {
+		cleanup()
 		return nil, nil, err
 	}
 	todoConfig := provideTodoConfig()
 	service := todo.NewService(store, todoConfig)
 	server := handler.NewServer(service)
 	authConfig := provideAuthConfig()
-	authenticator, cleanup2, err := provideAuthenticator(ctx, store, authConfig)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	auth := middleware.NewAuth(authenticator)
-	mux := http.NewRouter(server, auth)
-	bool2 := provideObservabilityEnabled()
-	logger, cleanup3, err := provideObservability(ctx, bool2)
+	authenticator, cleanup3, err := provideAuthenticator(ctx, store, authConfig)
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
+	auth := middleware.NewAuth(authenticator)
+	mux := http.NewRouter(server, auth)
 	httpServerConfig := provideHTTPServerConfig()
 	httpServer := provideHTTPServer(mux, logger, httpServerConfig)
 	return httpServer, func() {
@@ -96,7 +97,7 @@ func provideDBConfig() postgres.DBConfig {
 
 // provideStore creates a postgres.Store from StorageConfig and DBConfig.
 // Returns the store and a cleanup function that closes the database connection pool.
-func provideStore(ctx context.Context, cfg *config.StorageConfig, dbCfg postgres.DBConfig) (*postgres.Store, func(), error) {
+func provideStore(ctx context.Context, logger *slog.Logger, cfg *config.StorageConfig, dbCfg postgres.DBConfig) (*postgres.Store, func(), error) {
 	dbCfg.DSN = cfg.StorageDSN
 	store, err := postgres.NewStoreWithConfig(ctx, dbCfg)
 	if err != nil {
@@ -190,6 +191,7 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 		tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
 	}
+	slog.SetDefault(logger)
 
 	cleanup := func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

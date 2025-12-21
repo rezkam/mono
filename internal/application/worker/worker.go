@@ -18,6 +18,7 @@ type Worker struct {
 	processInterval  time.Duration
 	operationTimeout time.Duration // Timeout for individual storage operations
 	done             chan struct{}
+	stopOnce         sync.Once // Ensures Stop is idempotent
 	wg               sync.WaitGroup
 }
 
@@ -111,8 +112,11 @@ func (w *Worker) Start(ctx context.Context) error {
 }
 
 // Stop gracefully stops the worker.
+// This method is idempotent and safe to call multiple times.
 func (w *Worker) Stop() error {
-	close(w.done)
+	w.stopOnce.Do(func() {
+		close(w.done)
+	})
 	return nil
 }
 
@@ -201,14 +205,14 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	}
 
 	// Get template
-	getTemplateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-	defer cancel()
+	getTemplateCtx, getTemplateCancel := context.WithTimeout(ctx, w.operationTimeout)
 	template, err := w.repo.GetRecurringTemplate(getTemplateCtx, job.TemplateID)
+	getTemplateCancel()
 	if err != nil {
 		errMsg := fmt.Sprintf("template not found: %v", err)
-		updateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-		defer cancel()
+		updateCtx, updateCancel := context.WithTimeout(ctx, w.operationTimeout)
 		updateErr := w.repo.UpdateGenerationJobStatus(updateCtx, jobID, "FAILED", &errMsg)
+		updateCancel()
 		if updateErr != nil {
 			log.Printf("ERROR: Failed to mark job %s as FAILED after template error: %v", jobID, updateErr)
 			return false, fmt.Errorf("failed to get template: %w (additionally, failed to update job status: %v)", err, updateErr)
@@ -219,14 +223,14 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	log.Printf("Processing job %s for template %s (%s)", jobID, template.ID, template.Title)
 
 	// Generate tasks (may involve storage operations, so apply timeout)
-	genCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-	defer cancel()
+	genCtx, genCancel := context.WithTimeout(ctx, w.operationTimeout)
 	tasks, err := w.generator.GenerateTasksForTemplate(genCtx, template, job.GenerateFrom, job.GenerateUntil)
+	genCancel()
 	if err != nil {
 		errMsg := fmt.Sprintf("generation failed: %v", err)
-		updateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-		defer cancel()
+		updateCtx, updateCancel := context.WithTimeout(ctx, w.operationTimeout)
 		updateErr := w.repo.UpdateGenerationJobStatus(updateCtx, jobID, "FAILED", &errMsg)
+		updateCancel()
 		if updateErr != nil {
 			log.Printf("ERROR: Failed to mark job %s as FAILED after generation error: %v", jobID, updateErr)
 			return false, fmt.Errorf("failed to generate tasks: %w (additionally, failed to update job status: %v)", err, updateErr)
@@ -238,14 +242,14 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	// IMPORTANT: Use CreateTodoItem to preserve existing items and their status history
 	if len(tasks) > 0 {
 		for _, task := range tasks {
-			createCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-			defer cancel()
+			createCtx, createCancel := context.WithTimeout(ctx, w.operationTimeout)
 			err := w.repo.CreateTodoItem(createCtx, template.ListID, &task)
+			createCancel() // Release context resources immediately after each iteration
 			if err != nil {
 				errMsg := fmt.Sprintf("failed to create task: %v", err)
-				updateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-				defer cancel()
+				updateCtx, updateCancel := context.WithTimeout(ctx, w.operationTimeout)
 				updateErr := w.repo.UpdateGenerationJobStatus(updateCtx, jobID, "FAILED", &errMsg)
+				updateCancel()
 				if updateErr != nil {
 					log.Printf("ERROR: Failed to mark job %s as FAILED after task creation error: %v", jobID, updateErr)
 					return false, fmt.Errorf("failed to create task: %w (additionally, failed to update job status: %v)", err, updateErr)
@@ -258,18 +262,18 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	}
 
 	// Update template's last_generated_until
-	updateWindowCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-	defer cancel()
+	updateWindowCtx, updateWindowCancel := context.WithTimeout(ctx, w.operationTimeout)
 	err = w.repo.UpdateRecurringTemplateGenerationWindow(updateWindowCtx, template.ID, job.GenerateUntil)
+	updateWindowCancel()
 	if err != nil {
 		log.Printf("Warning: Failed to update template %s generation window: %v", template.ID, err)
 		// Don't fail the job for this - tasks were created successfully
 	}
 
 	// Mark job as completed
-	completeCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
-	defer cancel()
+	completeCtx, completeCancel := context.WithTimeout(ctx, w.operationTimeout)
 	err = w.repo.UpdateGenerationJobStatus(completeCtx, jobID, "COMPLETED", nil)
+	completeCancel()
 	if err != nil {
 		// Tasks were created but job status update failed - job will be stuck in RUNNING state
 		log.Printf("ERROR: Failed to mark job %s as COMPLETED (tasks were created, job stuck in RUNNING): %v", jobID, err)

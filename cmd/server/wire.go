@@ -57,7 +57,7 @@ func provideDBConfig() postgres.DBConfig {
 
 // provideStore creates a postgres.Store from StorageConfig and DBConfig.
 // Returns the store and a cleanup function that closes the database connection pool.
-func provideStore(ctx context.Context, cfg *config.StorageConfig, dbCfg postgres.DBConfig) (*postgres.Store, func(), error) {
+func provideStore(ctx context.Context, logger *slog.Logger, cfg *config.StorageConfig, dbCfg postgres.DBConfig) (*postgres.Store, func(), error) {
 	dbCfg.DSN = cfg.StorageDSN
 	store, err := postgres.NewStoreWithConfig(ctx, dbCfg)
 	if err != nil {
@@ -158,6 +158,9 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 		tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
 	}
+
+	// Set as default so standard log package also uses structured logging
+	slog.SetDefault(logger)
 
 	cleanup := func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

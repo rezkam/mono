@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -151,11 +152,15 @@ func stringValue(s *string) string {
 	return *s
 }
 
-// parseDuration parses a duration string (e.g., "1h30m") into time.Duration
-func parseDuration(s string) time.Duration {
+// parseDuration parses a duration string (e.g., "1h30m") into time.Duration.
+// Returns an error for invalid duration formats.
+func parseDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, fmt.Errorf("duration cannot be empty")
+	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("invalid duration format: %w", err)
 	}
-	return d
+	return d, nil
 }

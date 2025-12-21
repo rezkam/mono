@@ -83,8 +83,9 @@ func (a *Authenticator) processLastUsedUpdates() {
 		select {
 		case update := <-a.lastUsedUpdates:
 			// Derive context from application context (respects shutdown)
+			// Note: We call cancel() explicitly instead of using defer because
+			// defer in a loop defers until function exit, causing resource leaks.
 			ctx, cancel := context.WithTimeout(a.appCtx, a.operationTimeout)
-			defer cancel()
 
 			if err := a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp); err != nil {
 				// Log failure but continue processing (last_used_at is non-critical)
@@ -92,6 +93,7 @@ func (a *Authenticator) processLastUsedUpdates() {
 					slog.String("key_id", update.keyID),
 					slog.String("error", err.Error()))
 			}
+			cancel() // Release context resources immediately after each iteration
 
 		case <-a.shutdownChan:
 			// Drain remaining updates before shutdown
@@ -103,8 +105,8 @@ func (a *Authenticator) processLastUsedUpdates() {
 					// cleanup operations should succeed regardless of application state.
 					// The timeout still applies to prevent hanging on storage issues.
 					ctx, cancel := context.WithTimeout(context.Background(), a.operationTimeout)
-					defer cancel()
 					_ = a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp)
+					cancel() // Release context resources immediately after each iteration
 				default:
 					// No more updates, exit cleanly
 					return
