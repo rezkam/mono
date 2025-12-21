@@ -5,12 +5,12 @@ package domain
 type TaskStatus string
 
 const (
-	TaskStatusTodo       TaskStatus = "TODO"
-	TaskStatusInProgress TaskStatus = "IN_PROGRESS"
-	TaskStatusBlocked    TaskStatus = "BLOCKED"
-	TaskStatusDone       TaskStatus = "DONE"
-	TaskStatusArchived   TaskStatus = "ARCHIVED"
-	TaskStatusCancelled  TaskStatus = "CANCELLED"
+	TaskStatusTodo       TaskStatus = "todo"
+	TaskStatusInProgress TaskStatus = "in_progress"
+	TaskStatusBlocked    TaskStatus = "blocked"
+	TaskStatusDone       TaskStatus = "done"
+	TaskStatusArchived   TaskStatus = "archived"
+	TaskStatusCancelled  TaskStatus = "cancelled"
 )
 
 // TaskPriority represents the priority level of a task.
@@ -18,10 +18,10 @@ const (
 type TaskPriority string
 
 const (
-	TaskPriorityLow    TaskPriority = "LOW"
-	TaskPriorityMedium TaskPriority = "MEDIUM"
-	TaskPriorityHigh   TaskPriority = "HIGH"
-	TaskPriorityUrgent TaskPriority = "URGENT"
+	TaskPriorityLow    TaskPriority = "low"
+	TaskPriorityMedium TaskPriority = "medium"
+	TaskPriorityHigh   TaskPriority = "high"
+	TaskPriorityUrgent TaskPriority = "urgent"
 )
 
 // RecurrencePattern represents the type of recurrence for recurring tasks.
@@ -29,11 +29,11 @@ const (
 type RecurrencePattern string
 
 const (
-	RecurrenceDaily     RecurrencePattern = "DAILY"
-	RecurrenceWeekly    RecurrencePattern = "WEEKLY"
-	RecurrenceBiweekly  RecurrencePattern = "BIWEEKLY"
-	RecurrenceMonthly   RecurrencePattern = "MONTHLY"
-	RecurrenceYearly    RecurrencePattern = "YEARLY"
-	RecurrenceQuarterly RecurrencePattern = "QUARTERLY"
-	RecurrenceWeekdays  RecurrencePattern = "WEEKDAYS"
+	RecurrenceDaily     RecurrencePattern = "daily"
+	RecurrenceWeekly    RecurrencePattern = "weekly"
+	RecurrenceBiweekly  RecurrencePattern = "biweekly"
+	RecurrenceMonthly   RecurrencePattern = "monthly"
+	RecurrenceYearly    RecurrencePattern = "yearly"
+	RecurrenceQuarterly RecurrencePattern = "quarterly"
+	RecurrenceWeekdays  RecurrencePattern = "weekdays"
 )

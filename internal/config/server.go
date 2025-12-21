@@ -10,11 +10,9 @@ import (
 type ServerConfig struct {
 	StorageConfig
 	StoragePoolConfig
-	GRPCConfig
 	GatewayConfig
 	AuthConfig
 	APIKeyConfig
-	PaginationConfig
 	ObservabilityConfig
 
 	Env             string `env:"MONO_ENV" default:"dev"`
@@ -39,10 +37,6 @@ func LoadServerConfig() (*ServerConfig, error) {
 // Validate validates server-specific configuration.
 func (c *ServerConfig) Validate() error {
 	if err := c.StorageConfig.Validate(); err != nil {
-		return err
-	}
-
-	if err := c.PaginationConfig.Validate(); err != nil {
 		return err
 	}
 

@@ -13,4 +13,18 @@ var (
 
 	// ErrInvalidID indicates the provided ID format is invalid.
 	ErrInvalidID = errors.New("invalid ID format")
+
+	// Validation errors
+	ErrTitleRequired                 = errors.New("title is required")
+	ErrTitleTooLong                  = errors.New("title must be 255 characters or less")
+	ErrInvalidTaskStatus             = errors.New("invalid task status")
+	ErrInvalidTaskPriority           = errors.New("invalid task priority")
+	ErrInvalidRecurrencePattern      = errors.New("invalid recurrence pattern")
+	ErrRecurringTaskRequiresTemplate = errors.New("recurring task must have template ID")
+	ErrInvalidGenerationWindow       = errors.New("generation window must be 1-365 days")
+
+	// Business logic errors
+	ErrItemNotFound     = errors.New("item not found")
+	ErrTemplateNotFound = errors.New("recurring template not found")
+	ErrUnauthorized     = errors.New("unauthorized")
 )
