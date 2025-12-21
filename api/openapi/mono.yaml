@@ -1,0 +1,747 @@
+openapi: 3.0.3
+info:
+  title: Mono Task Management API
+  version: 1.0.0
+  description: RESTful API for task and list management with recurring templates
+
+servers:
+  - url: http://localhost:8080/api
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+paths:
+  /v1/lists:
+    post:
+      operationId: createList
+      summary: Create a new todo list
+      tags: [Lists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListRequest'
+      responses:
+        '201':
+          description: List created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      operationId: listLists
+      summary: List all todo lists with pagination
+      tags: [Lists]
+      parameters:
+        - name: page_size
+          in: query
+          description: Number of lists per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page_token
+          in: query
+          description: Page token from previous response
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: AIP-160 filter expression
+          schema:
+            type: string
+          example: "create_time > '2024-01-01'"
+        - name: order_by
+          in: query
+          description: AIP-132 sorting expression
+          schema:
+            type: string
+          example: "create_time desc"
+      responses:
+        '200':
+          description: Lists retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListListsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/lists/{id}:
+    get:
+      operationId: getList
+      summary: Get a todo list by ID
+      tags: [Lists]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/lists/{list_id}/items:
+    post:
+      operationId: createItem
+      summary: Create a new item in a list
+      tags: [Items]
+      parameters:
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemRequest'
+      responses:
+        '201':
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/lists/{list_id}/items/{item_id}:
+    patch:
+      operationId: updateItem
+      summary: Update an existing item
+      tags: [Items]
+      parameters:
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: item_id
+          in: path
+          required: true
+          description: Item ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateItemRequest'
+      responses:
+        '200':
+          description: Item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateItemResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/tasks:
+    get:
+      operationId: listTasks
+      summary: Search tasks globally with filtering and sorting
+      tags: [Tasks]
+      parameters:
+        - name: parent
+          in: query
+          description: Optional parent list ID to filter by
+          schema:
+            type: string
+            format: uuid
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page_token
+          in: query
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: AIP-160 filter expression
+          schema:
+            type: string
+          example: "status='TODO' AND priority='HIGH'"
+        - name: order_by
+          in: query
+          description: AIP-132 sorting expression
+          schema:
+            type: string
+          example: "due_time desc"
+      responses:
+        '200':
+          description: Tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTasksResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/lists/{list_id}/recurring-templates:
+    post:
+      operationId: createRecurringTemplate
+      summary: Create a recurring task template
+      tags: [RecurringTemplates]
+      parameters:
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecurringTemplateRequest'
+      responses:
+        '201':
+          description: Template created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRecurringTemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      operationId: listRecurringTemplates
+      summary: List recurring templates for a list
+      tags: [RecurringTemplates]
+      parameters:
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: active_only
+          in: query
+          description: Filter for active templates only
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Templates retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRecurringTemplatesResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/recurring-templates/{id}:
+    get:
+      operationId: getRecurringTemplate
+      summary: Get a recurring template by ID
+      tags: [RecurringTemplates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRecurringTemplateResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    patch:
+      operationId: updateRecurringTemplate
+      summary: Update a recurring template
+      tags: [RecurringTemplates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecurringTemplateRequest'
+      responses:
+        '200':
+          description: Template updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateRecurringTemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      operationId: deleteRecurringTemplate
+      summary: Delete a recurring template
+      tags: [RecurringTemplates]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Template deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  schemas:
+    # Request schemas
+    CreateListRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Shopping List"
+
+    CreateListResponse:
+      type: object
+      properties:
+        list:
+          $ref: '#/components/schemas/TodoList'
+
+    GetListResponse:
+      type: object
+      properties:
+        list:
+          $ref: '#/components/schemas/TodoList'
+
+    ListListsResponse:
+      type: object
+      properties:
+        lists:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodoList'
+        next_page_token:
+          type: string
+
+    CreateItemRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        due_time:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        estimated_duration:
+          type: string
+          description: ISO 8601 duration
+          example: "PT2H30M"
+        recurring_template_id:
+          type: string
+          format: uuid
+        instance_date:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          description: IANA timezone (e.g., 'Europe/Stockholm')
+          example: "America/New_York"
+
+    CreateItemResponse:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/TodoItem'
+
+    UpdateItemRequest:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/TodoItem'
+        update_mask:
+          type: array
+          items:
+            type: string
+          description: Fields to update (field mask)
+          example: ["title", "status", "priority"]
+
+    UpdateItemResponse:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/TodoItem'
+
+    ListTasksResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodoItem'
+        next_page_token:
+          type: string
+
+    CreateRecurringTemplateRequest:
+      type: object
+      required:
+        - title
+        - recurrence_pattern
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        tags:
+          type: array
+          items:
+            type: string
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        estimated_duration:
+          type: string
+          description: ISO 8601 duration
+        recurrence_pattern:
+          $ref: '#/components/schemas/RecurrencePattern'
+        recurrence_config:
+          type: string
+          description: JSON config for pattern-specific settings
+        due_offset:
+          type: string
+          description: ISO 8601 duration offset from instance date
+        generation_window_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 30
+
+    CreateRecurringTemplateResponse:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/RecurringTaskTemplate'
+
+    GetRecurringTemplateResponse:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/RecurringTaskTemplate'
+
+    UpdateRecurringTemplateRequest:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/RecurringTaskTemplate'
+        update_mask:
+          type: array
+          items:
+            type: string
+          description: Fields to update (field mask)
+
+    UpdateRecurringTemplateResponse:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/RecurringTaskTemplate'
+
+    ListRecurringTemplatesResponse:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecurringTaskTemplate'
+
+    # Domain models
+    TodoList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodoItem'
+        create_time:
+          type: string
+          format: date-time
+        total_items:
+          type: integer
+          description: Total items in this list
+        undone_items:
+          type: integer
+          description: Items not yet done
+
+    TodoItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        create_time:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        due_time:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            type: string
+        estimated_duration:
+          type: string
+          description: ISO 8601 duration
+        actual_duration:
+          type: string
+          description: ISO 8601 duration
+        recurring_template_id:
+          type: string
+          format: uuid
+        instance_date:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+          description: IANA timezone
+
+    RecurringTaskTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        list_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        estimated_duration:
+          type: string
+          description: ISO 8601 duration
+        recurrence_pattern:
+          $ref: '#/components/schemas/RecurrencePattern'
+        recurrence_config:
+          type: string
+          description: JSON configuration
+        due_offset:
+          type: string
+          description: ISO 8601 duration
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_generated_until:
+          type: string
+          format: date-time
+        generation_window_days:
+          type: integer
+
+    # Enums
+    TaskStatus:
+      type: string
+      enum:
+        - todo
+        - in_progress
+        - blocked
+        - done
+        - archived
+        - cancelled
+
+    TaskPriority:
+      type: string
+      enum:
+        - low
+        - medium
+        - high
+        - urgent
+
+    RecurrencePattern:
+      type: string
+      enum:
+        - daily
+        - weekly
+        - biweekly
+        - monthly
+        - yearly
+        - quarterly
+        - weekdays
+
+    # Error schemas
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  issue:
+                    type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized - invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API key passed as Bearer token in Authorization header
