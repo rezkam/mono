@@ -22,11 +22,11 @@ func setupSQLInjectionTest(t *testing.T) (*postgres.Store, func()) {
 	require.NoError(t, err)
 
 	// Clean up tables before test
-	_, err = store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	require.NoError(t, err)
 
 	cleanup := func() {
-		store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 		store.Close()
 	}
 

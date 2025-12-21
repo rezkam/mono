@@ -2,11 +2,12 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
@@ -42,9 +43,9 @@ func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.Re
 		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, templateUUID)
+	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, uuidToPgtype(templateUUID))
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: template %s", domain.ErrNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get template: %w", err)
@@ -66,9 +67,9 @@ func (s *Store) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id 
 	}
 
 	params := sqlcgen.UpdateRecurringTemplateGenerationWindowParams{
-		ID:                 templateUUID,
-		LastGeneratedUntil: until,
-		UpdatedAt:          time.Now().UTC(),
+		ID:                 uuidToPgtype(templateUUID),
+		LastGeneratedUntil: dateToPgtype(until),
+		UpdatedAt:          timeToPgtype(time.Now().UTC()),
 	}
 
 	// Single-query pattern: check rowsAffected to detect if template was deleted
@@ -103,13 +104,13 @@ func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, sche
 	}
 
 	params := sqlcgen.CreateGenerationJobParams{
-		ID:            jobID,
-		TemplateID:    templateUUID,
+		ID:            uuidToPgtype(jobID),
+		TemplateID:    uuidToPgtype(templateUUID),
 		Column3:       scheduledForParam,
 		Status:        "PENDING",
-		GenerateFrom:  from,
-		GenerateUntil: until,
-		CreatedAt:     time.Now().UTC(),
+		GenerateFrom:  dateToPgtype(from),
+		GenerateUntil: dateToPgtype(until),
+		CreatedAt:     timeToPgtype(time.Now().UTC()),
 	}
 
 	if err := s.queries.CreateGenerationJob(ctx, params); err != nil {
@@ -123,19 +124,19 @@ func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, sche
 // This uses a PostgreSQL function claim_next_generation_job() for atomic claiming.
 func (s *Store) ClaimNextGenerationJob(ctx context.Context) (string, error) {
 	// Call the PostgreSQL function that atomically claims a job
-	row := s.db.QueryRowContext(ctx, "SELECT claim_next_generation_job()")
+	row := s.pool.QueryRow(ctx, "SELECT claim_next_generation_job()")
 
-	var jobID sql.NullString
+	var jobID *string
 	if err := row.Scan(&jobID); err != nil {
 		return "", fmt.Errorf("failed to claim job: %w", err)
 	}
 
 	// If no job was available, the function returns NULL
-	if !jobID.Valid {
+	if jobID == nil {
 		return "", nil // Empty string = no jobs available
 	}
 
-	return jobID.String, nil
+	return *jobID, nil
 }
 
 // GetGenerationJob retrieves job details by ID.
@@ -145,9 +146,9 @@ func (s *Store) GetGenerationJob(ctx context.Context, id string) (*domain.Genera
 		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	dbJob, err := s.queries.GetGenerationJob(ctx, jobUUID)
+	dbJob, err := s.queries.GetGenerationJob(ctx, uuidToPgtype(jobUUID))
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: job %s", domain.ErrNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get job: %w", err)
@@ -164,20 +165,10 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 	}
 
 	params := sqlcgen.UpdateGenerationJobStatusParams{
-		ID:     jobUUID,
-		Status: status,
-		StartedAt: sql.NullTime{
-			Time:  time.Now().UTC(),
-			Valid: true,
-		},
-	}
-
-	// Set error message if provided
-	if errorMessage != nil {
-		params.ErrorMessage = sql.NullString{
-			String: *errorMessage,
-			Valid:  true,
-		}
+		ID:           uuidToPgtype(jobUUID),
+		Status:       status,
+		StartedAt:    timeToPgtype(time.Now().UTC()),
+		ErrorMessage: errorMessage,
 	}
 
 	// Single-query pattern: eliminates two-query anti-pattern (GET then UPDATE)
@@ -197,7 +188,7 @@ func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (
 		return false, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	hasJob, err := s.queries.HasPendingOrRunningJob(ctx, templateUUID)
+	hasJob, err := s.queries.HasPendingOrRunningJob(ctx, uuidToPgtype(templateUUID))
 	if err != nil {
 		return false, fmt.Errorf("failed to check for existing job: %w", err)
 	}

@@ -46,7 +46,7 @@ func SetupTestServer(t *testing.T) *TestServer {
 
 	// Create services
 	todoService := todo.NewService(store, todo.Config{})
-	authenticator := auth.NewAuthenticator(ctx, store, 5*time.Second)
+	authenticator := auth.NewAuthenticator(ctx, store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Create handlers and middleware
 	server := handler.NewServer(todoService)

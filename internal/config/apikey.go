@@ -6,6 +6,13 @@ import (
 	"github.com/rezkam/mono/internal/env"
 )
 
+// APIKeyConfig holds API key format configuration.
+type APIKeyConfig struct {
+	APIKeyType     string `env:"MONO_API_KEY_TYPE" default:"sk"`
+	APIServiceName string `env:"MONO_API_SERVICE_NAME" default:"mono"`
+	APIVersion     string `env:"MONO_API_VERSION" default:"v1"`
+}
+
 // APIKeyGenConfig holds all configuration for the apikey binary.
 type APIKeyGenConfig struct {
 	StorageConfig

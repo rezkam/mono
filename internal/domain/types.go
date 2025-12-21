@@ -34,3 +34,31 @@ type PagedResult struct {
 	TotalCount int        // Total matching items across all pages
 	HasMore    bool       // Whether there are more pages
 }
+
+// ListListsParams contains parameters for listing todo lists with filtering, sorting, and pagination.
+//
+// Common use cases:
+//   - "Recent lists": OrderBy="create_time", OrderDir="desc"
+//   - "Lists created after date": CreateTimeAfter=time
+//   - "Lists with title matching": TitleContains="project"
+type ListListsParams struct {
+	// Optional filters (nil = no filter applied)
+	TitleContains    *string    // Filter by title substring (case-insensitive)
+	CreateTimeAfter  *time.Time // Filter lists created after this time
+	CreateTimeBefore *time.Time // Filter lists created before this time
+
+	// Sorting (empty uses defaults: create_time field, desc direction)
+	OrderBy  string // Supported: "create_time", "title"
+	OrderDir string // Sort direction: "asc" or "desc" (empty = "desc")
+
+	// Pagination (both required for correct pagination)
+	Limit  int // Maximum number of items to return (page size)
+	Offset int // Number of items to skip (for page N: offset = (N-1) * limit)
+}
+
+// PagedListResult contains lists matching the query parameters.
+type PagedListResult struct {
+	Lists      []*TodoList // Lists matching the ListListsParams criteria
+	TotalCount int         // Total matching lists across all pages
+	HasMore    bool        // Whether there are more pages
+}

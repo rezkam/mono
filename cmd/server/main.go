@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 func main() {
@@ -42,8 +41,8 @@ func run() error {
 	case <-ctx.Done():
 		fmt.Println("\nReceived shutdown signal")
 
-		// Graceful shutdown with timeout
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// Graceful shutdown with configured timeout
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), server.ShutdownTimeout())
 		defer shutdownCancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {

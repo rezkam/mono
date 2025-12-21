@@ -148,3 +148,57 @@ func TestUpdateItem_InvalidStatusWithoutMask(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code,
 		"expected 400 for invalid status without mask, got %d: %s", w.Code, w.Body.String())
 }
+
+// TestUpdateItem_EmptyTitleRejected verifies that UpdateItem rejects empty titles
+// when sent via field mask, ensuring domain validation is enforced.
+func TestUpdateItem_EmptyTitleRejected(t *testing.T) {
+	ts := SetupTestServer(t)
+	defer ts.Cleanup()
+
+	ctx := context.Background()
+
+	// Create a list and item with valid title
+	list, err := ts.TodoService.CreateList(ctx, "Title Validation List")
+	require.NoError(t, err)
+
+	item, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
+		Title: "Original Valid Title",
+	})
+	require.NoError(t, err)
+
+	// Attempt to update with empty title via field mask
+	emptyTitle := ""
+	updateMask := []string{"title"}
+	reqBody := openapi.UpdateItemRequest{
+		Item: &openapi.TodoItem{
+			Title: &emptyTitle,
+		},
+		UpdateMask: &updateMask,
+	}
+
+	body, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/lists/%s/items/%s", list.ID, item.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+	w := httptest.NewRecorder()
+	ts.Router.ServeHTTP(w, req)
+
+	// Should return 400 Bad Request with validation error
+	assert.Equal(t, http.StatusBadRequest, w.Code,
+		"expected 400 for empty title, got %d: %s", w.Code, w.Body.String())
+
+	var resp openapi.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Error)
+	require.NotNil(t, resp.Error.Code)
+	assert.Equal(t, "VALIDATION_ERROR", *resp.Error.Code)
+
+	// Verify the original title is unchanged
+	updatedItem, err := ts.TodoService.GetItem(ctx, item.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Original Valid Title", updatedItem.Title,
+		"title should remain unchanged after rejected update")
+}

@@ -124,6 +124,25 @@ func (s *Service) ListLists(ctx context.Context) ([]*domain.TodoList, error) {
 	return lists, nil
 }
 
+// FindLists retrieves todo lists with filtering, sorting, and pagination.
+func (s *Service) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+	// Apply default page size if not specified or invalid
+	if params.Limit <= 0 {
+		params.Limit = s.config.DefaultPageSize
+	}
+	// Enforce maximum page size
+	if params.Limit > s.config.MaxPageSize {
+		params.Limit = s.config.MaxPageSize
+	}
+
+	result, err := s.repo.FindLists(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find lists: %w", err)
+	}
+
+	return result, nil
+}
+
 // UpdateList updates an existing todo list.
 func (s *Service) UpdateList(ctx context.Context, list *domain.TodoList) error {
 	if list.ID == "" {
@@ -244,6 +263,11 @@ func (s *Service) UpdateItem(ctx context.Context, listID string, item *domain.To
 
 // ListTasks searches for tasks with filtering, sorting, and pagination.
 func (s *Service) ListTasks(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
+	// Reject negative offsets to prevent database errors
+	if params.Offset < 0 {
+		params.Offset = 0
+	}
+
 	// Apply default limit if not specified or negative
 	if params.Limit <= 0 {
 		params.Limit = s.config.DefaultPageSize
@@ -287,6 +311,13 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		return nil, err
 	}
 	template.Title = title.String()
+
+	// Validate recurrence pattern
+	pattern, err := domain.NewRecurrencePattern(string(template.RecurrencePattern))
+	if err != nil {
+		return nil, err
+	}
+	template.RecurrencePattern = pattern
 
 	// Generate ID if not provided
 	if template.ID == "" {
@@ -343,6 +374,15 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, template *domain.
 			return err
 		}
 		template.Title = title.String()
+	}
+
+	// Validate recurrence pattern if being updated
+	if template.RecurrencePattern != "" {
+		pattern, err := domain.NewRecurrencePattern(string(template.RecurrencePattern))
+		if err != nil {
+			return err
+		}
+		template.RecurrencePattern = pattern
 	}
 
 	// Update timestamp

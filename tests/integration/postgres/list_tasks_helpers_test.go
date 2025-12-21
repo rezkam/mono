@@ -30,7 +30,10 @@ func newListTasksTestEnv(t *testing.T) *listTasksTestEnv {
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 
-	todoService := todo.NewService(store, todo.Config{})
+	todoService := todo.NewService(store, todo.Config{
+		DefaultPageSize: 25,
+		MaxPageSize:     100,
+	})
 
 	env := &listTasksTestEnv{
 		ctx:     ctx,

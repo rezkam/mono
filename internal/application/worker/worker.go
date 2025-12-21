@@ -179,8 +179,8 @@ func (w *Worker) RunScheduleOnce(ctx context.Context) error {
 func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	// Claim next job using SKIP LOCKED
 	claimCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+	defer cancel()
 	jobID, err := w.repo.ClaimNextGenerationJob(claimCtx)
-	cancel()
 	if err != nil {
 		return false, fmt.Errorf("failed to claim job: %w", err)
 	}
@@ -194,21 +194,21 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 
 	// Get job details
 	getJobCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+	defer cancel()
 	job, err := w.repo.GetGenerationJob(getJobCtx, jobID)
-	cancel()
 	if err != nil {
 		return false, fmt.Errorf("failed to get job details: %w", err)
 	}
 
 	// Get template
 	getTemplateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+	defer cancel()
 	template, err := w.repo.GetRecurringTemplate(getTemplateCtx, job.TemplateID)
-	cancel()
 	if err != nil {
 		errMsg := fmt.Sprintf("template not found: %v", err)
 		updateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+		defer cancel()
 		updateErr := w.repo.UpdateGenerationJobStatus(updateCtx, jobID, "FAILED", &errMsg)
-		cancel()
 		if updateErr != nil {
 			log.Printf("ERROR: Failed to mark job %s as FAILED after template error: %v", jobID, updateErr)
 			return false, fmt.Errorf("failed to get template: %w (additionally, failed to update job status: %v)", err, updateErr)
@@ -220,13 +220,13 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 
 	// Generate tasks (may involve storage operations, so apply timeout)
 	genCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+	defer cancel()
 	tasks, err := w.generator.GenerateTasksForTemplate(genCtx, template, job.GenerateFrom, job.GenerateUntil)
-	cancel()
 	if err != nil {
 		errMsg := fmt.Sprintf("generation failed: %v", err)
 		updateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+		defer cancel()
 		updateErr := w.repo.UpdateGenerationJobStatus(updateCtx, jobID, "FAILED", &errMsg)
-		cancel()
 		if updateErr != nil {
 			log.Printf("ERROR: Failed to mark job %s as FAILED after generation error: %v", jobID, updateErr)
 			return false, fmt.Errorf("failed to generate tasks: %w (additionally, failed to update job status: %v)", err, updateErr)
@@ -239,13 +239,13 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	if len(tasks) > 0 {
 		for _, task := range tasks {
 			createCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+			defer cancel()
 			err := w.repo.CreateTodoItem(createCtx, template.ListID, &task)
-			cancel()
 			if err != nil {
 				errMsg := fmt.Sprintf("failed to create task: %v", err)
 				updateCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+				defer cancel()
 				updateErr := w.repo.UpdateGenerationJobStatus(updateCtx, jobID, "FAILED", &errMsg)
-				cancel()
 				if updateErr != nil {
 					log.Printf("ERROR: Failed to mark job %s as FAILED after task creation error: %v", jobID, updateErr)
 					return false, fmt.Errorf("failed to create task: %w (additionally, failed to update job status: %v)", err, updateErr)
@@ -259,8 +259,8 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 
 	// Update template's last_generated_until
 	updateWindowCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+	defer cancel()
 	err = w.repo.UpdateRecurringTemplateGenerationWindow(updateWindowCtx, template.ID, job.GenerateUntil)
-	cancel()
 	if err != nil {
 		log.Printf("Warning: Failed to update template %s generation window: %v", template.ID, err)
 		// Don't fail the job for this - tasks were created successfully
@@ -268,8 +268,8 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 
 	// Mark job as completed
 	completeCtx, cancel := context.WithTimeout(ctx, w.operationTimeout)
+	defer cancel()
 	err = w.repo.UpdateGenerationJobStatus(completeCtx, jobID, "COMPLETED", nil)
-	cancel()
 	if err != nil {
 		// Tasks were created but job status update failed - job will be stuck in RUNNING state
 		log.Printf("ERROR: Failed to mark job %s as COMPLETED (tasks were created, job stuck in RUNNING): %v", jobID, err)

@@ -31,9 +31,13 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 		DueTime:  req.DueTime,
 	}
 
-	// Set priority if provided
+	// Validate and set priority if provided
 	if req.Priority != nil {
-		priority := domain.TaskPriority(*req.Priority)
+		priority, err := domain.NewTaskPriority(string(*req.Priority))
+		if err != nil {
+			response.FromDomainError(w, r, err)
+			return
+		}
 		item.Priority = &priority
 	}
 
@@ -51,7 +55,7 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 	// Call service layer (validation and ID generation happens here)
 	createdItem, err := s.todoService.CreateItem(r.Context(), listID.String(), item)
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -82,7 +86,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	// Get existing item
 	existing, err := s.todoService.GetItem(r.Context(), itemID.String())
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -91,12 +95,18 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
 		// Update all fields from request
 		if req.Item.Title != nil {
-			existing.Title = *req.Item.Title
+			// Validate title (even if empty) to prevent bypassing domain validation
+			title, err := domain.NewTitle(*req.Item.Title)
+			if err != nil {
+				response.FromDomainError(w, r, err)
+				return
+			}
+			existing.Title = title.String()
 		}
 		if req.Item.Status != nil {
 			status, err := domain.NewTaskStatus(string(*req.Item.Status))
 			if err != nil {
-				response.FromDomainError(w, err)
+				response.FromDomainError(w, r, err)
 				return
 			}
 			existing.Status = status
@@ -104,7 +114,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 		if req.Item.Priority != nil {
 			priority, err := domain.NewTaskPriority(string(*req.Item.Priority))
 			if err != nil {
-				response.FromDomainError(w, err)
+				response.FromDomainError(w, r, err)
 				return
 			}
 			existing.Priority = &priority
@@ -132,13 +142,19 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			switch field {
 			case "title":
 				if req.Item.Title != nil {
-					existing.Title = *req.Item.Title
+					// Validate title (even if empty) to prevent bypassing domain validation
+					title, err := domain.NewTitle(*req.Item.Title)
+					if err != nil {
+						response.FromDomainError(w, r, err)
+						return
+					}
+					existing.Title = title.String()
 				}
 			case "status":
 				if req.Item.Status != nil {
 					status, err := domain.NewTaskStatus(string(*req.Item.Status))
 					if err != nil {
-						response.FromDomainError(w, err)
+						response.FromDomainError(w, r, err)
 						return
 					}
 					existing.Status = status
@@ -147,7 +163,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 				if req.Item.Priority != nil {
 					priority, err := domain.NewTaskPriority(string(*req.Item.Priority))
 					if err != nil {
-						response.FromDomainError(w, err)
+						response.FromDomainError(w, r, err)
 						return
 					}
 					existing.Priority = &priority
@@ -176,14 +192,14 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 
 	// Call service layer
 	if err := s.todoService.UpdateItem(r.Context(), listID.String(), existing); err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
 	// Fetch updated item to return
 	updated, err := s.todoService.GetItem(r.Context(), itemID.String())
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -238,7 +254,7 @@ func (s *Server) ListTasks(w http.ResponseWriter, r *http.Request, params openap
 	// Call service layer
 	result, err := s.todoService.ListTasks(r.Context(), domainParams)
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 

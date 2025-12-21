@@ -13,6 +13,12 @@ const (
 	TaskStatusCancelled  TaskStatus = "cancelled"
 )
 
+// UndoneStatuses returns the list of statuses that are considered "not done".
+// Business rule: tasks that still require action (not completed, archived, or cancelled).
+func UndoneStatuses() []TaskStatus {
+	return []TaskStatus{TaskStatusTodo, TaskStatusInProgress, TaskStatusBlocked}
+}
+
 // TaskPriority represents the priority level of a task.
 // Value object - immutable string enum.
 type TaskPriority string

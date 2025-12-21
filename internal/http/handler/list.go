@@ -2,10 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime/types"
 
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/http/openapi"
 	"github.com/rezkam/mono/internal/http/response"
 )
@@ -23,7 +25,7 @@ func (s *Server) CreateList(w http.ResponseWriter, r *http.Request) {
 	// Call service layer (validation happens here via value objects in future)
 	list, err := s.todoService.CreateList(r.Context(), req.Title)
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -42,7 +44,7 @@ func (s *Server) GetList(w http.ResponseWriter, r *http.Request, id types.UUID) 
 	// Call service layer
 	list, err := s.todoService.GetList(r.Context(), id.String())
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -58,41 +60,55 @@ func (s *Server) GetList(w http.ResponseWriter, r *http.Request, id types.UUID) 
 // ListLists implements ServerInterface.ListLists.
 // GET /v1/lists
 func (s *Server) ListLists(w http.ResponseWriter, r *http.Request, params openapi.ListListsParams) {
-	// For now, return all lists without pagination
-	// TODO: Add repository method for paginated list retrieval
-	lists, err := s.todoService.ListLists(r.Context())
-	if err != nil {
-		response.FromDomainError(w, err)
-		return
+	// Parse filter and order_by parameters
+	var filterParams domain.ListListsParams
+	var err error
+
+	if params.Filter != nil && *params.Filter != "" {
+		filterParams, err = parseListFilter(*params.Filter)
+		if err != nil {
+			response.BadRequest(w, fmt.Sprintf("invalid filter: %v", err))
+			return
+		}
 	}
 
-	// Apply pagination in-memory (temporary until repository supports it)
+	// Parse order_by
+	if params.OrderBy != nil && *params.OrderBy != "" {
+		orderBy, orderDir, err := parseOrderBy(*params.OrderBy)
+		if err != nil {
+			response.BadRequest(w, fmt.Sprintf("invalid order_by: %v", err))
+			return
+		}
+		filterParams.OrderBy = orderBy
+		filterParams.OrderDir = orderDir
+	} else {
+		filterParams.OrderBy = "create_time"
+		filterParams.OrderDir = "desc"
+	}
+
+	// Parse pagination
 	pageSize := getPageSize(params.PageSize)
 	offset := parsePageToken(params.PageToken)
 
-	// Calculate slice bounds
-	start := offset
-	if start >= len(lists) {
-		start = len(lists)
-	}
+	filterParams.Limit = pageSize
+	filterParams.Offset = offset
 
-	end := start + pageSize
-	if end > len(lists) {
-		end = len(lists)
+	// Call service layer with filters and sorting
+	result, err := s.todoService.FindLists(r.Context(), filterParams)
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
 	}
-
-	// Slice the results
-	pagedLists := lists[start:end]
-	hasMore := end < len(lists)
 
 	// Map domain models to DTOs
-	listDTOs := make([]openapi.TodoList, len(pagedLists))
-	for i, list := range pagedLists {
+	listDTOs := make([]openapi.TodoList, len(result.Lists))
+	for i, list := range result.Lists {
 		listDTOs[i] = MapListToDTO(list)
 	}
 
 	// Generate next page token if there are more results
-	nextToken := generatePageToken(end, hasMore)
+	nextOffset := offset + pageSize
+	nextToken := generatePageToken(nextOffset, result.HasMore)
 
 	// Return success response
 	response.OK(w, openapi.ListListsResponse{

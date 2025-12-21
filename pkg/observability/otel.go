@@ -19,6 +19,13 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+
+	"github.com/rezkam/mono/internal/config"
+)
+
+const (
+	// DefaultServiceName is the default service name for observability when OTEL_SERVICE_NAME is not set.
+	DefaultServiceName = "mono"
 )
 
 // newResource creates a resource with service metadata merged with defaults.
@@ -186,9 +193,9 @@ func InitLogger(ctx context.Context, enabled bool) (*log.LoggerProvider, *slog.L
 
 	// Create a bridge logger that sends logs to OTel
 	// Service name comes from OTEL_RESOURCE_ATTRIBUTES or OTEL_SERVICE_NAME
-	serviceName := os.Getenv("OTEL_SERVICE_NAME")
-	if serviceName == "" {
-		serviceName = "unknown"
+	serviceName, exists := config.GetEnv[string]("OTEL_SERVICE_NAME")
+	if !exists {
+		serviceName = DefaultServiceName
 	}
 	logger := otelslog.NewLogger(serviceName, otelslog.WithLoggerProvider(loggerProvider))
 

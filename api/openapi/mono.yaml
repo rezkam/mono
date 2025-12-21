@@ -5,7 +5,7 @@ info:
   description: RESTful API for task and list management with recurring templates
 
 servers:
-  - url: http://localhost:8080/api
+  - url: http://localhost:8081/api
     description: Local development
 
 security:

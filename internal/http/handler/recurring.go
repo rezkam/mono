@@ -34,7 +34,11 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	if req.Priority != nil {
-		priority := domain.TaskPriority(*req.Priority)
+		priority, err := domain.NewTaskPriority(string(*req.Priority))
+		if err != nil {
+			response.FromDomainError(w, r, err)
+			return
+		}
 		template.Priority = &priority
 	}
 
@@ -69,7 +73,7 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	// Call service layer (validation happens here)
 	created, err := s.todoService.CreateRecurringTemplate(r.Context(), template)
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -88,7 +92,7 @@ func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, id
 	// Call service layer
 	template, err := s.todoService.GetRecurringTemplate(r.Context(), id.String())
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -119,7 +123,7 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	// Get existing template
 	existing, err := s.todoService.GetRecurringTemplate(r.Context(), id.String())
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -133,7 +137,11 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 			existing.Tags = *req.Template.Tags
 		}
 		if req.Template.Priority != nil {
-			priority := domain.TaskPriority(*req.Template.Priority)
+			priority, err := domain.NewTaskPriority(string(*req.Template.Priority))
+			if err != nil {
+				response.FromDomainError(w, r, err)
+				return
+			}
 			existing.Priority = &priority
 		}
 		if req.Template.EstimatedDuration != nil {
@@ -172,7 +180,11 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 				}
 			case "priority":
 				if req.Template.Priority != nil {
-					priority := domain.TaskPriority(*req.Template.Priority)
+					priority, err := domain.NewTaskPriority(string(*req.Template.Priority))
+					if err != nil {
+						response.FromDomainError(w, r, err)
+						return
+					}
 					existing.Priority = &priority
 				}
 			case "estimated_duration":
@@ -202,13 +214,17 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 				if req.Template.IsActive != nil {
 					existing.IsActive = *req.Template.IsActive
 				}
+			case "generation_window_days":
+				if req.Template.GenerationWindowDays != nil {
+					existing.GenerationWindowDays = *req.Template.GenerationWindowDays
+				}
 			}
 		}
 	}
 
 	// Call service layer (validation happens here)
 	if err := s.todoService.UpdateRecurringTemplate(r.Context(), existing); err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -226,7 +242,7 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 func (s *Server) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, id types.UUID) {
 	// Call service layer
 	if err := s.todoService.DeleteRecurringTemplate(r.Context(), id.String()); err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 
@@ -246,7 +262,7 @@ func (s *Server) ListRecurringTemplates(w http.ResponseWriter, r *http.Request, 
 	// Call service layer
 	templates, err := s.todoService.ListRecurringTemplates(r.Context(), listID.String(), activeOnly)
 	if err != nil {
-		response.FromDomainError(w, err)
+		response.FromDomainError(w, r, err)
 		return
 	}
 

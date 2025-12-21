@@ -20,6 +20,9 @@ type Repository interface {
 	// FindAllLists retrieves all todo lists with counts but without items.
 	FindAllLists(ctx context.Context) ([]*domain.TodoList, error)
 
+	// FindLists retrieves todo lists with filtering, sorting, and pagination.
+	FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error)
+
 	// UpdateList updates an existing todo list metadata (title, etc).
 	// Returns error if list not found.
 	UpdateList(ctx context.Context, list *domain.TodoList) error

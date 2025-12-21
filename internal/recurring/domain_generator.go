@@ -69,6 +69,7 @@ func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate,
 
 	task := domain.TodoItem{
 		ID:                  taskID,
+		ListID:              template.ListID,
 		Title:               template.Title,
 		Status:              domain.TaskStatusTodo,
 		Priority:            template.Priority,

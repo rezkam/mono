@@ -52,7 +52,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 		name := fmt.Sprintf("%dKeys_%s", scenario.numKeys, scenario.position)
 		b.Run(name, func(b *testing.B) {
 			// Setup: Clean database
-			_, err = store.DB().ExecContext(ctx, "TRUNCATE api_keys CASCADE")
+			_, err = store.Pool().Exec(ctx, "TRUNCATE api_keys CASCADE")
 			if err != nil {
 				b.Fatalf("Failed to clean database: %v", err)
 			}
@@ -132,7 +132,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 
 	b.Run("O1_IndexedLookup", func(b *testing.B) {
 		// Setup
-		_, err = store.DB().ExecContext(ctx, "TRUNCATE api_keys CASCADE")
+		_, err = store.Pool().Exec(ctx, "TRUNCATE api_keys CASCADE")
 		if err != nil {
 			b.Fatalf("Failed to clean database: %v", err)
 		}
@@ -169,7 +169,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 
 	b.Run("On_LinearScan", func(b *testing.B) {
 		// Setup
-		_, err = store.DB().ExecContext(ctx, "TRUNCATE api_keys CASCADE")
+		_, err = store.Pool().Exec(ctx, "TRUNCATE api_keys CASCADE")
 		if err != nil {
 			b.Fatalf("Failed to clean database: %v", err)
 		}

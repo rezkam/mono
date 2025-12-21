@@ -25,13 +25,13 @@ func setupWorkerTest(t *testing.T) (*postgres.Store, *worker.Worker, func()) {
 	require.NoError(t, err)
 
 	// Clean up tables before test
-	_, err = store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	require.NoError(t, err)
 
 	w := worker.New(store)
 
 	cleanup := func() {
-		store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 		store.Close()
 	}
 
@@ -91,9 +91,9 @@ func TestWorker_CompleteFlow(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Clean up any leftover templates/jobs from previous subtests
-			_, err := store.DB().Exec("DELETE FROM recurring_generation_jobs")
+			_, err := store.Pool().Exec(ctx, "DELETE FROM recurring_generation_jobs")
 			require.NoError(t, err)
-			_, err = store.DB().Exec("DELETE FROM recurring_task_templates")
+			_, err = store.Pool().Exec(ctx, "DELETE FROM recurring_task_templates")
 			require.NoError(t, err)
 
 			// Create fresh list for this subtest
@@ -133,7 +133,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 
 			// Verify job was created
 			var jobCount int
-			err = store.DB().QueryRow(`
+			err = store.Pool().QueryRow(ctx, `
 				SELECT COUNT(*) FROM recurring_generation_jobs
 				WHERE template_id = $1 AND status = 'PENDING'
 			`, template.ID).Scan(&jobCount)
@@ -147,7 +147,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 
 			// Verify job completed
 			var completedCount int
-			err = store.DB().QueryRow(`
+			err = store.Pool().QueryRow(ctx, `
 				SELECT COUNT(*) FROM recurring_generation_jobs
 				WHERE template_id = $1 AND status = 'COMPLETED'
 			`, template.ID).Scan(&completedCount)
@@ -302,7 +302,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 
 	// Verify all jobs are completed in DB
 	var completedJobs int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'COMPLETED'
 	`).Scan(&completedJobs)
 	require.NoError(t, err)
@@ -534,7 +534,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	require.NoError(t, err)
 
 	var pendingJobs int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
 		WHERE template_id = $1 AND status = 'PENDING'
 	`, templateID).Scan(&pendingJobs)
@@ -590,7 +590,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 
 	// Verify status history was created (should have 3 entries: TODO, IN_PROGRESS, DONE)
 	var historyCount int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM task_status_history WHERE task_id = $1
 	`, existingTaskID).Scan(&historyCount)
 	require.NoError(t, err)
@@ -644,7 +644,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 
 	// CRITICAL: Verify status history was preserved
 	var historyCountAfter int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM task_status_history WHERE task_id = $1
 	`, existingTaskID).Scan(&historyCountAfter)
 	require.NoError(t, err)
@@ -652,7 +652,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 
 	// Verify we can still query the history
 	var statusHistory []string
-	rows, err := store.DB().Query(`
+	rows, err := store.Pool().Query(ctx, `
 		SELECT to_status FROM task_status_history
 		WHERE task_id = $1
 		ORDER BY changed_at ASC

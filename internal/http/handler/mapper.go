@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -130,7 +131,14 @@ func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringTaskT
 	pattern := openapi.RecurrencePattern(template.RecurrencePattern)
 	dto.RecurrencePattern = &pattern
 
-	// TODO: Map RecurrenceConfig (map to JSON string)
+	// Map recurrence_config (domain map[string]interface{} to JSON string)
+	if template.RecurrenceConfig != nil {
+		configJSON, err := json.Marshal(template.RecurrenceConfig)
+		if err == nil {
+			configStr := string(configJSON)
+			dto.RecurrenceConfig = &configStr
+		}
+	}
 
 	return dto
 }

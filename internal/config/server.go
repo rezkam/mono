@@ -9,14 +9,8 @@ import (
 // ServerConfig holds all configuration for the server binary.
 type ServerConfig struct {
 	StorageConfig
-	StoragePoolConfig
-	GatewayConfig
-	AuthConfig
-	APIKeyConfig
-	ObservabilityConfig
 
-	Env             string `env:"MONO_ENV" default:"dev"`
-	ShutdownTimeout int    `env:"MONO_SHUTDOWN_TIMEOUT" default:"10"`
+	Env string `env:"MONO_ENV" default:"dev"`
 }
 
 // LoadServerConfig loads and validates server configuration.
@@ -36,13 +30,5 @@ func LoadServerConfig() (*ServerConfig, error) {
 
 // Validate validates server-specific configuration.
 func (c *ServerConfig) Validate() error {
-	if err := c.StorageConfig.Validate(); err != nil {
-		return err
-	}
-
-	if c.ShutdownTimeout < 1 {
-		return fmt.Errorf("MONO_SHUTDOWN_TIMEOUT must be at least 1 second")
-	}
-
-	return nil
+	return c.StorageConfig.Validate()
 }

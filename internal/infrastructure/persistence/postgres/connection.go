@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver for migrations
 	"github.com/pressly/goose/v3"
 )
 
@@ -26,20 +27,25 @@ type DBConfig struct {
 // NewStoreWithConfig creates a new PostgreSQL store with the given configuration.
 // It also runs migrations automatically.
 func NewStoreWithConfig(ctx context.Context, cfg DBConfig) (*Store, error) {
-	// Open PostgreSQL connection
-	db, err := sql.Open("pgx", cfg.DSN)
+	// Run migrations first using database/sql (goose requires it)
+	if err := runMigrationsWithDSN(ctx, cfg.DSN); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	// Parse connection string and configure pool
+	poolConfig, err := pgxpool.ParseConfig(cfg.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
 	// Configure connection pool with defaults if not set
-	maxOpenConns := cfg.MaxOpenConns
-	if maxOpenConns <= 0 {
-		maxOpenConns = 25
+	maxConns := int32(cfg.MaxOpenConns)
+	if maxConns <= 0 {
+		maxConns = 25
 	}
-	maxIdleConns := cfg.MaxIdleConns
-	if maxIdleConns <= 0 {
-		maxIdleConns = 5
+	minConns := int32(cfg.MaxIdleConns)
+	if minConns <= 0 {
+		minConns = 5
 	}
 	connMaxLifetime := cfg.ConnMaxLifetime
 	if connMaxLifetime <= 0 {
@@ -50,24 +56,24 @@ func NewStoreWithConfig(ctx context.Context, cfg DBConfig) (*Store, error) {
 		connMaxIdleTime = 1 * time.Minute
 	}
 
-	db.SetMaxOpenConns(maxOpenConns)
-	db.SetMaxIdleConns(maxIdleConns)
-	db.SetConnMaxLifetime(connMaxLifetime)
-	db.SetConnMaxIdleTime(connMaxIdleTime)
+	poolConfig.MaxConns = maxConns
+	poolConfig.MinConns = minConns
+	poolConfig.MaxConnLifetime = connMaxLifetime
+	poolConfig.MaxConnIdleTime = connMaxIdleTime
+
+	// Create connection pool
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
+	}
 
 	// Verify connection
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Run migrations
-	if err := runMigrations(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	return NewStore(db), nil
+	return NewStore(pool), nil
 }
 
 // NewPostgresStore creates a PostgreSQL store with default connection pool settings.
@@ -83,8 +89,19 @@ func NewPostgresStoreWithPoolConfig(ctx context.Context, connString string, pool
 	return NewStoreWithConfig(ctx, poolConfig)
 }
 
-// runMigrations runs PostgreSQL database migrations using goose with embedded files.
-func runMigrations(db *sql.DB) error {
+// runMigrationsWithDSN runs PostgreSQL database migrations using goose with embedded files.
+// Uses a temporary database/sql connection since goose requires it.
+func runMigrationsWithDSN(ctx context.Context, dsn string) error {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return fmt.Errorf("failed to open database for migrations: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.PingContext(ctx); err != nil {
+		return fmt.Errorf("failed to ping database for migrations: %w", err)
+	}
+
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf("failed to set goose dialect: %w", err)
 	}

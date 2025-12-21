@@ -2,11 +2,12 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
@@ -18,7 +19,7 @@ import (
 func (s *Store) FindByShortToken(ctx context.Context, shortToken string) (*domain.APIKey, error) {
 	dbKey, err := s.queries.GetAPIKeyByShortToken(ctx, shortToken)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: API key", domain.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to get API key: %w", err)
@@ -35,11 +36,8 @@ func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time
 	}
 
 	params := sqlcgen.UpdateAPIKeyLastUsedParams{
-		ID: id,
-		LastUsedAt: sql.NullTime{
-			Time:  timestamp,
-			Valid: true,
-		},
+		ID:         uuidToPgtype(id),
+		LastUsedAt: timeToPgtype(timestamp),
 	}
 
 	// Single-query pattern: check rowsAffected to detect revoked/deleted API key
@@ -59,7 +57,7 @@ func (s *Store) Create(ctx context.Context, key *domain.APIKey) error {
 	}
 
 	params := sqlcgen.CreateAPIKeyParams{
-		ID:             id,
+		ID:             uuidToPgtype(id),
 		KeyType:        key.KeyType,
 		Service:        key.Service,
 		Version:        key.Version,
@@ -67,14 +65,8 @@ func (s *Store) Create(ctx context.Context, key *domain.APIKey) error {
 		LongSecretHash: key.LongSecretHash,
 		Name:           key.Name,
 		IsActive:       key.IsActive,
-		CreatedAt:      key.CreatedAt,
-	}
-
-	if key.ExpiresAt != nil {
-		params.ExpiresAt = sql.NullTime{
-			Time:  *key.ExpiresAt,
-			Valid: true,
-		}
+		CreatedAt:      timeToPgtype(key.CreatedAt),
+		ExpiresAt:      timePtrToPgtype(key.ExpiresAt),
 	}
 
 	if err := s.queries.CreateAPIKey(ctx, params); err != nil {

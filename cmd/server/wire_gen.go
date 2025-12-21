@@ -17,6 +17,8 @@ import (
 	"github.com/rezkam/mono/internal/http/handler"
 	"github.com/rezkam/mono/internal/http/middleware"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/pkg/observability"
+	"log/slog"
 	"os"
 	"time"
 )
@@ -30,51 +32,73 @@ func InitializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
 		return nil, nil, err
 	}
 	storageConfig := &serverConfig.StorageConfig
-	store, cleanup, err := provideStore(ctx, storageConfig)
+	dbConfig := provideDBConfig()
+	store, cleanup, err := provideStore(ctx, storageConfig, dbConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 	todoConfig := provideTodoConfig()
 	service := todo.NewService(store, todoConfig)
 	server := handler.NewServer(service)
-	duration := _wireDurationValue
-	authenticator, cleanup2, err := provideAuthenticator(ctx, store, duration)
+	authConfig := provideAuthConfig()
+	authenticator, cleanup2, err := provideAuthenticator(ctx, store, authConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	auth := middleware.NewAuth(authenticator)
 	mux := http.NewRouter(server, auth)
-	httpServer := provideHTTPServer(mux, serverConfig)
+	bool2 := provideObservabilityEnabled()
+	logger, cleanup3, err := provideObservability(ctx, bool2)
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	httpServerConfig := provideHTTPServerConfig()
+	httpServer := provideHTTPServer(mux, logger, httpServerConfig)
 	return httpServer, func() {
+		cleanup3()
 		cleanup2()
 		cleanup()
 	}, nil
 }
-
-var (
-	_wireDurationValue = time.Duration(5 * time.Second)
-)
 
 // wire.go:
 
 // ConfigSet provides configuration.
 var ConfigSet = wire.NewSet(config.LoadServerConfig, wire.FieldsOf(new(*config.ServerConfig),
 	"StorageConfig",
-	"AuthConfig",
 ),
 )
 
 // DatabaseSet provides database connection and store.
 // The Store implements both todo.Repository and auth.Repository
 var DatabaseSet = wire.NewSet(
+	provideDBConfig,
 	provideStore, wire.Bind(new(todo.Repository), new(*postgres.Store)), wire.Bind(new(auth.Repository), new(*postgres.Store)),
 )
 
-// provideStore creates a postgres.Store from StorageConfig.
+// provideDBConfig reads database pool config from environment.
+func provideDBConfig() postgres.DBConfig {
+	maxOpenConns, _ := config.GetEnv[int]("MONO_DB_MAX_OPEN_CONNS")
+	maxIdleConns, _ := config.GetEnv[int]("MONO_DB_MAX_IDLE_CONNS")
+	connMaxLifetimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_LIFETIME_SEC")
+	connMaxIdleTimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_IDLE_TIME_SEC")
+
+	return postgres.DBConfig{
+		MaxOpenConns:    maxOpenConns,
+		MaxIdleConns:    maxIdleConns,
+		ConnMaxLifetime: time.Duration(connMaxLifetimeSec) * time.Second,
+		ConnMaxIdleTime: time.Duration(connMaxIdleTimeSec) * time.Second,
+	}
+}
+
+// provideStore creates a postgres.Store from StorageConfig and DBConfig.
 // Returns the store and a cleanup function that closes the database connection pool.
-func provideStore(ctx context.Context, cfg *config.StorageConfig) (*postgres.Store, func(), error) {
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+func provideStore(ctx context.Context, cfg *config.StorageConfig, dbCfg postgres.DBConfig) (*postgres.Store, func(), error) {
+	dbCfg.DSN = cfg.StorageDSN
+	store, err := postgres.NewStoreWithConfig(ctx, dbCfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,10 +126,21 @@ func provideTodoConfig() todo.Config {
 // ServiceSet provides application services.
 var ServiceSet = wire.NewSet(todo.NewService, provideTodoConfig)
 
+// provideAuthConfig reads authenticator config from environment.
+func provideAuthConfig() auth.Config {
+	operationTimeoutSec, _ := config.GetEnv[int]("MONO_AUTH_OPERATION_TIMEOUT_SEC")
+	updateQueueSize, _ := config.GetEnv[int]("MONO_AUTH_UPDATE_QUEUE_SIZE")
+
+	return auth.Config{
+		OperationTimeout: time.Duration(operationTimeoutSec) * time.Second,
+		UpdateQueueSize:  updateQueueSize,
+	}
+}
+
 // provideAuthenticator creates an Authenticator and returns a cleanup function
 // that gracefully shuts down the background worker.
-func provideAuthenticator(ctx context.Context, repo auth.Repository, timeout time.Duration) (*auth.Authenticator, func(), error) {
-	authenticator := auth.NewAuthenticator(ctx, repo, timeout)
+func provideAuthenticator(ctx context.Context, repo auth.Repository, cfg auth.Config) (*auth.Authenticator, func(), error) {
+	authenticator := auth.NewAuthenticator(ctx, repo, cfg)
 
 	cleanup := func() {
 
@@ -121,7 +156,66 @@ func provideAuthenticator(ctx context.Context, repo auth.Repository, timeout tim
 }
 
 // AuthSet provides authentication components.
-var AuthSet = wire.NewSet(wire.Value(time.Duration(5*time.Second)), provideAuthenticator)
+var AuthSet = wire.NewSet(
+	provideAuthConfig,
+	provideAuthenticator,
+)
+
+// provideObservabilityEnabled reads MONO_OTEL_ENABLED from environment.
+func provideObservabilityEnabled() bool {
+	enabled, exists := config.GetEnv[bool]("MONO_OTEL_ENABLED")
+	if !exists {
+		return false
+	}
+	return enabled
+}
+
+// provideObservability initializes OpenTelemetry providers and returns cleanup function.
+func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func(), error) {
+
+	tracerProvider, err := observability.InitTracerProvider(ctx, enabled)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to init tracer provider: %w", err)
+	}
+
+	meterProvider, err := observability.InitMeterProvider(ctx, enabled)
+	if err != nil {
+		tracerProvider.Shutdown(ctx)
+		return nil, nil, fmt.Errorf("failed to init meter provider: %w", err)
+	}
+
+	loggerProvider, logger, err := observability.InitLogger(ctx, enabled)
+	if err != nil {
+		meterProvider.Shutdown(ctx)
+		tracerProvider.Shutdown(ctx)
+		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
+	}
+
+	cleanup := func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := loggerProvider.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown logger provider: %v\n", err)
+		}
+		if err := meterProvider.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown meter provider: %v\n", err)
+		}
+		if err := tracerProvider.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown tracer provider: %v\n", err)
+		}
+	}
+
+	return logger, cleanup, nil
+}
+
+// ObservabilitySet provides observability components.
+var ObservabilitySet = wire.NewSet(
+	provideObservabilityEnabled,
+	provideObservability,
+)
 
 // HTTPSet provides HTTP layer components.
-var HTTPSet = wire.NewSet(handler.NewServer, middleware.NewAuth, http.NewRouter)
+var HTTPSet = wire.NewSet(handler.NewServer, middleware.NewAuth, http.NewRouter, provideHTTPServerConfig,
+	provideHTTPServer,
+)

@@ -27,12 +27,12 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	defer store.Close()
 
 	// Clean up tables before test
-	_, err = store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	require.NoError(t, err)
 
 	// Cleanup after test
 	defer func() {
-		store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	}()
 
 	w := worker.New(store)
@@ -74,7 +74,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		require.NoError(t, err)
 
 		var jobCount int
-		err = store.DB().QueryRow(`
+		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
 			WHERE template_id = $1
 		`, templateID).Scan(&jobCount)
@@ -89,7 +89,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		require.NoError(t, err)
 
 		var jobCount int
-		err = store.DB().QueryRow(`
+		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
 			WHERE template_id = $1
 		`, templateID).Scan(&jobCount)
@@ -104,7 +104,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		require.NoError(t, err)
 
 		var jobCount int
-		err = store.DB().QueryRow(`
+		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
 			WHERE template_id = $1
 		`, templateID).Scan(&jobCount)
@@ -121,7 +121,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 
 		// Verify job is completed
 		var completedCount int
-		err = store.DB().QueryRow(`
+		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
 			WHERE template_id = $1 AND status = 'COMPLETED'
 		`, templateID).Scan(&completedCount)
@@ -136,7 +136,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		// At this point, no new pending job should be created because
 		// last_generated_until was updated to cover the window
 		var pendingCount int
-		err = store.DB().QueryRow(`
+		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
 			WHERE template_id = $1 AND status = 'PENDING'
 		`, templateID).Scan(&pendingCount)
@@ -156,11 +156,11 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	defer store.Close()
 
 	// Clean up tables
-	_, err = store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	require.NoError(t, err)
 
 	defer func() {
-		store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	}()
 
 	w := worker.New(store)
@@ -207,7 +207,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 
 	// Verify job is RUNNING
 	var runningCount int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
 		WHERE template_id = $1 AND status = 'RUNNING'
 	`, templateID).Scan(&runningCount)
@@ -219,7 +219,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	require.NoError(t, err)
 
 	var totalJobs int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
 		WHERE template_id = $1
 	`, templateID).Scan(&totalJobs)
@@ -238,11 +238,11 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	defer store.Close()
 
 	// Clean up tables
-	_, err = store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	require.NoError(t, err)
 
 	defer func() {
-		store.DB().Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 	}()
 
 	w := worker.New(store)
@@ -288,7 +288,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 
 	for i, templateID := range templateIDs {
 		var jobCount int
-		err = store.DB().QueryRow(`
+		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
 			WHERE template_id = $1
 		`, templateID).Scan(&jobCount)
@@ -301,7 +301,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	require.NoError(t, err)
 
 	var totalJobs int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
 	`).Scan(&totalJobs)
 	require.NoError(t, err)
@@ -318,7 +318,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	require.NoError(t, err)
 
 	var pendingJobs int
-	err = store.DB().QueryRow(`
+	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
 		WHERE status = 'PENDING'
 	`).Scan(&pendingJobs)

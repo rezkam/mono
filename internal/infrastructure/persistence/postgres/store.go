@@ -1,8 +1,7 @@
 package postgres
 
 import (
-	"database/sql"
-
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/application/worker"
@@ -20,7 +19,7 @@ import (
 // The store uses sqlc-generated queries for type-safe SQL operations
 // and converter functions to translate between database types and domain types.
 type Store struct {
-	db      *sql.DB
+	pool    *pgxpool.Pool
 	queries *sqlcgen.Queries
 }
 
@@ -31,18 +30,18 @@ var (
 	_ worker.Repository = (*Store)(nil)
 )
 
-// NewStore creates a new PostgreSQL store with the given database connection.
-func NewStore(db *sql.DB) *Store {
+// NewStore creates a new PostgreSQL store with the given connection pool.
+func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{
-		db:      db,
-		queries: sqlcgen.New(db),
+		pool:    pool,
+		queries: sqlcgen.New(pool),
 	}
 }
 
-// DB returns the underlying database connection.
-// This is useful for transaction management and migrations.
-func (s *Store) DB() *sql.DB {
-	return s.db
+// Pool returns the underlying connection pool.
+// This is useful for transaction management and raw queries.
+func (s *Store) Pool() *pgxpool.Pool {
+	return s.pool
 }
 
 // Queries returns the sqlc-generated queries for advanced use cases.
@@ -51,7 +50,8 @@ func (s *Store) Queries() *sqlcgen.Queries {
 	return s.queries
 }
 
-// Close closes the database connection.
+// Close closes the database connection pool.
 func (s *Store) Close() error {
-	return s.db.Close()
+	s.pool.Close()
+	return nil
 }

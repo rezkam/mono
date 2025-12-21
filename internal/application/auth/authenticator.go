@@ -13,6 +13,18 @@ import (
 	"github.com/rezkam/mono/internal/infrastructure/keygen"
 )
 
+// Default configuration values.
+const (
+	DefaultOperationTimeout = 5 * time.Second
+	DefaultUpdateQueueSize  = 1000
+)
+
+// Config holds configuration for the Authenticator.
+type Config struct {
+	OperationTimeout time.Duration // Timeout for storage operations
+	UpdateQueueSize  int           // Buffer size for last_used_at updates
+}
+
 // lastUsedUpdate holds information for updating an API key's last_used_at timestamp.
 type lastUsedUpdate struct {
 	keyID     string
@@ -25,6 +37,7 @@ type Authenticator struct {
 	appCtx           context.Context // Application context, cancelled on shutdown
 	lastUsedUpdates  chan lastUsedUpdate
 	shutdownChan     chan struct{}
+	shutdownOnce     sync.Once // Ensures shutdown is idempotent
 	wg               sync.WaitGroup
 	operationTimeout time.Duration // Timeout for storage operations
 }
@@ -32,14 +45,26 @@ type Authenticator struct {
 // NewAuthenticator creates a new authenticator and starts the background worker
 // for processing last_used_at updates.
 // The ctx parameter should be an application-level context that gets cancelled on shutdown.
-// The operationTimeout parameter specifies the timeout for individual storage operations.
-func NewAuthenticator(ctx context.Context, repo Repository, operationTimeout time.Duration) *Authenticator {
+// Applies application defaults for negative config values.
+// Zero OperationTimeout means no timeout (operations wait indefinitely).
+// Zero UpdateQueueSize gets the default (must be > 0 to avoid blocking).
+func NewAuthenticator(ctx context.Context, repo Repository, config Config) *Authenticator {
+	// Apply defaults only for negative values
+	// Zero timeout means "no timeout" (wait indefinitely)
+	// Zero queue size is invalid (would block), so use default
+	if config.OperationTimeout < 0 {
+		config.OperationTimeout = DefaultOperationTimeout
+	}
+	if config.UpdateQueueSize <= 0 {
+		config.UpdateQueueSize = DefaultUpdateQueueSize
+	}
+
 	a := &Authenticator{
 		repo:             repo,
 		appCtx:           ctx,
-		lastUsedUpdates:  make(chan lastUsedUpdate, 1000), // buffered to handle bursts
+		lastUsedUpdates:  make(chan lastUsedUpdate, config.UpdateQueueSize),
 		shutdownChan:     make(chan struct{}),
-		operationTimeout: operationTimeout,
+		operationTimeout: config.OperationTimeout,
 	}
 
 	// Start background worker for processing last_used_at updates
@@ -59,6 +84,7 @@ func (a *Authenticator) processLastUsedUpdates() {
 		case update := <-a.lastUsedUpdates:
 			// Derive context from application context (respects shutdown)
 			ctx, cancel := context.WithTimeout(a.appCtx, a.operationTimeout)
+			defer cancel()
 
 			if err := a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp); err != nil {
 				// Log failure but continue processing (last_used_at is non-critical)
@@ -66,7 +92,6 @@ func (a *Authenticator) processLastUsedUpdates() {
 					slog.String("key_id", update.keyID),
 					slog.String("error", err.Error()))
 			}
-			cancel()
 
 		case <-a.shutdownChan:
 			// Drain remaining updates before shutdown
@@ -78,8 +103,8 @@ func (a *Authenticator) processLastUsedUpdates() {
 					// cleanup operations should succeed regardless of application state.
 					// The timeout still applies to prevent hanging on storage issues.
 					ctx, cancel := context.WithTimeout(context.Background(), a.operationTimeout)
+					defer cancel()
 					_ = a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp)
-					cancel()
 				default:
 					// No more updates, exit cleanly
 					return
@@ -92,23 +117,28 @@ func (a *Authenticator) processLastUsedUpdates() {
 // Shutdown gracefully shuts down the authenticator by signaling the worker to stop
 // and waiting for it to finish processing remaining updates.
 // It respects the provided context's deadline for shutdown timeout.
+// This method is idempotent and safe to call multiple times.
 func (a *Authenticator) Shutdown(ctx context.Context) error {
-	// Signal worker to stop
-	close(a.shutdownChan)
+	var shutdownErr error
+	a.shutdownOnce.Do(func() {
+		// Signal worker to stop
+		close(a.shutdownChan)
 
-	// Wait for worker to finish, with timeout
-	done := make(chan struct{})
-	go func() {
-		a.wg.Wait()
-		close(done)
-	}()
+		// Wait for worker to finish, with timeout
+		done := make(chan struct{})
+		go func() {
+			a.wg.Wait()
+			close(done)
+		}()
 
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("shutdown timeout: %w", ctx.Err())
-	}
+		select {
+		case <-done:
+			shutdownErr = nil
+		case <-ctx.Done():
+			shutdownErr = fmt.Errorf("shutdown timeout: %w", ctx.Err())
+		}
+	})
+	return shutdownErr
 }
 
 // ValidateAPIKey validates an API key and returns the key information if valid.
