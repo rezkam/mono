@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security sync-agents
+.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -53,9 +53,15 @@ help: ## Display this help message
 	@echo "Targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-gen: ## Generate Go code from Protobuf files using buf
-	@echo "Generating Protobuf files..."
-	@PATH="$$PATH:$(HOME)/go/bin" buf generate api/proto
+gen-openapi: ## Generate Go code from OpenAPI spec
+	@echo "Generating OpenAPI code..."
+	@$(HOME)/go/bin/oapi-codegen -config tools/oapi-codegen.yaml api/openapi/mono.yaml
+
+wire: ## Generate Wire dependency injection code
+	@echo "Running Wire..."
+	@cd cmd/server && $(HOME)/go/bin/wire
+
+gen: gen-openapi wire gen-sqlc ## Generate all code (OpenAPI, Wire, sqlc)
 
 gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
 	@echo "Generating sqlc code..."
@@ -135,9 +141,9 @@ bench-test: ## Run benchmarks using test database (port 5433, auto-cleanup)
 	fi
 
 
-build: ## Build the server binary
+build: gen ## Build the server binary
 	@echo "Building binary..."
-	go build -o $(BINARY_NAME) cmd/server/main.go
+	go build -o $(BINARY_NAME) ./cmd/server
 
 build-worker: ## Build the background worker binary
 	@echo "Building worker..."
@@ -170,7 +176,7 @@ setup-hooks: ## Configure git hooks to run automatically
 
 run: build ## Build and run server using dev database
 	@echo "Running server..."
-	MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" MONO_GRPC_PORT=8080 MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
+	MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" MONO_REST_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."
@@ -245,7 +251,7 @@ test-integration-up: ## [TEST DB] Start test database (port 5433)
 		sleep 2; \
 	done
 	@echo "Running migrations..."
-	@TEST_POSTGRES_URL="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
 		go run github.com/pressly/goose/v3/cmd/goose@latest \
 		-dir internal/infrastructure/persistence/postgres/migrations \
 		postgres \
@@ -307,13 +313,38 @@ test-e2e: ## [TEST DB] Run end-to-end tests (auto-cleanup before/after)
 
 test-all: ## Run all tests (unit tests + integration tests + e2e tests)
 	@echo "=== Running unit tests ==="
-	@go test -v ./internal/recurring/... ./internal/service/...
+	@go test -v ./internal/recurring/...
 	@echo ""
-	@echo "=== Running integration tests ==="
+	@echo "=== Running integration tests (postgres) ==="
 	@$(MAKE) test-integration
+	@echo ""
+	@echo "=== Running integration tests (http) ==="
+	@$(MAKE) test-integration-http
 	@echo ""
 	@echo "=== Running e2e tests ==="
 	@$(MAKE) test-e2e
+
+test-integration-http: ## [TEST DB] Run HTTP integration tests (auto-cleanup before/after)
+	@echo "=== Cleaning any existing test database ==="
+	@docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
+	@echo ""
+	@echo "=== Starting fresh test database ==="
+	@$(MAKE) test-integration-up
+	@echo ""
+	@echo "=== Running HTTP integration tests ==="
+	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+		go test -v ./tests/integration/http -count=1; \
+	TEST_RESULT=$$?; \
+	echo ""; \
+	echo "=== Cleaning up test database ==="; \
+	$(MAKE) test-integration-clean; \
+	echo ""; \
+	if [ $$TEST_RESULT -eq 0 ]; then \
+		echo "✅ HTTP integration tests PASSED"; \
+	else \
+		echo "❌ HTTP integration tests FAILED"; \
+		exit $$TEST_RESULT; \
+	fi
 
 # Helper targets
 .PHONY: test-db-status test-db-logs test-db-shell

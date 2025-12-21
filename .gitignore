@@ -40,3 +40,6 @@ dist/
 # Documentation (local research notes)
 docs/
 
+# Proto build artifacts
+*.binpb
+
