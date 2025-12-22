@@ -31,6 +31,16 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 		DueTime:  req.DueTime,
 	}
 
+	// Parse estimated_duration if provided
+	if req.EstimatedDuration != nil {
+		duration, err := parseDuration(*req.EstimatedDuration)
+		if err != nil {
+			response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+			return
+		}
+		item.EstimatedDuration = &duration
+	}
+
 	// Validate and set priority if provided
 	if req.Priority != nil {
 		priority, err := domain.NewTaskPriority(string(*req.Priority))
