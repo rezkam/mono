@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -312,128 +311,65 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
 	}
 
-	// Parse etag to version if provided (already validated by service layer)
-	var version *int
-	if params.Etag != nil {
-		v, err := parseEtagToVersion(*params.Etag)
-		if err != nil {
-			// Should never happen if service layer validated correctly
-			return nil, fmt.Errorf("failed to parse etag: %w", err)
-		}
-		version = &v
-	}
-
 	// Build update mask set for quick lookup
 	maskSet := make(map[string]bool)
 	for _, field := range params.UpdateMask {
 		maskSet[field] = true
 	}
 
-	// Build SET clause dynamically with fields from update mask
-	setClauses := []string{"updated_at = $1", "version = version + 1"}
-	args := []any{time.Now().UTC()}
-	argNum := 2
-
-	if maskSet["title"] && params.Title != nil {
-		setClauses = append(setClauses, fmt.Sprintf("title = $%d", argNum))
-		args = append(args, *params.Title)
-		argNum++
+	// Build sqlc params - pass nil for fields not in mask to preserve existing values
+	sqlcParams := sqlcgen.UpdateTodoItemParams{
+		ID:     uuidToPgtype(itemUUID),
+		ListID: uuidToPgtype(listUUID),
 	}
-	if maskSet["status"] && params.Status != nil {
-		setClauses = append(setClauses, fmt.Sprintf("status = $%d", argNum))
-		args = append(args, string(*params.Status))
-		argNum++
+
+	// Map field mask to sqlc params (nil = preserve existing value via COALESCE)
+	if maskSet["title"] {
+		sqlcParams.Title = params.Title
+	}
+	if maskSet["status"] {
+		if params.Status != nil {
+			statusStr := string(*params.Status)
+			sqlcParams.Status = &statusStr
+		}
 	}
 	if maskSet["priority"] {
-		setClauses = append(setClauses, fmt.Sprintf("priority = $%d", argNum))
 		if params.Priority != nil {
-			args = append(args, string(*params.Priority))
-		} else {
-			args = append(args, nil)
+			priorityStr := string(*params.Priority)
+			sqlcParams.Priority = &priorityStr
 		}
-		argNum++
 	}
 	if maskSet["due_time"] {
-		setClauses = append(setClauses, fmt.Sprintf("due_time = $%d", argNum))
-		args = append(args, params.DueTime)
-		argNum++
+		sqlcParams.DueTime = timePtrToPgtype(params.DueTime)
 	}
 	if maskSet["tags"] {
-		setClauses = append(setClauses, fmt.Sprintf("tags = $%d", argNum))
 		if params.Tags != nil {
-			tagsJSON, _ := json.Marshal(*params.Tags)
-			args = append(args, tagsJSON)
+			sqlcParams.Tags, _ = json.Marshal(*params.Tags)
 		} else {
-			args = append(args, []byte("[]"))
+			sqlcParams.Tags = []byte("[]")
 		}
-		argNum++
 	}
 	if maskSet["timezone"] {
-		setClauses = append(setClauses, fmt.Sprintf("timezone = $%d", argNum))
-		args = append(args, params.Timezone)
-		argNum++
+		sqlcParams.Timezone = params.Timezone
 	}
 	if maskSet["estimated_duration"] {
-		setClauses = append(setClauses, fmt.Sprintf("estimated_duration = $%d", argNum))
-		if params.EstimatedDuration != nil {
-			args = append(args, params.EstimatedDuration.Nanoseconds())
-		} else {
-			args = append(args, nil)
-		}
-		argNum++
+		sqlcParams.EstimatedDuration = durationPtrToPgtypeInterval(params.EstimatedDuration)
 	}
 	if maskSet["actual_duration"] {
-		setClauses = append(setClauses, fmt.Sprintf("actual_duration = $%d", argNum))
-		if params.ActualDuration != nil {
-			args = append(args, params.ActualDuration.Nanoseconds())
-		} else {
-			args = append(args, nil)
+		sqlcParams.ActualDuration = durationPtrToPgtypeInterval(params.ActualDuration)
+	}
+
+	// Handle optimistic locking with etag
+	if params.Etag != nil {
+		version, err := parseEtagToVersion(*params.Etag)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse etag: %w", err)
 		}
-		argNum++
+		sqlcParams.ExpectedVersion = &version
 	}
 
-	// Build WHERE clause
-	whereClause := fmt.Sprintf("id = $%d AND list_id = $%d", argNum, argNum+1)
-	args = append(args, itemUUID, listUUID)
-	argNum += 2
-
-	// Add version check if etag provided
-	if version != nil {
-		whereClause += fmt.Sprintf(" AND version = $%d", argNum)
-		args = append(args, *version)
-	}
-
-	// Build full query with RETURNING
-	query := fmt.Sprintf(
-		`UPDATE todo_items SET %s WHERE %s
-		RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration,
-		          create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version`,
-		strings.Join(setClauses, ", "),
-		whereClause,
-	)
-
-	// Execute query
-	row := s.pool.QueryRow(ctx, query, args...)
-
-	// Scan result
-	var item sqlcgen.TodoItem
-	err = row.Scan(
-		&item.ID,
-		&item.ListID,
-		&item.Title,
-		&item.Status,
-		&item.Priority,
-		&item.EstimatedDuration,
-		&item.ActualDuration,
-		&item.CreateTime,
-		&item.UpdatedAt,
-		&item.DueTime,
-		&item.Tags,
-		&item.RecurringTemplateID,
-		&item.InstanceDate,
-		&item.Timezone,
-		&item.Version,
-	)
+	// Execute type-safe update query
+	item, err := s.queries.UpdateTodoItem(ctx, sqlcParams)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Distinguish between not-found and version-conflict
@@ -451,9 +387,9 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 			}
 
 			// Item exists and belongs to correct list, so update failed due to version mismatch
-			if version != nil {
-				return nil, fmt.Errorf("%w: expected version %d, current version %d",
-					domain.ErrVersionConflict, *version, existingItem.Version)
+			if params.Etag != nil {
+				return nil, fmt.Errorf("%w: expected version %s, current version %d",
+					domain.ErrVersionConflict, *params.Etag, existingItem.Version)
 			}
 			return nil, fmt.Errorf("%w: item %s", domain.ErrNotFound, params.ItemID)
 		}
@@ -472,8 +408,8 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 // parseEtagToVersion extracts the version number from an etag string.
 // Assumes etag is already validated by the service layer.
 // Etag format: numeric string like "1", "2", "42"
-func parseEtagToVersion(etag string) (int, error) {
-	var version int
+func parseEtagToVersion(etag string) (int32, error) {
+	var version int32
 	_, err := fmt.Sscanf(etag, "%d", &version)
 	return version, err
 }
@@ -650,114 +586,57 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		maskSet[field] = true
 	}
 
-	// Build SET clause dynamically with fields from update mask
-	setClauses := []string{"updated_at = $1"}
-	args := []any{time.Now().UTC()}
-	argNum := 2
+	// Build sqlc params - pass nil for fields not in mask to preserve existing values
+	sqlcParams := sqlcgen.UpdateRecurringTemplateParams{
+		ID: uuidToPgtype(templateUUID),
+	}
 
-	if maskSet["title"] && params.Title != nil {
-		setClauses = append(setClauses, fmt.Sprintf("title = $%d", argNum))
-		args = append(args, *params.Title)
-		argNum++
+	// Map field mask to sqlc params (nil = preserve existing value via COALESCE)
+	if maskSet["title"] {
+		sqlcParams.Title = params.Title
 	}
 	if maskSet["tags"] {
-		setClauses = append(setClauses, fmt.Sprintf("tags = $%d", argNum))
 		if params.Tags != nil {
-			tagsJSON, _ := json.Marshal(*params.Tags)
-			args = append(args, tagsJSON)
+			sqlcParams.Tags, _ = json.Marshal(*params.Tags)
 		} else {
-			args = append(args, []byte("[]"))
+			sqlcParams.Tags = []byte("[]")
 		}
-		argNum++
 	}
 	if maskSet["priority"] {
-		setClauses = append(setClauses, fmt.Sprintf("priority = $%d", argNum))
 		if params.Priority != nil {
-			args = append(args, string(*params.Priority))
-		} else {
-			args = append(args, nil)
+			priorityStr := string(*params.Priority)
+			sqlcParams.Priority = &priorityStr
 		}
-		argNum++
 	}
 	if maskSet["estimated_duration"] {
-		setClauses = append(setClauses, fmt.Sprintf("estimated_duration = $%d", argNum))
-		if params.EstimatedDuration != nil {
-			args = append(args, params.EstimatedDuration.Nanoseconds())
-		} else {
-			args = append(args, nil)
-		}
-		argNum++
+		sqlcParams.EstimatedDuration = durationPtrToPgtypeInterval(params.EstimatedDuration)
 	}
-	if maskSet["recurrence_pattern"] && params.RecurrencePattern != nil {
-		setClauses = append(setClauses, fmt.Sprintf("recurrence_pattern = $%d", argNum))
-		args = append(args, string(*params.RecurrencePattern))
-		argNum++
+	if maskSet["recurrence_pattern"] {
+		if params.RecurrencePattern != nil {
+			patternStr := string(*params.RecurrencePattern)
+			sqlcParams.RecurrencePattern = &patternStr
+		}
 	}
 	if maskSet["recurrence_config"] {
-		setClauses = append(setClauses, fmt.Sprintf("recurrence_config = $%d", argNum))
 		if params.RecurrenceConfig != nil {
-			configJSON, _ := json.Marshal(params.RecurrenceConfig)
-			args = append(args, configJSON)
-		} else {
-			args = append(args, nil)
+			sqlcParams.RecurrenceConfig, _ = json.Marshal(params.RecurrenceConfig)
 		}
-		argNum++
 	}
 	if maskSet["due_offset"] {
-		setClauses = append(setClauses, fmt.Sprintf("due_offset = $%d", argNum))
-		if params.DueOffset != nil {
-			args = append(args, params.DueOffset.Nanoseconds())
-		} else {
-			args = append(args, nil)
+		sqlcParams.DueOffset = durationPtrToPgtypeInterval(params.DueOffset)
+	}
+	if maskSet["is_active"] {
+		sqlcParams.IsActive = params.IsActive
+	}
+	if maskSet["generation_window_days"] {
+		if params.GenerationWindowDays != nil {
+			days := int32(*params.GenerationWindowDays)
+			sqlcParams.GenerationWindowDays = &days
 		}
-		argNum++
-	}
-	if maskSet["is_active"] && params.IsActive != nil {
-		setClauses = append(setClauses, fmt.Sprintf("is_active = $%d", argNum))
-		args = append(args, *params.IsActive)
-		argNum++
-	}
-	if maskSet["generation_window_days"] && params.GenerationWindowDays != nil {
-		setClauses = append(setClauses, fmt.Sprintf("generation_window_days = $%d", argNum))
-		args = append(args, *params.GenerationWindowDays)
-		argNum++
 	}
 
-	// Build WHERE clause
-	whereClause := fmt.Sprintf("id = $%d", argNum)
-	args = append(args, templateUUID)
-
-	// Build full query with RETURNING
-	query := fmt.Sprintf(
-		`UPDATE recurring_templates SET %s WHERE %s
-		RETURNING id, list_id, title, tags, priority, estimated_duration, recurrence_pattern,
-		          recurrence_config, due_offset, is_active, created_at, updated_at,
-		          last_generated_until, generation_window_days`,
-		strings.Join(setClauses, ", "),
-		whereClause,
-	)
-
-	// Execute query
-	row := s.pool.QueryRow(ctx, query, args...)
-
-	// Scan result
-	var tmpl sqlcgen.RecurringTaskTemplate
-	err = row.Scan(
-		&tmpl.ID,
-		&tmpl.ListID,
-		&tmpl.Title,
-		&tmpl.Tags,
-		&tmpl.Priority,
-		&tmpl.EstimatedDuration,
-		&tmpl.RecurrencePattern,
-		&tmpl.RecurrenceConfig,
-		&tmpl.DueOffset,
-		&tmpl.IsActive,
-		&tmpl.CreatedAt,
-		&tmpl.UpdatedAt,
-		&tmpl.LastGeneratedUntil,
-		&tmpl.GenerationWindowDays,
-	)
+	// Execute type-safe update query
+	tmpl, err := s.queries.UpdateRecurringTemplate(ctx, sqlcParams)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, params.TemplateID)

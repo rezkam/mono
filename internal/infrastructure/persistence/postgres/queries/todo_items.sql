@@ -26,27 +26,31 @@ ORDER BY create_time ASC;
 SELECT * FROM todo_items
 ORDER BY list_id, create_time ASC;
 
--- name: UpdateTodoItem :execrows
--- DATA ACCESS PATTERN: Optimistic locking with version check
--- :execrows returns (int64, error) - Repository checks rowsAffected:
---   0 → Either item doesn't exist, belongs to different list, OR version mismatch (concurrent update)
---   1 → Success, version incremented
--- SECURITY: Validates item belongs to the specified list to prevent cross-list updates
--- CONCURRENCY: Version check prevents lost updates in race conditions
+-- name: UpdateTodoItem :one
+-- DATA ACCESS PATTERN: Partial update with COALESCE pattern
+-- Supports field masks by passing NULL for unchanged fields
+-- Returns updated row, or pgx.ErrNoRows if:
+--   - Item doesn't exist
+--   - Item belongs to different list (security: prevents cross-list updates)
+--   - Version mismatch (concurrency: prevents lost updates)
+-- SECURITY: Validates item belongs to the specified list
+-- CONCURRENCY: Optional version check for optimistic locking
+-- TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
 UPDATE todo_items
-SET title = sqlc.arg(title),
-    status = sqlc.arg(status),
-    priority = sqlc.arg(priority),
-    estimated_duration = sqlc.narg('estimated_duration'),
-    actual_duration = sqlc.narg('actual_duration'),
-    updated_at = sqlc.arg(updated_at),
-    due_time = sqlc.narg(due_time),
-    tags = sqlc.arg(tags),
-    timezone = sqlc.narg(timezone),
+SET title = COALESCE(sqlc.narg('title'), title),
+    status = COALESCE(sqlc.narg('status'), status),
+    priority = COALESCE(sqlc.narg('priority'), priority),
+    estimated_duration = COALESCE(sqlc.narg('estimated_duration'), estimated_duration),
+    actual_duration = COALESCE(sqlc.narg('actual_duration'), actual_duration),
+    due_time = COALESCE(sqlc.narg('due_time'), due_time),
+    tags = COALESCE(sqlc.narg('tags'), tags),
+    timezone = COALESCE(sqlc.narg('timezone'), timezone),
+    updated_at = NOW(),
     version = version + 1
-WHERE id = sqlc.arg(id)
-  AND list_id = sqlc.arg(list_id)
-  AND version = sqlc.arg(version);
+WHERE id = sqlc.arg('id')
+  AND list_id = sqlc.arg('list_id')
+  AND (sqlc.narg('expected_version')::integer IS NULL OR version = sqlc.narg('expected_version')::integer)
+RETURNING *;
 
 -- name: UpdateTodoItemStatus :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected

@@ -32,31 +32,30 @@ SELECT * FROM recurring_task_templates
 WHERE is_active = true
 ORDER BY created_at DESC;
 
--- name: UpdateRecurringTemplate :execrows
--- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
--- :execrows returns (int64, error) where int64 is the number of rows affected
+-- name: UpdateRecurringTemplate :one
+-- DATA ACCESS PATTERN: Partial update with COALESCE pattern
+-- Supports field masks by passing NULL for unchanged fields
+-- Returns updated row, or pgx.ErrNoRows if template doesn't exist
+-- TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
 --
 -- Why this pattern:
---   - Single database round-trip (vs two-query SELECT+UPDATE pattern)
---   - No race condition: record cannot be deleted between check and update
---   - Efficient: PostgreSQL returns affected count with no additional cost
---   - Repository layer checks: rowsAffected == 0 → domain.ErrNotFound
---
--- Anti-pattern to avoid:
---   SELECT to check existence, then UPDATE if found
---   - Two round-trips to database
---   - Race condition window between queries
---   - Doubled network latency
+--   - Single database round-trip with full row returned
+--   - No race condition: atomically updates and returns result
+--   - Partial update support: NULL preserves existing values via COALESCE
+--   - Type safe: sqlc validates all columns against actual schema
 UPDATE recurring_task_templates
-SET title = sqlc.arg(title),
-    tags = sqlc.arg(tags),
-    priority = sqlc.arg(priority),
-    estimated_duration = sqlc.narg('estimated_duration'),
-    recurrence_pattern = sqlc.arg(recurrence_pattern),
-    recurrence_config = sqlc.arg(recurrence_config),
-    due_offset = sqlc.narg('due_offset'),
-    updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id);
+SET title = COALESCE(sqlc.narg('title'), title),
+    tags = COALESCE(sqlc.narg('tags'), tags),
+    priority = COALESCE(sqlc.narg('priority'), priority),
+    estimated_duration = COALESCE(sqlc.narg('estimated_duration'), estimated_duration),
+    recurrence_pattern = COALESCE(sqlc.narg('recurrence_pattern'), recurrence_pattern),
+    recurrence_config = COALESCE(sqlc.narg('recurrence_config'), recurrence_config),
+    due_offset = COALESCE(sqlc.narg('due_offset'), due_offset),
+    is_active = COALESCE(sqlc.narg('is_active'), is_active),
+    generation_window_days = COALESCE(sqlc.narg('generation_window_days'), generation_window_days),
+    updated_at = NOW()
+WHERE id = sqlc.arg('id')
+RETURNING *;
 
 -- name: UpdateRecurringTemplateGenerationWindow :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
