@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // TodoList is an aggregate root representing a collection of tasks.
 //
@@ -30,7 +33,7 @@ func (l *TodoList) UpdateItemStatus(itemID string, status TaskStatus) bool {
 	for i, item := range l.Items {
 		if item.ID == itemID {
 			l.Items[i].Status = status
-			l.Items[i].UpdatedAt = time.Now()
+			l.Items[i].UpdatedAt = time.Now().UTC()
 			return true
 		}
 	}
@@ -73,6 +76,71 @@ type TodoItem struct {
 
 	// Optimistic locking version for concurrent update protection
 	Version int
+}
+
+// Etag returns the entity tag for this item.
+// The etag is based on the version number and is used for optimistic concurrency control.
+// Returns the version as a string: "1", "2", "42", etc.
+func (item *TodoItem) Etag() string {
+	return fmt.Sprintf("%d", item.Version)
+}
+
+// UpdateItemParams contains parameters for updating a todo item with field mask support.
+// Uses client-side optimistic concurrency control via etag (AIP-154).
+type UpdateItemParams struct {
+	ItemID string
+	ListID string
+
+	// Etag for optimistic concurrency control.
+	// Format: quoted string, e.g., `"1"`, `"2"`.
+	// If doesn't match current version, returns ErrVersionConflict.
+	Etag *string
+
+	// UpdateMask specifies which fields to update.
+	// Only fields in this list will be modified.
+	UpdateMask []string
+
+	// Field values (only applied if field is in UpdateMask)
+	Title             *string
+	Status            *TaskStatus
+	Priority          *TaskPriority
+	DueTime           *time.Time
+	Tags              *[]string
+	Timezone          *string
+	EstimatedDuration *time.Duration
+	ActualDuration    *time.Duration
+}
+
+// UpdateListParams contains parameters for updating a todo list with field mask support.
+type UpdateListParams struct {
+	ListID string
+
+	// UpdateMask specifies which fields to update.
+	// Only fields in this list will be modified.
+	UpdateMask []string
+
+	// Field values (only applied if field is in UpdateMask)
+	Title *string
+}
+
+// UpdateRecurringTemplateParams contains parameters for updating a recurring template with field mask support.
+type UpdateRecurringTemplateParams struct {
+	TemplateID string
+
+	// UpdateMask specifies which fields to update.
+	// Only fields in this list will be modified.
+	UpdateMask []string
+
+	// Field values (only applied if field is in UpdateMask)
+	Title                *string
+	Tags                 *[]string
+	Priority             *TaskPriority
+	EstimatedDuration    *time.Duration
+	RecurrencePattern    *RecurrencePattern
+	RecurrenceConfig     map[string]interface{}
+	DueOffset            *time.Duration
+	IsActive             *bool
+	GenerationWindowDays *int
 }
 
 // RecurringTemplate is an aggregate root representing a template for generating recurring task instances.

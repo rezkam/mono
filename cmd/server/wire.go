@@ -103,19 +103,12 @@ func provideAuthConfig() auth.Config {
 }
 
 // provideAuthenticator creates an Authenticator and returns a cleanup function
-// that gracefully shuts down the background worker.
+// that waits for the background worker to finish.
 func provideAuthenticator(ctx context.Context, repo auth.Repository, cfg auth.Config) (*auth.Authenticator, func(), error) {
 	authenticator := auth.NewAuthenticator(ctx, repo, cfg)
 
 	cleanup := func() {
-		// Use a background context with timeout for shutdown
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := authenticator.Shutdown(shutdownCtx); err != nil {
-			// Log error but don't fail cleanup
-			fmt.Fprintf(os.Stderr, "failed to shutdown authenticator: %v\n", err)
-		}
+		authenticator.Wait()
 	}
 
 	return authenticator, cleanup, nil

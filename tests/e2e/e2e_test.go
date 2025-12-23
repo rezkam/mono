@@ -86,7 +86,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	httpServer.Shutdown(ctx)
-	authenticator.Shutdown(ctx)
+	authenticator.Wait()
 	os.Exit(code)
 }
 

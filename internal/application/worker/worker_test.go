@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -364,5 +365,70 @@ func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "failed to update job status") {
 		t.Errorf("error should NOT mention status update failure when it succeeded, got: %v", err)
+	}
+}
+
+// TestWorker_GracefulShutdown tests that in-flight operations complete on shutdown.
+// When ctx is cancelled:
+// 1. Worker stops accepting new work (tickers stop)
+// 2. In-flight operations complete (not aborted)
+// 3. Worker exits cleanly
+func TestWorker_GracefulShutdown(t *testing.T) {
+	var operationStarted atomic.Bool
+	var operationCompleted atomic.Bool
+
+	repo := &mockRepository{
+		getActiveTemplatesFunc: func(ctx context.Context) ([]*domain.RecurringTemplate, error) {
+			return nil, nil
+		},
+		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
+			operationStarted.Store(true)
+			// Simulate slow operation - should complete even after shutdown signal
+			time.Sleep(200 * time.Millisecond)
+			operationCompleted.Store(true)
+			return "", nil
+		},
+	}
+
+	w := New(repo,
+		WithScheduleInterval(1*time.Hour),        // Don't trigger scheduler
+		WithProcessInterval(50*time.Millisecond), // Trigger processor quickly
+		WithOperationTimeout(5*time.Second),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- w.Start(ctx)
+	}()
+
+	// Wait for operation to START
+	for i := 0; i < 50; i++ {
+		if operationStarted.Load() {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !operationStarted.Load() {
+		t.Fatal("operation never started")
+	}
+
+	// Cancel context while operation is in-flight
+	cancel()
+
+	// Wait for worker to exit
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Errorf("expected nil error on graceful shutdown, got: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not exit after context cancellation")
+	}
+
+	// Verify operation completed (was not aborted)
+	if !operationCompleted.Load() {
+		t.Error("in-flight operation was aborted - should have completed gracefully")
 	}
 }

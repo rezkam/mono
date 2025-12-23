@@ -46,23 +46,11 @@ func run() error {
 		worker.WithOperationTimeout(time.Duration(cfg.WorkerOperationTimeout)*time.Second),
 	)
 
-	// Start worker in goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		errChan <- w.Start(ctx)
-	}()
-
 	slog.InfoContext(ctx, "Recurring task worker started")
 
-	// Wait for context cancellation (from signal) or worker error
-	select {
-	case <-ctx.Done():
-		slog.InfoContext(ctx, "Received shutdown signal, stopping worker...")
-		w.Stop()
-	case err := <-errChan:
-		if err != nil && err != context.Canceled {
-			slog.ErrorContext(ctx, "Worker error", "error", err)
-		}
+	// Start worker - blocks until ctx is cancelled and in-flight work completes
+	if err := w.Start(ctx); err != nil {
+		return fmt.Errorf("worker error: %w", err)
 	}
 
 	slog.InfoContext(ctx, "Worker shut down gracefully")

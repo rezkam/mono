@@ -63,7 +63,7 @@ func SetupTestServer(t *testing.T) *TestServer {
 
 	// Cleanup function
 	cleanup := func() {
-		_ = authenticator.Shutdown(context.Background())
+		authenticator.Wait()
 		_ = store.Close()
 	}
 

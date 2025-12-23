@@ -34,10 +34,8 @@ type lastUsedUpdate struct {
 // Authenticator handles API key authentication.
 type Authenticator struct {
 	repo             Repository
-	appCtx           context.Context // Application context, cancelled on shutdown
+	ctx              context.Context // Cancelled on shutdown
 	lastUsedUpdates  chan lastUsedUpdate
-	shutdownChan     chan struct{}
-	shutdownOnce     sync.Once // Ensures shutdown is idempotent
 	wg               sync.WaitGroup
 	operationTimeout time.Duration // Timeout for storage operations
 }
@@ -61,9 +59,8 @@ func NewAuthenticator(ctx context.Context, repo Repository, config Config) *Auth
 
 	a := &Authenticator{
 		repo:             repo,
-		appCtx:           ctx,
+		ctx:              ctx,
 		lastUsedUpdates:  make(chan lastUsedUpdate, config.UpdateQueueSize),
-		shutdownChan:     make(chan struct{}),
 		operationTimeout: config.OperationTimeout,
 	}
 
@@ -82,33 +79,16 @@ func (a *Authenticator) processLastUsedUpdates() {
 	for {
 		select {
 		case update := <-a.lastUsedUpdates:
-			// Derive context from application context (respects shutdown)
-			// Note: We call cancel() explicitly instead of using defer because
-			// defer in a loop defers until function exit, causing resource leaks.
-			ctx, cancel := context.WithTimeout(a.appCtx, a.operationTimeout)
+			a.processUpdate(update)
 
-			if err := a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp); err != nil {
-				// Log failure but continue processing (last_used_at is non-critical)
-				slog.WarnContext(ctx, "Failed to update API key last_used_at",
-					slog.String("key_id", update.keyID),
-					slog.String("error", err.Error()))
-			}
-			cancel() // Release context resources immediately after each iteration
-
-		case <-a.shutdownChan:
-			// Drain remaining updates before shutdown
+		case <-a.ctx.Done():
+			slog.Info("Shutdown requested, draining remaining last_used updates...")
 			for {
 				select {
 				case update := <-a.lastUsedUpdates:
-					// Use context.Background() for cleanup operations to ensure they complete
-					// even though appCtx is cancelled during shutdown. This is defensive:
-					// cleanup operations should succeed regardless of application state.
-					// The timeout still applies to prevent hanging on storage issues.
-					ctx, cancel := context.WithTimeout(context.Background(), a.operationTimeout)
-					_ = a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp)
-					cancel() // Release context resources immediately after each iteration
+					a.processUpdate(update)
 				default:
-					// No more updates, exit cleanly
+					slog.Info("Authenticator worker stopped gracefully")
 					return
 				}
 			}
@@ -116,31 +96,29 @@ func (a *Authenticator) processLastUsedUpdates() {
 	}
 }
 
-// Shutdown gracefully shuts down the authenticator by signaling the worker to stop
-// and waiting for it to finish processing remaining updates.
-// It respects the provided context's deadline for shutdown timeout.
-// This method is idempotent and safe to call multiple times.
-func (a *Authenticator) Shutdown(ctx context.Context) error {
-	var shutdownErr error
-	a.shutdownOnce.Do(func() {
-		// Signal worker to stop
-		close(a.shutdownChan)
+// processUpdate handles a single last_used_at update.
+func (a *Authenticator) processUpdate(update lastUsedUpdate) {
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if a.operationTimeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), a.operationTimeout)
+	}
 
-		// Wait for worker to finish, with timeout
-		done := make(chan struct{})
-		go func() {
-			a.wg.Wait()
-			close(done)
-		}()
+	if err := a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp); err != nil {
+		slog.WarnContext(ctx, "Failed to update API key last_used_at",
+			slog.String("key_id", update.keyID),
+			slog.String("error", err.Error()))
+	}
 
-		select {
-		case <-done:
-			shutdownErr = nil
-		case <-ctx.Done():
-			shutdownErr = fmt.Errorf("shutdown timeout: %w", ctx.Err())
-		}
-	})
-	return shutdownErr
+	if cancel != nil {
+		cancel() // releases timer resources
+	}
+}
+
+// Wait blocks until the background worker finishes processing remaining updates.
+// Call this after cancelling the context passed to NewAuthenticator.
+func (a *Authenticator) Wait() {
+	a.wg.Wait()
 }
 
 // ValidateAPIKey validates an API key and returns the key information if valid.
@@ -153,9 +131,14 @@ func (a *Authenticator) ValidateAPIKey(ctx context.Context, apiKey string) (*dom
 		return nil, domain.ErrUnauthorized
 	}
 
-	// Create timeout context for storage operation
-	opCtx, cancel := context.WithTimeout(ctx, a.operationTimeout)
-	defer cancel()
+	// Create timeout context for storage operation (if timeout is configured)
+	// Zero timeout means no timeout - use parent context directly
+	opCtx := ctx
+	if a.operationTimeout > 0 {
+		var cancel context.CancelFunc
+		opCtx, cancel = context.WithTimeout(ctx, a.operationTimeout)
+		defer cancel()
+	}
 
 	key, err := a.repo.FindByShortToken(opCtx, keyParts.ShortToken)
 	if err != nil {
