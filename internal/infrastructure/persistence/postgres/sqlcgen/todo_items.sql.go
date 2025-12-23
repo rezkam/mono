@@ -411,65 +411,81 @@ func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFil
 	return items, nil
 }
 
-const updateTodoItem = `-- name: UpdateTodoItem :execrows
+const updateTodoItem = `-- name: UpdateTodoItem :one
 UPDATE todo_items
-SET title = $1,
-    status = $2,
-    priority = $3,
-    estimated_duration = $4,
-    actual_duration = $5,
-    updated_at = $6,
-    due_time = $7,
-    tags = $8,
-    timezone = $9,
+SET title = COALESCE($1, title),
+    status = COALESCE($2, status),
+    priority = COALESCE($3, priority),
+    estimated_duration = COALESCE($4, estimated_duration),
+    actual_duration = COALESCE($5, actual_duration),
+    due_time = COALESCE($6, due_time),
+    tags = COALESCE($7, tags),
+    timezone = COALESCE($8, timezone),
+    updated_at = NOW(),
     version = version + 1
-WHERE id = $10
-  AND list_id = $11
-  AND version = $12
+WHERE id = $9
+  AND list_id = $10
+  AND ($11::integer IS NULL OR version = $11::integer)
+RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version
 `
 
 type UpdateTodoItemParams struct {
-	Title             string             `json:"title"`
-	Status            string             `json:"status"`
+	Title             *string            `json:"title"`
+	Status            *string            `json:"status"`
 	Priority          *string            `json:"priority"`
 	EstimatedDuration pgtype.Interval    `json:"estimated_duration"`
 	ActualDuration    pgtype.Interval    `json:"actual_duration"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	DueTime           pgtype.Timestamptz `json:"due_time"`
 	Tags              []byte             `json:"tags"`
 	Timezone          *string            `json:"timezone"`
 	ID                pgtype.UUID        `json:"id"`
 	ListID            pgtype.UUID        `json:"list_id"`
-	Version           int32              `json:"version"`
+	ExpectedVersion   *int32             `json:"expected_version"`
 }
 
-// DATA ACCESS PATTERN: Optimistic locking with version check
-// :execrows returns (int64, error) - Repository checks rowsAffected:
+// DATA ACCESS PATTERN: Partial update with COALESCE pattern
+// Supports field masks by passing NULL for unchanged fields
+// Returns updated row, or pgx.ErrNoRows if:
+//   - Item doesn't exist
+//   - Item belongs to different list (security: prevents cross-list updates)
+//   - Version mismatch (concurrency: prevents lost updates)
 //
-//	0 → Either item doesn't exist, belongs to different list, OR version mismatch (concurrent update)
-//	1 → Success, version incremented
-//
-// SECURITY: Validates item belongs to the specified list to prevent cross-list updates
-// CONCURRENCY: Version check prevents lost updates in race conditions
-func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateTodoItem,
+// SECURITY: Validates item belongs to the specified list
+// CONCURRENCY: Optional version check for optimistic locking
+// TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
+func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (TodoItem, error) {
+	row := q.db.QueryRow(ctx, updateTodoItem,
 		arg.Title,
 		arg.Status,
 		arg.Priority,
 		arg.EstimatedDuration,
 		arg.ActualDuration,
-		arg.UpdatedAt,
 		arg.DueTime,
 		arg.Tags,
 		arg.Timezone,
 		arg.ID,
 		arg.ListID,
-		arg.Version,
+		arg.ExpectedVersion,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var i TodoItem
+	err := row.Scan(
+		&i.ID,
+		&i.ListID,
+		&i.Title,
+		&i.Status,
+		&i.Priority,
+		&i.EstimatedDuration,
+		&i.ActualDuration,
+		&i.CreateTime,
+		&i.UpdatedAt,
+		&i.DueTime,
+		&i.Tags,
+		&i.RecurringTemplateID,
+		&i.InstanceDate,
+		&i.Timezone,
+		&i.Version,
+	)
+	return i, err
 }
 
 const updateTodoItemStatus = `-- name: UpdateTodoItemStatus :execrows

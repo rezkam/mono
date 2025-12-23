@@ -32,19 +32,22 @@ func timeToPgtype(t time.Time) pgtype.Timestamptz {
 }
 
 // pgtypeToTime converts pgtype.Timestamptz to time.Time (zero if invalid).
+// Always returns time in UTC location for consistent timezone handling.
 func pgtypeToTime(t pgtype.Timestamptz) time.Time {
 	if !t.Valid {
 		return time.Time{}
 	}
-	return t.Time
+	return t.Time.UTC()
 }
 
 // pgtypeToTimePtr converts pgtype.Timestamptz to *time.Time (nil if invalid).
+// Always returns time in UTC location for consistent timezone handling.
 func pgtypeToTimePtr(t pgtype.Timestamptz) *time.Time {
 	if !t.Valid {
 		return nil
 	}
-	return &t.Time
+	utcTime := t.Time.UTC()
+	return &utcTime
 }
 
 // timePtrToPgtype converts *time.Time to pgtype.Timestamptz.
@@ -451,4 +454,13 @@ func durationToInterval(d time.Duration) pgtype.Interval {
 		Microseconds: d.Microseconds(),
 		Valid:        true,
 	}
+}
+
+// durationPtrToPgtypeInterval converts optional Go duration pointer to pgtype.Interval.
+// If duration is nil, returns invalid interval (for use with COALESCE in SQL).
+func durationPtrToPgtypeInterval(d *time.Duration) pgtype.Interval {
+	if d == nil {
+		return pgtype.Interval{Valid: false}
+	}
+	return durationToInterval(*d)
 }

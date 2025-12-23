@@ -144,32 +144,31 @@ type Querier interface {
 	// retry_count is preserved automatically (not in SET clause)
 	// Critical for worker: Detects if job was deleted/claimed by another worker between operations
 	UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error)
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) where int64 is the number of rows affected
+	// DATA ACCESS PATTERN: Partial update with COALESCE pattern
+	// Supports field masks by passing NULL for unchanged fields
+	// Returns updated row, or pgx.ErrNoRows if template doesn't exist
+	// TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
 	//
 	// Why this pattern:
-	//   - Single database round-trip (vs two-query SELECT+UPDATE pattern)
-	//   - No race condition: record cannot be deleted between check and update
-	//   - Efficient: PostgreSQL returns affected count with no additional cost
-	//   - Repository layer checks: rowsAffected == 0 → domain.ErrNotFound
-	//
-	// Anti-pattern to avoid:
-	//   SELECT to check existence, then UPDATE if found
-	//   - Two round-trips to database
-	//   - Race condition window between queries
-	//   - Doubled network latency
-	UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (int64, error)
+	//   - Single database round-trip with full row returned
+	//   - No race condition: atomically updates and returns result
+	//   - Partial update support: NULL preserves existing values via COALESCE
+	//   - Type safe: sqlc validates all columns against actual schema
+	UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (RecurringTaskTemplate, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Critical for worker: Detects if template was deleted between job claim and generation
 	UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error)
-	// DATA ACCESS PATTERN: Optimistic locking with version check
-	// :execrows returns (int64, error) - Repository checks rowsAffected:
-	//   0 → Either item doesn't exist, belongs to different list, OR version mismatch (concurrent update)
-	//   1 → Success, version incremented
-	// SECURITY: Validates item belongs to the specified list to prevent cross-list updates
-	// CONCURRENCY: Version check prevents lost updates in race conditions
-	UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (int64, error)
+	// DATA ACCESS PATTERN: Partial update with COALESCE pattern
+	// Supports field masks by passing NULL for unchanged fields
+	// Returns updated row, or pgx.ErrNoRows if:
+	//   - Item doesn't exist
+	//   - Item belongs to different list (security: prevents cross-list updates)
+	//   - Version mismatch (concurrency: prevents lost updates)
+	// SECURITY: Validates item belongs to the specified list
+	// CONCURRENCY: Optional version check for optimistic locking
+	// TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
+	UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (TodoItem, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Efficient status updates without separate existence check

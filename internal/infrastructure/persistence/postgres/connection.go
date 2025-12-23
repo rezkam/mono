@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver for migrations
 	"github.com/pressly/goose/v3"
@@ -60,6 +61,12 @@ func NewStoreWithConfig(ctx context.Context, cfg DBConfig) (*Store, error) {
 	poolConfig.MinConns = minConns
 	poolConfig.MaxConnLifetime = connMaxLifetime
 	poolConfig.MaxConnIdleTime = connMaxIdleTime
+
+	// Set timezone to UTC for all connections to ensure consistent timestamp handling
+	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET TIMEZONE='UTC'")
+		return err
+	}
 
 	// Create connection pool
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
