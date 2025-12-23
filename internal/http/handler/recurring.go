@@ -22,11 +22,17 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Build domain model from DTO
+	pattern, err := domain.NewRecurrencePattern(string(req.RecurrencePattern))
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
+
 	template := &domain.RecurringTemplate{
 		ListID:            listID.String(),
 		Title:             req.Title,
 		Tags:              []string{},
-		RecurrencePattern: domain.RecurrencePattern(req.RecurrencePattern),
+		RecurrencePattern: pattern,
 	}
 
 	if req.Tags != nil {
@@ -43,18 +49,18 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	if req.EstimatedDuration != nil {
-		duration, err := parseDuration(*req.EstimatedDuration)
+		duration, err := domain.ParseDuration(*req.EstimatedDuration)
 		if err != nil {
-			response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+			response.FromDomainError(w, r, err)
 			return
 		}
 		template.EstimatedDuration = &duration
 	}
 
 	if req.DueOffset != nil {
-		duration, err := parseDuration(*req.DueOffset)
+		duration, err := domain.ParseDuration(*req.DueOffset)
 		if err != nil {
-			response.BadRequest(w, "invalid due_offset: "+err.Error())
+			response.FromDomainError(w, r, err)
 			return
 		}
 		template.DueOffset = &duration
@@ -177,30 +183,38 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 			params.Tags = req.Template.Tags
 		case "priority":
 			if req.Template.Priority != nil {
-				priority := domain.TaskPriority(*req.Template.Priority)
+				priority, err := domain.NewTaskPriority(string(*req.Template.Priority))
+				if err != nil {
+					response.FromDomainError(w, r, err)
+					return
+				}
 				params.Priority = &priority
 			}
 		case "estimated_duration":
 			if req.Template.EstimatedDuration != nil {
-				duration, err := parseDuration(*req.Template.EstimatedDuration)
+				duration, err := domain.ParseDuration(*req.Template.EstimatedDuration)
 				if err != nil {
-					response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+					response.FromDomainError(w, r, err)
 					return
 				}
 				params.EstimatedDuration = &duration
 			}
 		case "due_offset":
 			if req.Template.DueOffset != nil {
-				duration, err := parseDuration(*req.Template.DueOffset)
+				duration, err := domain.ParseDuration(*req.Template.DueOffset)
 				if err != nil {
-					response.BadRequest(w, "invalid due_offset: "+err.Error())
+					response.FromDomainError(w, r, err)
 					return
 				}
 				params.DueOffset = &duration
 			}
 		case "recurrence_pattern":
 			if req.Template.RecurrencePattern != nil {
-				pattern := domain.RecurrencePattern(*req.Template.RecurrencePattern)
+				pattern, err := domain.NewRecurrencePattern(string(*req.Template.RecurrencePattern))
+				if err != nil {
+					response.FromDomainError(w, r, err)
+					return
+				}
 				params.RecurrencePattern = &pattern
 			}
 		case "recurrence_config":

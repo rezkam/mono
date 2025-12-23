@@ -32,9 +32,9 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 
 	// Parse estimated_duration if provided
 	if req.EstimatedDuration != nil {
-		duration, err := parseDuration(*req.EstimatedDuration)
+		duration, err := domain.ParseDuration(*req.EstimatedDuration)
 		if err != nil {
-			response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+			response.FromDomainError(w, r, err)
 			return
 		}
 		item.EstimatedDuration = &duration
@@ -138,12 +138,20 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			params.Title = req.Item.Title
 		case "status":
 			if req.Item.Status != nil {
-				status := domain.TaskStatus(*req.Item.Status)
+				status, err := domain.NewTaskStatus(string(*req.Item.Status))
+				if err != nil {
+					response.FromDomainError(w, r, err)
+					return
+				}
 				params.Status = &status
 			}
 		case "priority":
 			if req.Item.Priority != nil {
-				priority := domain.TaskPriority(*req.Item.Priority)
+				priority, err := domain.NewTaskPriority(string(*req.Item.Priority))
+				if err != nil {
+					response.FromDomainError(w, r, err)
+					return
+				}
 				params.Priority = &priority
 			}
 		case "due_time":
@@ -156,18 +164,18 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			params.Timezone = req.Item.Timezone
 		case "estimated_duration":
 			if req.Item.EstimatedDuration != nil {
-				duration, err := parseDuration(*req.Item.EstimatedDuration)
+				duration, err := domain.ParseDuration(*req.Item.EstimatedDuration)
 				if err != nil {
-					response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+					response.FromDomainError(w, r, err)
 					return
 				}
 				params.EstimatedDuration = &duration
 			}
 		case "actual_duration":
 			if req.Item.ActualDuration != nil {
-				duration, err := parseDuration(*req.Item.ActualDuration)
+				duration, err := domain.ParseDuration(*req.Item.ActualDuration)
 				if err != nil {
-					response.BadRequest(w, "invalid actual_duration: "+err.Error())
+					response.FromDomainError(w, r, err)
 					return
 				}
 				params.ActualDuration = &duration
