@@ -113,15 +113,6 @@ func dbAPIKeyToDomain(dbKey sqlcgen.ApiKey) *domain.APIKey {
 
 // === Todo List Conversions ===
 
-func dbTodoListToDomain(dbList sqlcgen.TodoList) *domain.TodoList {
-	return &domain.TodoList{
-		ID:         pgtypeToUUIDString(dbList.ID),
-		Title:      dbList.Title,
-		Items:      []domain.TodoItem{}, // Populated separately if needed
-		CreateTime: pgtypeToTime(dbList.CreateTime),
-	}
-}
-
 func domainTodoListToDB(list *domain.TodoList) (pgtype.UUID, string, pgtype.Timestamptz, error) {
 	id, err := uuid.Parse(list.ID)
 	if err != nil {
@@ -307,50 +298,6 @@ func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTod
 	// Instance Date
 	if item.InstanceDate != nil {
 		params.InstanceDate = dateToPgtype(*item.InstanceDate)
-	}
-
-	return params, nil
-}
-
-func domainTodoItemToUpdateParams(item *domain.TodoItem) (sqlcgen.UpdateTodoItemParams, error) {
-	itemID, err := uuid.Parse(item.ID)
-	if err != nil {
-		return sqlcgen.UpdateTodoItemParams{}, fmt.Errorf("%w: item %v", domain.ErrInvalidID, err)
-	}
-
-	params := sqlcgen.UpdateTodoItemParams{
-		ID:        uuidToPgtype(itemID),
-		Title:     item.Title,
-		Status:    string(item.Status),
-		UpdatedAt: timeToPgtype(item.UpdatedAt),
-		DueTime:   timePtrToPgtype(item.DueTime),
-		Timezone:  item.Timezone,
-		Version:   int32(item.Version),
-	}
-
-	// Priority (now *string in pgx)
-	if item.Priority != nil {
-		priority := string(*item.Priority)
-		params.Priority = &priority
-	}
-
-	// Estimated Duration
-	if item.EstimatedDuration != nil {
-		params.EstimatedDuration = durationToInterval(*item.EstimatedDuration)
-	}
-
-	// Actual Duration
-	if item.ActualDuration != nil {
-		params.ActualDuration = durationToInterval(*item.ActualDuration)
-	}
-
-	// Tags (now []byte in pgx)
-	if len(item.Tags) > 0 {
-		tagsJSON, err := json.Marshal(item.Tags)
-		if err != nil {
-			return params, fmt.Errorf("failed to marshal tags: %w", err)
-		}
-		params.Tags = tagsJSON
 	}
 
 	return params, nil

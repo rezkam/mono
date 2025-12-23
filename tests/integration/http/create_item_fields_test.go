@@ -125,7 +125,8 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		require.NotNil(t, resp.Item)
 		require.NotNil(t, resp.Item.Priority)
-		assert.Equal(t, openapi.High, *resp.Item.Priority)
+		high := openapi.TaskPriority("high")
+		assert.Equal(t, high, *resp.Item.Priority)
 	})
 
 	t.Run("estimated_duration is mapped", func(t *testing.T) {
@@ -237,7 +238,8 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		assert.ElementsMatch(t, []string{"work", "important"}, *resp.Item.Tags)
 
 		require.NotNil(t, resp.Item.Priority)
-		assert.Equal(t, openapi.Urgent, *resp.Item.Priority)
+		urgent := openapi.TaskPriority("urgent")
+		assert.Equal(t, urgent, *resp.Item.Priority)
 
 		require.NotNil(t, resp.Item.EstimatedDuration)
 		assert.Equal(t, "2h45m0s", *resp.Item.EstimatedDuration)
@@ -251,7 +253,8 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		// Verify auto-generated fields
 		require.NotNil(t, resp.Item.Id)
 		require.NotNil(t, resp.Item.Status)
-		assert.Equal(t, openapi.Todo, *resp.Item.Status)
+		todo := openapi.TaskStatus("todo")
+		assert.Equal(t, todo, *resp.Item.Status)
 		require.NotNil(t, resp.Item.CreateTime)
 		require.NotNil(t, resp.Item.UpdatedAt)
 	})
@@ -352,7 +355,7 @@ func TestCreateItem_PriorityValues(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listResp))
 	listID := listResp.List.Id.String()
 
-	priorities := []openapi.TaskPriority{openapi.Low, openapi.Medium, openapi.High, openapi.Urgent}
+	priorities := []openapi.TaskPriority{"low", "medium", "high", "urgent"}
 
 	for _, priority := range priorities {
 		t.Run(string(priority), func(t *testing.T) {

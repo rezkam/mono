@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime/types"
@@ -60,38 +59,32 @@ func (s *Server) GetList(w http.ResponseWriter, r *http.Request, id types.UUID) 
 // ListLists implements ServerInterface.ListLists.
 // GET /v1/lists
 func (s *Server) ListLists(w http.ResponseWriter, r *http.Request, params openapi.ListListsParams) {
-	// Parse filter and order_by parameters
-	var filterParams domain.ListListsParams
-	var err error
-
-	if params.Filter != nil && *params.Filter != "" {
-		filterParams, err = parseListFilter(*params.Filter)
-		if err != nil {
-			response.BadRequest(w, fmt.Sprintf("invalid filter: %v", err))
-			return
-		}
-	}
-
-	// Parse order_by
-	if params.OrderBy != nil && *params.OrderBy != "" {
-		orderBy, orderDir, err := parseOrderBy(*params.OrderBy)
-		if err != nil {
-			response.BadRequest(w, fmt.Sprintf("invalid order_by: %v", err))
-			return
-		}
-		filterParams.OrderBy = orderBy
-		filterParams.OrderDir = orderDir
-	} else {
-		filterParams.OrderBy = "create_time"
-		filterParams.OrderDir = "desc"
-	}
-
-	// Parse pagination
-	pageSize := getPageSize(params.PageSize)
+	// Build domain params from query params
 	offset := parsePageToken(params.PageToken)
 
-	filterParams.Limit = pageSize
-	filterParams.Offset = offset
+	filterParams := domain.ListListsParams{
+		Limit:  getPageSize(params.PageSize),
+		Offset: offset,
+	}
+
+	// Set filter parameters if specified
+	if params.TitleContains != nil {
+		filterParams.TitleContains = params.TitleContains
+	}
+	if params.CreatedAfter != nil {
+		filterParams.CreateTimeAfter = params.CreatedAfter
+	}
+	if params.CreatedBefore != nil {
+		filterParams.CreateTimeBefore = params.CreatedBefore
+	}
+
+	// Set sorting if specified
+	if params.SortBy != nil {
+		filterParams.OrderBy = string(*params.SortBy)
+	}
+	if params.SortDir != nil {
+		filterParams.OrderDir = string(*params.SortDir)
+	}
 
 	// Call service layer with filters and sorting
 	result, err := s.todoService.FindLists(r.Context(), filterParams)
@@ -106,9 +99,8 @@ func (s *Server) ListLists(w http.ResponseWriter, r *http.Request, params openap
 		listDTOs[i] = MapListToDTO(list)
 	}
 
-	// Generate next page token if there are more results
-	nextOffset := offset + pageSize
-	nextToken := generatePageToken(nextOffset, result.HasMore)
+	// Generate next page token based on repository result
+	nextToken := generatePageToken(offset+len(result.Lists), result.HasMore)
 
 	// Return success response
 	response.OK(w, openapi.ListListsResponse{

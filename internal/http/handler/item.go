@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime/types"
@@ -209,26 +208,24 @@ func (s *Server) ListTasks(w http.ResponseWriter, r *http.Request, params openap
 		domainParams.ListID = &parentStr
 	}
 
-	// Parse filter (AIP-160)
-	if params.Filter != nil && *params.Filter != "" {
-		// TODO: Full AIP-160 parser - for now just log warning
-		// filterCriteria, err := parseFilter(*params.Filter)
-		// if err != nil {
-		//     response.BadRequest(w, fmt.Sprintf("invalid filter: %v", err))
-		//     return
-		// }
-		// Apply filter criteria to domainParams
+	// Set status filter if specified
+	if params.Status != nil {
+		status := domain.TaskStatus(*params.Status)
+		domainParams.Status = &status
 	}
 
-	// Parse order_by (AIP-132)
-	if params.OrderBy != nil && *params.OrderBy != "" {
-		field, direction, err := parseOrderBy(*params.OrderBy)
-		if err != nil {
-			response.BadRequest(w, fmt.Sprintf("invalid order_by: %v", err))
-			return
-		}
-		domainParams.OrderBy = field
-		domainParams.OrderDir = direction
+	// Set priority filter if specified
+	if params.Priority != nil {
+		priority := domain.TaskPriority(*params.Priority)
+		domainParams.Priority = &priority
+	}
+
+	// Set sorting if specified
+	if params.SortBy != nil {
+		domainParams.OrderBy = string(*params.SortBy)
+	}
+	if params.SortDir != nil {
+		domainParams.OrderDir = string(*params.SortDir)
 	}
 
 	// Call service layer

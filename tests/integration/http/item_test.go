@@ -28,8 +28,8 @@ func TestUpdateItem_SetsStatusAndPriority(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	status := openapi.Done
-	priority := openapi.High
+	status := openapi.TaskStatus("done")
+	priority := openapi.TaskPriority("high")
 	updateMask := []string{"status", "priority"}
 	reqBody := openapi.UpdateItemRequest{
 		Item: &openapi.TodoItem{

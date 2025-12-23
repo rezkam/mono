@@ -38,20 +38,64 @@ const (
 
 // Defines values for TaskPriority.
 const (
-	High   TaskPriority = "high"
-	Low    TaskPriority = "low"
-	Medium TaskPriority = "medium"
-	Urgent TaskPriority = "urgent"
+	TaskPriorityHigh   TaskPriority = "high"
+	TaskPriorityLow    TaskPriority = "low"
+	TaskPriorityMedium TaskPriority = "medium"
+	TaskPriorityUrgent TaskPriority = "urgent"
 )
 
 // Defines values for TaskStatus.
 const (
-	Archived   TaskStatus = "archived"
-	Blocked    TaskStatus = "blocked"
-	Cancelled  TaskStatus = "cancelled"
-	Done       TaskStatus = "done"
-	InProgress TaskStatus = "in_progress"
-	Todo       TaskStatus = "todo"
+	TaskStatusArchived   TaskStatus = "archived"
+	TaskStatusBlocked    TaskStatus = "blocked"
+	TaskStatusCancelled  TaskStatus = "cancelled"
+	TaskStatusDone       TaskStatus = "done"
+	TaskStatusInProgress TaskStatus = "in_progress"
+	TaskStatusTodo       TaskStatus = "todo"
+)
+
+// Defines values for ListListsParamsSortBy.
+const (
+	CreateTime ListListsParamsSortBy = "create_time"
+	Title      ListListsParamsSortBy = "title"
+)
+
+// Defines values for ListListsParamsSortDir.
+const (
+	ListListsParamsSortDirAsc  ListListsParamsSortDir = "asc"
+	ListListsParamsSortDirDesc ListListsParamsSortDir = "desc"
+)
+
+// Defines values for ListTasksParamsStatus.
+const (
+	ListTasksParamsStatusArchived   ListTasksParamsStatus = "archived"
+	ListTasksParamsStatusBlocked    ListTasksParamsStatus = "blocked"
+	ListTasksParamsStatusCancelled  ListTasksParamsStatus = "cancelled"
+	ListTasksParamsStatusDone       ListTasksParamsStatus = "done"
+	ListTasksParamsStatusInProgress ListTasksParamsStatus = "in_progress"
+	ListTasksParamsStatusTodo       ListTasksParamsStatus = "todo"
+)
+
+// Defines values for ListTasksParamsPriority.
+const (
+	ListTasksParamsPriorityHigh   ListTasksParamsPriority = "high"
+	ListTasksParamsPriorityLow    ListTasksParamsPriority = "low"
+	ListTasksParamsPriorityMedium ListTasksParamsPriority = "medium"
+	ListTasksParamsPriorityUrgent ListTasksParamsPriority = "urgent"
+)
+
+// Defines values for ListTasksParamsSortBy.
+const (
+	CreatedAt ListTasksParamsSortBy = "created_at"
+	DueTime   ListTasksParamsSortBy = "due_time"
+	Priority  ListTasksParamsSortBy = "priority"
+	UpdatedAt ListTasksParamsSortBy = "updated_at"
+)
+
+// Defines values for ListTasksParamsSortDir.
+const (
+	ListTasksParamsSortDirAsc  ListTasksParamsSortDir = "asc"
+	ListTasksParamsSortDirDesc ListTasksParamsSortDir = "desc"
 )
 
 // CreateItemRequest defines model for CreateItemRequest.
@@ -264,12 +308,27 @@ type ListListsParams struct {
 	// PageToken Page token from previous response
 	PageToken *string `form:"page_token,omitempty" json:"page_token,omitempty"`
 
-	// Filter AIP-160 filter expression
-	Filter *string `form:"filter,omitempty" json:"filter,omitempty"`
+	// TitleContains Filter by title substring (case-insensitive)
+	TitleContains *string `form:"title_contains,omitempty" json:"title_contains,omitempty"`
 
-	// OrderBy AIP-132 sorting expression
-	OrderBy *string `form:"order_by,omitempty" json:"order_by,omitempty"`
+	// CreatedAfter Filter lists created after this time
+	CreatedAfter *time.Time `form:"created_after,omitempty" json:"created_after,omitempty"`
+
+	// CreatedBefore Filter lists created before this time
+	CreatedBefore *time.Time `form:"created_before,omitempty" json:"created_before,omitempty"`
+
+	// SortBy Field to sort by
+	SortBy *ListListsParamsSortBy `form:"sort_by,omitempty" json:"sort_by,omitempty"`
+
+	// SortDir Sort direction
+	SortDir *ListListsParamsSortDir `form:"sort_dir,omitempty" json:"sort_dir,omitempty"`
 }
+
+// ListListsParamsSortBy defines parameters for ListLists.
+type ListListsParamsSortBy string
+
+// ListListsParamsSortDir defines parameters for ListLists.
+type ListListsParamsSortDir string
 
 // ListRecurringTemplatesParams defines parameters for ListRecurringTemplates.
 type ListRecurringTemplatesParams struct {
@@ -280,16 +339,34 @@ type ListRecurringTemplatesParams struct {
 // ListTasksParams defines parameters for ListTasks.
 type ListTasksParams struct {
 	// Parent Optional parent list ID to filter by
-	Parent    *openapi_types.UUID `form:"parent,omitempty" json:"parent,omitempty"`
-	PageSize  *int                `form:"page_size,omitempty" json:"page_size,omitempty"`
-	PageToken *string             `form:"page_token,omitempty" json:"page_token,omitempty"`
+	Parent *openapi_types.UUID `form:"parent,omitempty" json:"parent,omitempty"`
 
-	// Filter AIP-160 filter expression
-	Filter *string `form:"filter,omitempty" json:"filter,omitempty"`
+	// Status Filter by task status
+	Status *ListTasksParamsStatus `form:"status,omitempty" json:"status,omitempty"`
 
-	// OrderBy AIP-132 sorting expression
-	OrderBy *string `form:"order_by,omitempty" json:"order_by,omitempty"`
+	// Priority Filter by task priority
+	Priority *ListTasksParamsPriority `form:"priority,omitempty" json:"priority,omitempty"`
+
+	// SortBy Field to sort by
+	SortBy *ListTasksParamsSortBy `form:"sort_by,omitempty" json:"sort_by,omitempty"`
+
+	// SortDir Sort direction
+	SortDir   *ListTasksParamsSortDir `form:"sort_dir,omitempty" json:"sort_dir,omitempty"`
+	PageSize  *int                    `form:"page_size,omitempty" json:"page_size,omitempty"`
+	PageToken *string                 `form:"page_token,omitempty" json:"page_token,omitempty"`
 }
+
+// ListTasksParamsStatus defines parameters for ListTasks.
+type ListTasksParamsStatus string
+
+// ListTasksParamsPriority defines parameters for ListTasks.
+type ListTasksParamsPriority string
+
+// ListTasksParamsSortBy defines parameters for ListTasks.
+type ListTasksParamsSortBy string
+
+// ListTasksParamsSortDir defines parameters for ListTasks.
+type ListTasksParamsSortDir string
 
 // CreateListJSONRequestBody defines body for CreateList for application/json ContentType.
 type CreateListJSONRequestBody = CreateListRequest
@@ -452,19 +529,43 @@ func (siw *ServerInterfaceWrapper) ListLists(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// ------------- Optional query parameter "filter" -------------
+	// ------------- Optional query parameter "title_contains" -------------
 
-	err = runtime.BindQueryParameter("form", true, false, "filter", r.URL.Query(), &params.Filter)
+	err = runtime.BindQueryParameter("form", true, false, "title_contains", r.URL.Query(), &params.TitleContains)
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filter", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "title_contains", Err: err})
 		return
 	}
 
-	// ------------- Optional query parameter "order_by" -------------
+	// ------------- Optional query parameter "created_after" -------------
 
-	err = runtime.BindQueryParameter("form", true, false, "order_by", r.URL.Query(), &params.OrderBy)
+	err = runtime.BindQueryParameter("form", true, false, "created_after", r.URL.Query(), &params.CreatedAfter)
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order_by", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "created_after", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "created_before" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "created_before", r.URL.Query(), &params.CreatedBefore)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "created_before", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort_by" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort_by", r.URL.Query(), &params.SortBy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_by", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort_dir" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort_dir", r.URL.Query(), &params.SortDir)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_dir", Err: err})
 		return
 	}
 
@@ -789,6 +890,38 @@ func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "priority" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "priority", r.URL.Query(), &params.Priority)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "priority", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort_by" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort_by", r.URL.Query(), &params.SortBy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_by", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort_dir" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort_dir", r.URL.Query(), &params.SortDir)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_dir", Err: err})
+		return
+	}
+
 	// ------------- Optional query parameter "page_size" -------------
 
 	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
@@ -802,22 +935,6 @@ func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Requ
 	err = runtime.BindQueryParameter("form", true, false, "page_token", r.URL.Query(), &params.PageToken)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_token", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "filter" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "filter", r.URL.Query(), &params.Filter)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "filter", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "order_by" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "order_by", r.URL.Query(), &params.OrderBy)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order_by", Err: err})
 		return
 	}
 
@@ -985,45 +1102,47 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"9jwAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

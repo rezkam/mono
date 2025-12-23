@@ -2,12 +2,9 @@ package handler
 
 import (
 	"encoding/base64"
-	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/rezkam/mono/internal/application/todo"
-	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/ptr"
 )
 
@@ -60,46 +57,4 @@ func getPageSize(pageSize *int) int {
 		return todo.MaxPageSize
 	}
 	return size
-}
-
-// parseOrderBy parses an AIP-132 order_by expression.
-// Supports single-field sorting with optional direction.
-// Full AIP-132 spec: https://google.aip.dev/132
-//
-// Examples:
-//   - "due_time" -> field="due_time", direction="desc" (default)
-//   - "due_time desc" -> field="due_time", direction="desc"
-//   - "priority asc" -> field="priority", direction="asc"
-//
-// Returns field name and direction ("asc" or "desc").
-func parseOrderBy(orderBy string) (field string, direction string, err error) {
-	if orderBy == "" {
-		return "created_at", "desc", nil // Default
-	}
-
-	// Split on whitespace to separate field and direction
-	parts := strings.Fields(orderBy)
-
-	if len(parts) == 0 {
-		return "created_at", "desc", nil
-	}
-
-	field = parts[0]
-
-	// Default direction is descending (common for time-based sorting)
-	direction = "desc"
-
-	if len(parts) >= 2 {
-		dir := strings.ToLower(parts[1])
-		if dir == "asc" {
-			direction = "asc"
-		} else if dir == "desc" {
-			direction = "desc"
-		} else {
-			return "", "", fmt.Errorf("%w: '%s' (must be 'asc' or 'desc')", domain.ErrInvalidSortDirection, parts[1])
-		}
-	}
-
-	// Ignore additional parts (multi-field not supported yet)
-	return field, direction, nil
 }

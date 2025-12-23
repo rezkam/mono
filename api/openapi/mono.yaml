@@ -55,18 +55,37 @@ paths:
           description: Page token from previous response
           schema:
             type: string
-        - name: filter
+        - name: title_contains
           in: query
-          description: AIP-160 filter expression
+          description: Filter by title substring (case-insensitive)
           schema:
             type: string
-          example: "create_time > '2024-01-01'"
-        - name: order_by
+        - name: created_after
           in: query
-          description: AIP-132 sorting expression
+          description: Filter lists created after this time
           schema:
             type: string
-          example: "create_time desc"
+            format: date-time
+        - name: created_before
+          in: query
+          description: Filter lists created before this time
+          schema:
+            type: string
+            format: date-time
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [create_time, title]
+            default: create_time
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         '200':
           description: Lists retrieved successfully
@@ -197,6 +216,32 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: status
+          in: query
+          description: Filter by task status
+          schema:
+            type: string
+            enum: [todo, in_progress, blocked, done, archived, cancelled]
+        - name: priority
+          in: query
+          description: Filter by task priority
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [due_time, priority, created_at, updated_at]
+            default: created_at
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
         - name: page_size
           in: query
           schema:
@@ -208,18 +253,6 @@ paths:
           in: query
           schema:
             type: string
-        - name: filter
-          in: query
-          description: AIP-160 filter expression
-          schema:
-            type: string
-          example: "status='TODO' AND priority='HIGH'"
-        - name: order_by
-          in: query
-          description: AIP-132 sorting expression
-          schema:
-            type: string
-          example: "due_time desc"
       responses:
         '200':
           description: Tasks retrieved successfully
