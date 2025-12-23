@@ -34,6 +34,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/domain"
+	"github.com/rezkam/mono/internal/ptr"
 )
 
 // Default configuration values.
@@ -126,6 +127,11 @@ func (s *Service) ListLists(ctx context.Context) ([]*domain.TodoList, error) {
 
 // FindLists retrieves todo lists with filtering, sorting, and pagination.
 func (s *Service) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+	// Reject negative offsets to prevent database errors
+	if params.Offset < 0 {
+		params.Offset = 0
+	}
+
 	// Apply default page size if not specified or invalid
 	if params.Limit <= 0 {
 		params.Limit = s.config.DefaultPageSize
@@ -143,26 +149,23 @@ func (s *Service) FindLists(ctx context.Context, params domain.ListListsParams) 
 	return result, nil
 }
 
-// UpdateList updates an existing todo list.
-func (s *Service) UpdateList(ctx context.Context, list *domain.TodoList) error {
-	if list.ID == "" {
-		return domain.ErrListNotFound
+// UpdateList updates a list using field mask.
+// Only updates fields specified in UpdateMask.
+func (s *Service) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
+	if params.ListID == "" {
+		return nil, domain.ErrListNotFound
 	}
 
 	// Validate title if being updated
-	if list.Title != "" {
-		title, err := domain.NewTitle(list.Title)
+	if params.Title != nil {
+		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		list.Title = title.String()
+		params.Title = ptr.To(title.String())
 	}
 
-	if err := s.repo.UpdateList(ctx, list); err != nil {
-		return err // Repository returns domain errors
-	}
-
-	return nil
+	return s.repo.UpdateList(ctx, params)
 }
 
 // CreateItem creates a new todo item in a list.
@@ -225,40 +228,62 @@ func (s *Service) GetItem(ctx context.Context, id string) (*domain.TodoItem, err
 	return item, nil
 }
 
-// UpdateItem updates an existing todo item.
-// Validates that the item belongs to the specified list.
-func (s *Service) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
-	if item.ID == "" {
-		return domain.ErrItemNotFound
+// UpdateItem updates an item using field mask and optional etag for OCC.
+// Only updates fields specified in UpdateMask.
+// If etag is provided and doesn't match, returns domain.ErrVersionConflict.
+func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
+	if params.ItemID == "" {
+		return nil, domain.ErrItemNotFound
 	}
-	if listID == "" {
-		return domain.ErrListNotFound
+	if params.ListID == "" {
+		return nil, domain.ErrListNotFound
+	}
+
+	// Validate etag format if provided
+	if params.Etag != nil {
+		etag := *params.Etag
+		// Etag should be a numeric string (version number)
+		var version int
+		if _, err := fmt.Sscanf(etag, "%d", &version); err != nil {
+			return nil, domain.ErrInvalidEtagFormat
+		}
+		if version < 1 {
+			return nil, domain.ErrInvalidEtagFormat
+		}
 	}
 
 	// Validate title if being updated
-	if item.Title != "" {
-		title, err := domain.NewTitle(item.Title)
+	if params.Title != nil {
+		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		item.Title = title.String()
+		titleStr := title.String()
+		params.Title = &titleStr
 	}
 
-	// Validate timezone if provided
-	if item.Timezone != nil && *item.Timezone != "" {
-		if _, err := time.LoadLocation(*item.Timezone); err != nil {
-			return fmt.Errorf("invalid timezone: %w", err)
+	// Validate status if being updated
+	if params.Status != nil {
+		if _, err := domain.NewTaskStatus(string(*params.Status)); err != nil {
+			return nil, err
 		}
 	}
 
-	// Update timestamp
-	item.UpdatedAt = time.Now().UTC()
-
-	if err := s.repo.UpdateItem(ctx, listID, item); err != nil {
-		return err // Repository returns domain errors
+	// Validate priority if being updated
+	if params.Priority != nil {
+		if _, err := domain.NewTaskPriority(string(*params.Priority)); err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	// Validate timezone if being updated
+	if params.Timezone != nil && *params.Timezone != "" {
+		if _, err := time.LoadLocation(*params.Timezone); err != nil {
+			return nil, fmt.Errorf("invalid timezone: %w", err)
+		}
+	}
+
+	return s.repo.UpdateItem(ctx, params)
 }
 
 // ListTasks searches for tasks with filtering, sorting, and pagination.
@@ -287,7 +312,7 @@ func (s *Service) ListTasks(ctx context.Context, params domain.ListTasksParams) 
 			"updated_at": true,
 		}
 		if !validFields[params.OrderBy] {
-			return nil, fmt.Errorf("invalid order_by field: %s (supported: due_time, priority, created_at, updated_at)", params.OrderBy)
+			return nil, fmt.Errorf("%w: %s (supported: due_time, priority, created_at, updated_at)", domain.ErrInvalidOrderByField, params.OrderBy)
 		}
 	}
 
@@ -340,6 +365,11 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		template.GenerationWindowDays = 30
 	}
 
+	// Validate generation window using domain validation
+	if err := domain.ValidateGenerationWindowDays(template.GenerationWindowDays); err != nil {
+		return nil, err
+	}
+
 	if err := s.repo.CreateRecurringTemplate(ctx, template); err != nil {
 		return nil, fmt.Errorf("failed to create template: %w", err)
 	}
@@ -361,38 +391,39 @@ func (s *Service) GetRecurringTemplate(ctx context.Context, id string) (*domain.
 	return template, nil
 }
 
-// UpdateRecurringTemplate updates an existing recurring template.
-func (s *Service) UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
-	if template.ID == "" {
-		return domain.ErrTemplateNotFound
+// UpdateRecurringTemplate updates a recurring template using field mask.
+// Only updates fields specified in UpdateMask.
+func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
+	if params.TemplateID == "" {
+		return nil, domain.ErrTemplateNotFound
 	}
 
 	// Validate title if being updated
-	if template.Title != "" {
-		title, err := domain.NewTitle(template.Title)
+	if params.Title != nil {
+		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		template.Title = title.String()
+		params.Title = ptr.To(title.String())
 	}
 
 	// Validate recurrence pattern if being updated
-	if template.RecurrencePattern != "" {
-		pattern, err := domain.NewRecurrencePattern(string(template.RecurrencePattern))
+	if params.RecurrencePattern != nil {
+		pattern, err := domain.NewRecurrencePattern(string(*params.RecurrencePattern))
 		if err != nil {
-			return err
+			return nil, err
 		}
-		template.RecurrencePattern = pattern
+		params.RecurrencePattern = ptr.To(pattern)
 	}
 
-	// Update timestamp
-	template.UpdatedAt = time.Now().UTC()
-
-	if err := s.repo.UpdateRecurringTemplate(ctx, template); err != nil {
-		return err // Repository returns domain errors
+	// Validate generation window if being updated using domain validation
+	if params.GenerationWindowDays != nil {
+		if err := domain.ValidateGenerationWindowDays(*params.GenerationWindowDays); err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	return s.repo.UpdateRecurringTemplate(ctx, params)
 }
 
 // DeleteRecurringTemplate deletes a recurring template.

@@ -620,6 +620,9 @@ components:
         timezone:
           type: string
           description: IANA timezone
+        etag:
+          type: string
+          description: Entity tag for optimistic concurrency control (RFC 7232). Quoted string format like "1", "2", etc.
 
     RecurringTaskTemplate:
       type: object

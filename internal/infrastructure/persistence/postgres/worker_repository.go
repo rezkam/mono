@@ -46,7 +46,7 @@ func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.Re
 	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, uuidToPgtype(templateUUID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w: template %s", domain.ErrNotFound, id)
+			return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get template: %w", err)
 	}

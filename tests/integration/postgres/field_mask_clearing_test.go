@@ -42,7 +42,7 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Field Mask Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -59,8 +59,8 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 		Title:      "Item with Priority",
 		Status:     domain.TaskStatusTodo,
 		Priority:   &priority,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 
 	// Clear priority by setting it to nil
 	fetchedItem.Priority = nil
-	err = todoService.UpdateItem(ctx, listID, fetchedItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, fetchedItem))
 	require.NoError(t, err)
 
 	// Verify priority is cleared
@@ -110,7 +110,7 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "DueTime Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -121,14 +121,14 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 	require.NoError(t, err)
 	itemID := itemUUID.String()
 
-	dueTime := time.Now().Add(24 * time.Hour).UTC()
+	dueTime := time.Now().UTC().Add(24 * time.Hour).UTC()
 	item := &domain.TodoItem{
 		ID:         itemID,
 		Title:      "Item with DueTime",
 		Status:     domain.TaskStatusTodo,
 		DueTime:    &dueTime,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 
 	// Clear due_time by setting it to nil
 	fetchedItem.DueTime = nil
-	err = todoService.UpdateItem(ctx, listID, fetchedItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, fetchedItem))
 	require.NoError(t, err)
 
 	// Verify due_time is cleared
@@ -177,7 +177,7 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Duration Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -194,8 +194,8 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		Title:             "Item with Duration",
 		Status:            domain.TaskStatusTodo,
 		EstimatedDuration: &duration,
-		CreateTime:        time.Now().UTC(),
-		UpdatedAt:         time.Now().UTC(),
+		CreateTime:        time.Now().UTC().UTC(),
+		UpdatedAt:         time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 
 	// Clear estimated_duration by setting it to nil
 	fetchedItem.EstimatedDuration = nil
-	err = todoService.UpdateItem(ctx, listID, fetchedItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, fetchedItem))
 	require.NoError(t, err)
 
 	// Verify estimated_duration is cleared
@@ -245,7 +245,7 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Timezone Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -262,8 +262,8 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 		Title:      "Item with Timezone",
 		Status:     domain.TaskStatusTodo,
 		Timezone:   &timezone,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -276,7 +276,7 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 
 	// Clear timezone by setting it to nil
 	fetchedItem.Timezone = nil
-	err = todoService.UpdateItem(ctx, listID, fetchedItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, fetchedItem))
 	require.NoError(t, err)
 
 	// Verify timezone is cleared
@@ -313,7 +313,7 @@ func TestFieldMask_ClearTags(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Tags Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -329,8 +329,8 @@ func TestFieldMask_ClearTags(t *testing.T) {
 		Title:      "Item with Tags",
 		Status:     domain.TaskStatusTodo,
 		Tags:       []string{"work", "urgent", "important"},
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -342,7 +342,7 @@ func TestFieldMask_ClearTags(t *testing.T) {
 
 	// Clear tags by setting to empty array
 	fetchedItem.Tags = []string{}
-	err = todoService.UpdateItem(ctx, listID, fetchedItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, fetchedItem))
 	require.NoError(t, err)
 
 	// Verify tags are cleared
@@ -380,7 +380,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Partial Update Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -392,7 +392,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	itemID := itemUUID.String()
 
 	priority := domain.TaskPriorityHigh
-	dueTime := time.Now().Add(48 * time.Hour).UTC()
+	dueTime := time.Now().UTC().Add(48 * time.Hour).UTC()
 	duration := 3 * time.Hour
 	timezone := "Europe/Stockholm"
 
@@ -405,8 +405,8 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		EstimatedDuration: &duration,
 		Timezone:          &timezone,
 		Tags:              []string{"test", "important"},
-		CreateTime:        time.Now().UTC(),
-		UpdatedAt:         time.Now().UTC(),
+		CreateTime:        time.Now().UTC().UTC(),
+		UpdatedAt:         time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -415,7 +415,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	existingItem, err := todoService.GetItem(ctx, itemID)
 	require.NoError(t, err)
 	existingItem.Title = "Updated Title Only"
-	err = todoService.UpdateItem(ctx, listID, existingItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, existingItem))
 	require.NoError(t, err)
 
 	// Verify only title changed, all other fields preserved

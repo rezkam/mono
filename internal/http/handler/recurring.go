@@ -128,132 +128,106 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Get existing template
-	existing, err := s.todoService.GetRecurringTemplate(r.Context(), id.String())
+	// Build UpdateRecurringTemplateParams
+	params := domain.UpdateRecurringTemplateParams{
+		TemplateID: id.String(),
+	}
+
+	// Determine update mask
+	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
+		// No mask specified - update all provided fields
+		params.UpdateMask = []string{}
+		if req.Template.Title != nil {
+			params.UpdateMask = append(params.UpdateMask, "title")
+		}
+		if req.Template.Tags != nil {
+			params.UpdateMask = append(params.UpdateMask, "tags")
+		}
+		if req.Template.Priority != nil {
+			params.UpdateMask = append(params.UpdateMask, "priority")
+		}
+		if req.Template.EstimatedDuration != nil {
+			params.UpdateMask = append(params.UpdateMask, "estimated_duration")
+		}
+		if req.Template.DueOffset != nil {
+			params.UpdateMask = append(params.UpdateMask, "due_offset")
+		}
+		if req.Template.RecurrencePattern != nil {
+			params.UpdateMask = append(params.UpdateMask, "recurrence_pattern")
+		}
+		if req.Template.RecurrenceConfig != nil {
+			params.UpdateMask = append(params.UpdateMask, "recurrence_config")
+		}
+		if req.Template.IsActive != nil {
+			params.UpdateMask = append(params.UpdateMask, "is_active")
+		}
+		if req.Template.GenerationWindowDays != nil {
+			params.UpdateMask = append(params.UpdateMask, "generation_window_days")
+		}
+	} else {
+		params.UpdateMask = *req.UpdateMask
+	}
+
+	// Map field values from request to params
+	for _, field := range params.UpdateMask {
+		switch field {
+		case "title":
+			params.Title = req.Template.Title
+		case "tags":
+			params.Tags = req.Template.Tags
+		case "priority":
+			if req.Template.Priority != nil {
+				priority := domain.TaskPriority(*req.Template.Priority)
+				params.Priority = &priority
+			}
+		case "estimated_duration":
+			if req.Template.EstimatedDuration != nil {
+				duration, err := parseDuration(*req.Template.EstimatedDuration)
+				if err != nil {
+					response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+					return
+				}
+				params.EstimatedDuration = &duration
+			}
+		case "due_offset":
+			if req.Template.DueOffset != nil {
+				duration, err := parseDuration(*req.Template.DueOffset)
+				if err != nil {
+					response.BadRequest(w, "invalid due_offset: "+err.Error())
+					return
+				}
+				params.DueOffset = &duration
+			}
+		case "recurrence_pattern":
+			if req.Template.RecurrencePattern != nil {
+				pattern := domain.RecurrencePattern(*req.Template.RecurrencePattern)
+				params.RecurrencePattern = &pattern
+			}
+		case "recurrence_config":
+			if req.Template.RecurrenceConfig != nil && *req.Template.RecurrenceConfig != "" {
+				var config map[string]interface{}
+				if err := json.Unmarshal([]byte(*req.Template.RecurrenceConfig), &config); err != nil {
+					response.BadRequest(w, "invalid recurrence_config JSON")
+					return
+				}
+				params.RecurrenceConfig = config
+			}
+		case "is_active":
+			params.IsActive = req.Template.IsActive
+		case "generation_window_days":
+			params.GenerationWindowDays = req.Template.GenerationWindowDays
+		}
+	}
+
+	// Call service layer (validation happens there)
+	updated, err := s.todoService.UpdateRecurringTemplate(r.Context(), params)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
 	}
 
-	// Apply updates based on update_mask (if provided)
-	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
-		// Update all fields if no mask provided
-		if req.Template.Title != nil {
-			existing.Title = *req.Template.Title
-		}
-		if req.Template.Tags != nil {
-			existing.Tags = *req.Template.Tags
-		}
-		if req.Template.Priority != nil {
-			priority, err := domain.NewTaskPriority(string(*req.Template.Priority))
-			if err != nil {
-				response.FromDomainError(w, r, err)
-				return
-			}
-			existing.Priority = &priority
-		}
-		if req.Template.EstimatedDuration != nil {
-			duration, err := parseDuration(*req.Template.EstimatedDuration)
-			if err != nil {
-				response.BadRequest(w, "invalid estimated_duration: "+err.Error())
-				return
-			}
-			existing.EstimatedDuration = &duration
-		}
-		if req.Template.DueOffset != nil {
-			duration, err := parseDuration(*req.Template.DueOffset)
-			if err != nil {
-				response.BadRequest(w, "invalid due_offset: "+err.Error())
-				return
-			}
-			existing.DueOffset = &duration
-		}
-		if req.Template.RecurrencePattern != nil {
-			existing.RecurrencePattern = domain.RecurrencePattern(*req.Template.RecurrencePattern)
-		}
-		if req.Template.RecurrenceConfig != nil && *req.Template.RecurrenceConfig != "" {
-			var config map[string]interface{}
-			if err := json.Unmarshal([]byte(*req.Template.RecurrenceConfig), &config); err != nil {
-				response.BadRequest(w, "invalid recurrence_config JSON")
-				return
-			}
-			existing.RecurrenceConfig = config
-		}
-		if req.Template.IsActive != nil {
-			existing.IsActive = *req.Template.IsActive
-		}
-	} else {
-		// Update only specified fields
-		for _, field := range *req.UpdateMask {
-			switch field {
-			case "title":
-				if req.Template.Title != nil {
-					existing.Title = *req.Template.Title
-				}
-			case "tags":
-				if req.Template.Tags != nil {
-					existing.Tags = *req.Template.Tags
-				}
-			case "priority":
-				if req.Template.Priority != nil {
-					priority, err := domain.NewTaskPriority(string(*req.Template.Priority))
-					if err != nil {
-						response.FromDomainError(w, r, err)
-						return
-					}
-					existing.Priority = &priority
-				}
-			case "estimated_duration":
-				if req.Template.EstimatedDuration != nil {
-					duration, err := parseDuration(*req.Template.EstimatedDuration)
-					if err != nil {
-						response.BadRequest(w, "invalid estimated_duration: "+err.Error())
-						return
-					}
-					existing.EstimatedDuration = &duration
-				}
-			case "due_offset":
-				if req.Template.DueOffset != nil {
-					duration, err := parseDuration(*req.Template.DueOffset)
-					if err != nil {
-						response.BadRequest(w, "invalid due_offset: "+err.Error())
-						return
-					}
-					existing.DueOffset = &duration
-				}
-			case "recurrence_pattern":
-				if req.Template.RecurrencePattern != nil {
-					existing.RecurrencePattern = domain.RecurrencePattern(*req.Template.RecurrencePattern)
-				}
-			case "recurrence_config":
-				if req.Template.RecurrenceConfig != nil && *req.Template.RecurrenceConfig != "" {
-					var config map[string]interface{}
-					if err := json.Unmarshal([]byte(*req.Template.RecurrenceConfig), &config); err != nil {
-						response.BadRequest(w, "invalid recurrence_config JSON")
-						return
-					}
-					existing.RecurrenceConfig = config
-				}
-			case "is_active":
-				if req.Template.IsActive != nil {
-					existing.IsActive = *req.Template.IsActive
-				}
-			case "generation_window_days":
-				if req.Template.GenerationWindowDays != nil {
-					existing.GenerationWindowDays = *req.Template.GenerationWindowDays
-				}
-			}
-		}
-	}
-
-	// Call service layer (validation happens here)
-	if err := s.todoService.UpdateRecurringTemplate(r.Context(), existing); err != nil {
-		response.FromDomainError(w, r, err)
-		return
-	}
-
 	// Map domain model to DTO
-	templateDTO := MapTemplateToDTO(existing)
+	templateDTO := MapTemplateToDTO(updated)
 
 	// Return success response
 	response.OK(w, openapi.UpdateRecurringTemplateResponse{

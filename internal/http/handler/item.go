@@ -93,137 +93,91 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 		return
 	}
 
-	// Get existing item
-	existing, err := s.todoService.GetItem(r.Context(), itemID.String())
-	if err != nil {
-		response.FromDomainError(w, r, err)
-		return
+	// Build UpdateItemParams from request
+	params := domain.UpdateItemParams{
+		ItemID: itemID.String(),
+		ListID: listID.String(),
+		Etag:   req.Item.Etag,
 	}
 
-	// Apply updates based on update_mask
-	// If no update_mask or empty, update all fields
+	// Determine update mask
 	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
-		// Update all fields from request
+		// No mask specified - update all provided fields
+		params.UpdateMask = []string{}
 		if req.Item.Title != nil {
-			// Validate title (even if empty) to prevent bypassing domain validation
-			title, err := domain.NewTitle(*req.Item.Title)
-			if err != nil {
-				response.FromDomainError(w, r, err)
-				return
-			}
-			existing.Title = title.String()
+			params.UpdateMask = append(params.UpdateMask, "title")
 		}
 		if req.Item.Status != nil {
-			status, err := domain.NewTaskStatus(string(*req.Item.Status))
-			if err != nil {
-				response.FromDomainError(w, r, err)
-				return
-			}
-			existing.Status = status
+			params.UpdateMask = append(params.UpdateMask, "status")
 		}
 		if req.Item.Priority != nil {
-			priority, err := domain.NewTaskPriority(string(*req.Item.Priority))
-			if err != nil {
-				response.FromDomainError(w, r, err)
-				return
-			}
-			existing.Priority = &priority
+			params.UpdateMask = append(params.UpdateMask, "priority")
 		}
 		if req.Item.DueTime != nil {
-			existing.DueTime = req.Item.DueTime
+			params.UpdateMask = append(params.UpdateMask, "due_time")
 		}
 		if req.Item.Tags != nil {
-			existing.Tags = *req.Item.Tags
+			params.UpdateMask = append(params.UpdateMask, "tags")
 		}
 		if req.Item.Timezone != nil {
-			existing.Timezone = req.Item.Timezone
+			params.UpdateMask = append(params.UpdateMask, "timezone")
 		}
 		if req.Item.EstimatedDuration != nil {
-			duration, err := parseDuration(*req.Item.EstimatedDuration)
-			if err != nil {
-				response.BadRequest(w, "invalid estimated_duration: "+err.Error())
-				return
-			}
-			existing.EstimatedDuration = &duration
+			params.UpdateMask = append(params.UpdateMask, "estimated_duration")
 		}
 		if req.Item.ActualDuration != nil {
-			duration, err := parseDuration(*req.Item.ActualDuration)
-			if err != nil {
-				response.BadRequest(w, "invalid actual_duration: "+err.Error())
-				return
-			}
-			existing.ActualDuration = &duration
+			params.UpdateMask = append(params.UpdateMask, "actual_duration")
 		}
 	} else {
-		// Update only specified fields
-		for _, field := range *req.UpdateMask {
-			switch field {
-			case "title":
-				if req.Item.Title != nil {
-					// Validate title (even if empty) to prevent bypassing domain validation
-					title, err := domain.NewTitle(*req.Item.Title)
-					if err != nil {
-						response.FromDomainError(w, r, err)
-						return
-					}
-					existing.Title = title.String()
+		params.UpdateMask = *req.UpdateMask
+	}
+
+	// Map field values from request to params
+	for _, field := range params.UpdateMask {
+		switch field {
+		case "title":
+			params.Title = req.Item.Title
+		case "status":
+			if req.Item.Status != nil {
+				status := domain.TaskStatus(*req.Item.Status)
+				params.Status = &status
+			}
+		case "priority":
+			if req.Item.Priority != nil {
+				priority := domain.TaskPriority(*req.Item.Priority)
+				params.Priority = &priority
+			}
+		case "due_time":
+			params.DueTime = req.Item.DueTime
+		case "tags":
+			if req.Item.Tags != nil {
+				params.Tags = req.Item.Tags
+			}
+		case "timezone":
+			params.Timezone = req.Item.Timezone
+		case "estimated_duration":
+			if req.Item.EstimatedDuration != nil {
+				duration, err := parseDuration(*req.Item.EstimatedDuration)
+				if err != nil {
+					response.BadRequest(w, "invalid estimated_duration: "+err.Error())
+					return
 				}
-			case "status":
-				if req.Item.Status != nil {
-					status, err := domain.NewTaskStatus(string(*req.Item.Status))
-					if err != nil {
-						response.FromDomainError(w, r, err)
-						return
-					}
-					existing.Status = status
+				params.EstimatedDuration = &duration
+			}
+		case "actual_duration":
+			if req.Item.ActualDuration != nil {
+				duration, err := parseDuration(*req.Item.ActualDuration)
+				if err != nil {
+					response.BadRequest(w, "invalid actual_duration: "+err.Error())
+					return
 				}
-			case "priority":
-				if req.Item.Priority != nil {
-					priority, err := domain.NewTaskPriority(string(*req.Item.Priority))
-					if err != nil {
-						response.FromDomainError(w, r, err)
-						return
-					}
-					existing.Priority = &priority
-				}
-			case "due_time":
-				existing.DueTime = req.Item.DueTime
-			case "tags":
-				if req.Item.Tags != nil {
-					existing.Tags = *req.Item.Tags
-				}
-			case "timezone":
-				existing.Timezone = req.Item.Timezone
-			case "estimated_duration":
-				if req.Item.EstimatedDuration != nil {
-					duration, err := parseDuration(*req.Item.EstimatedDuration)
-					if err != nil {
-						response.BadRequest(w, "invalid estimated_duration: "+err.Error())
-						return
-					}
-					existing.EstimatedDuration = &duration
-				}
-			case "actual_duration":
-				if req.Item.ActualDuration != nil {
-					duration, err := parseDuration(*req.Item.ActualDuration)
-					if err != nil {
-						response.BadRequest(w, "invalid actual_duration: "+err.Error())
-						return
-					}
-					existing.ActualDuration = &duration
-				}
+				params.ActualDuration = &duration
 			}
 		}
 	}
 
-	// Call service layer
-	if err := s.todoService.UpdateItem(r.Context(), listID.String(), existing); err != nil {
-		response.FromDomainError(w, r, err)
-		return
-	}
-
-	// Fetch updated item to return
-	updated, err := s.todoService.GetItem(r.Context(), itemID.String())
+	// Call service layer - returns updated item
+	updated, err := s.todoService.UpdateItem(r.Context(), params)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

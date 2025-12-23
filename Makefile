@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint setup-hooks security sync-agents
+.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -166,9 +166,15 @@ gen-apikey: build-apikey ## Generate a new API key (usage: NAME="My Key" DAYS=30
 		MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" ./mono-apikey -name "$(NAME)" -days $(DAYS); \
 	fi
 
-lint: ## Run linter
-	@echo "Running linter..."
-	go vet ./...
+build-timeutc-linter: ## Build custom timezone linter
+	@echo "Building timeutc linter..."
+	@cd tools/linters/timeutc && go build -o ../../../timeutc ./cmd/timeutc
+
+lint: build-timeutc-linter ## Run linters (golangci-lint + custom timezone linter)
+	@echo "Running golangci-lint..."
+	golangci-lint run
+	@echo "Running custom timezone linter..."
+	./timeutc ./...
 
 setup-hooks: ## Configure git hooks to run automatically
 	@git config core.hooksPath .githooks
@@ -180,7 +186,7 @@ run: build ## Build and run server using dev database
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."
-	@rm -f mono-server mono-worker mono-apikey
+	@rm -f mono-server mono-worker mono-apikey timeutc
 	@echo "All binaries removed"
 
 docker-build: ## Build the Docker image

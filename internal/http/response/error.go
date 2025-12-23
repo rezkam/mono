@@ -106,6 +106,8 @@ func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		ValidationError(w, "recurring_template_id", "required for recurring tasks")
 	case errors.Is(err, domain.ErrInvalidGenerationWindow):
 		ValidationError(w, "generation_window_days", "must be between 1 and 365")
+	case errors.Is(err, domain.ErrInvalidEtagFormat):
+		ValidationError(w, "etag", "must be a numeric string (e.g., \"1\", \"2\")")
 
 	// Not found errors (404)
 	case errors.Is(err, domain.ErrListNotFound):

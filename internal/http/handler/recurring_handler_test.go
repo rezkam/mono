@@ -33,7 +33,7 @@ func (s *stubRepository) FindAllLists(ctx context.Context) ([]*domain.TodoList, 
 func (s *stubRepository) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) UpdateList(ctx context.Context, list *domain.TodoList) error {
+func (s *stubRepository) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
@@ -42,7 +42,7 @@ func (s *stubRepository) CreateItem(ctx context.Context, listID string, item *do
 func (s *stubRepository) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+func (s *stubRepository) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
@@ -54,7 +54,7 @@ func (s *stubRepository) CreateRecurringTemplate(ctx context.Context, template *
 func (s *stubRepository) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	panic("should not be called")
 }
-func (s *stubRepository) UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
+func (s *stubRepository) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) DeleteRecurringTemplate(ctx context.Context, id string) error {
@@ -84,7 +84,7 @@ func TestUpdateRecurringTemplate_MissingTemplateReturnsBadRequest(t *testing.T) 
 // spyRepository captures what was passed to UpdateRecurringTemplate
 type spyRepository struct {
 	stubRepository
-	capturedTemplate *domain.RecurringTemplate
+	capturedParams   *domain.UpdateRecurringTemplateParams
 	existingTemplate *domain.RecurringTemplate
 }
 
@@ -95,9 +95,14 @@ func (s *spyRepository) FindRecurringTemplate(ctx context.Context, id string) (*
 	return nil, domain.ErrTemplateNotFound
 }
 
-func (s *spyRepository) UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
-	s.capturedTemplate = template
-	return nil
+func (s *spyRepository) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
+	s.capturedParams = &params
+	// Return the existing template with updated fields for the test
+	result := *s.existingTemplate
+	if params.GenerationWindowDays != nil {
+		result.GenerationWindowDays = *params.GenerationWindowDays
+	}
+	return &result, nil
 }
 
 // TestUpdateRecurringTemplate_UpdatesGenerationWindowDays tests that
@@ -144,8 +149,9 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	srv.UpdateRecurringTemplate(w, req, id)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	require.NotNil(t, repo.capturedTemplate, "template should have been passed to repository")
-	assert.Equal(t, 60, repo.capturedTemplate.GenerationWindowDays, "generation_window_days should be updated to 60")
+	require.NotNil(t, repo.capturedParams, "params should have been passed to repository")
+	require.NotNil(t, repo.capturedParams.GenerationWindowDays, "generation_window_days should be in params")
+	assert.Equal(t, 60, *repo.capturedParams.GenerationWindowDays, "generation_window_days should be updated to 60")
 }
 
 // TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest tests that

@@ -49,7 +49,9 @@ func parseListFilter(filter string) (domain.ListListsParams, error) {
 					if err != nil {
 						return params, fmt.Errorf("invalid create_time_after format: %w", err)
 					}
-					params.CreateTimeAfter = &t
+					// Convert to UTC for consistency with database storage
+					utcTime := t.UTC()
+					params.CreateTimeAfter = &utcTime
 				}
 			} else if strings.Contains(clause, "<") {
 				timeStr := extractQuotedValue(clause)
@@ -58,7 +60,9 @@ func parseListFilter(filter string) (domain.ListListsParams, error) {
 					if err != nil {
 						return params, fmt.Errorf("invalid create_time_before format: %w", err)
 					}
-					params.CreateTimeBefore = &t
+					// Convert to UTC for consistency with database storage
+					utcTime := t.UTC()
+					params.CreateTimeBefore = &utcTime
 				}
 			}
 			continue

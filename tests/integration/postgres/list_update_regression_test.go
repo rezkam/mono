@@ -54,7 +54,7 @@ func TestUpdateList_PreservesCreateTime(t *testing.T) {
 
 	// Update the list title (UpdateList only takes Title, not CreateTime)
 	list.Title = "Updated Title"
-	err = store.UpdateList(ctx, list)
+	_, err = store.UpdateList(ctx, ListToUpdateParams(list))
 	require.NoError(t, err)
 
 	// Verify create_time was NOT modified
@@ -108,7 +108,7 @@ func TestUpdateList_PreservesCreateTime_MultipleUpdates(t *testing.T) {
 	titles := []string{"Title v2", "Title v3", "Title v4"}
 	for _, title := range titles {
 		list.Title = title
-		err = store.UpdateList(ctx, list)
+		_, err = store.UpdateList(ctx, ListToUpdateParams(list))
 		require.NoError(t, err)
 	}
 
@@ -162,7 +162,7 @@ func TestUpdateItem_PreservesCreateTime(t *testing.T) {
 	require.NoError(t, err)
 	existingItem.Title = "Updated Task"
 	existingItem.Status = domain.TaskStatusInProgress
-	err = todoService.UpdateItem(ctx, listID, existingItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, existingItem))
 	require.NoError(t, err)
 
 	// Verify create_time unchanged
@@ -228,7 +228,7 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 
 	firstItem := &fetchedList.Items[0]
 	firstItem.Status = domain.TaskStatusDone
-	err = todoService.UpdateItem(ctx, listID, firstItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, firstItem))
 	require.NoError(t, err)
 
 	// Verify counts updated correctly

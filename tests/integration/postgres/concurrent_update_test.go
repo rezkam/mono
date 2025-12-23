@@ -46,7 +46,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Concurrent Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -61,8 +61,8 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 		ID:         itemID,
 		Title:      "Original Title",
 		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	wg.Add(numGoroutines)
 
 	errors := make(chan error, numGoroutines)
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 
 	for i := 0; i < numGoroutines; i++ {
 		goroutineID := i
@@ -87,7 +87,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 				Status: domain.TaskStatus([]string{"todo", "in_progress", "done"}[goroutineID%3]),
 			}
 
-			err := todoService.UpdateItem(ctx, listID, item)
+			_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, item))
 			if err != nil {
 				errors <- err
 			}
@@ -152,7 +152,7 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -167,8 +167,8 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 		ID:         itemID,
 		Title:      "Task 1",
 		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -186,11 +186,11 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 
 	// Request A: Update status to "done"
 	requestA_item.Status = domain.TaskStatusDone
-	requestA_item.UpdatedAt = time.Now().UTC()
+	requestA_item.UpdatedAt = time.Now().UTC().UTC()
 
 	// Request B: Update title to "Updated"
 	requestB_item.Title = "Updated Task"
-	requestB_item.UpdatedAt = time.Now().UTC()
+	requestB_item.UpdatedAt = time.Now().UTC().UTC()
 
 	// Execute concurrently
 	var wg sync.WaitGroup
@@ -199,13 +199,13 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		errA = todoService.UpdateItem(ctx, listID, requestA_item)
+		_, errA = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, requestA_item))
 	}()
 
 	go func() {
 		defer wg.Done()
 		time.Sleep(10 * time.Millisecond) // B slightly delayed
-		errB = todoService.UpdateItem(ctx, listID, requestB_item)
+		_, errB = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, requestB_item))
 	}()
 
 	wg.Wait()
@@ -289,7 +289,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Concurrent Field Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -305,8 +305,8 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		Title:      "Original Title",
 		Status:     domain.TaskStatusTodo,
 		Tags:       []string{"original"},
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -331,7 +331,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		// Use the same version (simulating concurrent read-modify-write)
 		itemCopy := *originalItem
 		itemCopy.Title = "Updated Title"
-		err := todoService.UpdateItem(ctx, listID, &itemCopy)
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, &itemCopy))
 		results <- updateResult{"title", err}
 	}()
 
@@ -342,7 +342,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		time.Sleep(5 * time.Millisecond) // Slight delay to ensure title update goes first
 		itemCopy := *originalItem
 		itemCopy.Status = domain.TaskStatusInProgress
-		err := todoService.UpdateItem(ctx, listID, &itemCopy)
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, &itemCopy))
 		results <- updateResult{"status", err}
 	}()
 
@@ -353,7 +353,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // More delay
 		itemCopy := *originalItem
 		itemCopy.Tags = []string{"updated", "concurrent"}
-		err := todoService.UpdateItem(ctx, listID, &itemCopy)
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, &itemCopy))
 		results <- updateResult{"tags", err}
 	}()
 
@@ -419,7 +419,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Timestamp Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -430,7 +430,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	itemID := itemUUID.String()
 
-	createTime := time.Now().UTC()
+	createTime := time.Now().UTC().UTC()
 	item := &domain.TodoItem{
 		ID:         itemID,
 		Title:      "Timestamp Test",
@@ -445,7 +445,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Record the time before concurrent updates
-	beforeUpdates := time.Now().UTC()
+	beforeUpdates := time.Now().UTC().UTC()
 
 	// Run concurrent updates
 	const numGoroutines = 5
@@ -461,7 +461,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 				Title:  fmt.Sprintf("Update %d", goroutineID),
 				Status: domain.TaskStatusTodo,
 			}
-			todoService.UpdateItem(ctx, listID, item)
+			todoService.UpdateItem(ctx, ItemToUpdateParams(listID, item))
 		}()
 	}
 
@@ -511,7 +511,7 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Multi-Item Test List",
-		CreateTime: time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
 		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
@@ -529,8 +529,8 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 			ID:         itemIDs[i],
 			Title:      fmt.Sprintf("Item %d", i),
 			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			CreateTime: time.Now().UTC().UTC(),
+			UpdatedAt:  time.Now().UTC().UTC(),
 		}
 		err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
@@ -550,7 +550,7 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 				Title:  fmt.Sprintf("Updated Item %d", itemIndex),
 				Status: domain.TaskStatusDone,
 			}
-			err := todoService.UpdateItem(ctx, listID, item)
+			_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, item))
 			if err != nil {
 				errors <- fmt.Errorf("item %d update failed: %w", itemIndex, err)
 			}

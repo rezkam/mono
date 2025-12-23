@@ -59,7 +59,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("due_time is mapped", func(t *testing.T) {
-		dueTime := time.Now().Add(24 * time.Hour).Truncate(time.Second)
+		dueTime := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 		reqBody := map[string]interface{}{
 			"title":    "Due Time Test",
 			"due_time": dueTime.Format(time.RFC3339),
@@ -199,7 +199,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("all fields together", func(t *testing.T) {
-		dueTime := time.Now().Add(48 * time.Hour).Truncate(time.Second)
+		dueTime := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
 		instanceDate := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
 
 		reqBody := map[string]interface{}{

@@ -61,7 +61,7 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 			Status: domain.TaskStatusInProgress,
 		}
 
-		err := todoService.UpdateItem(ctx, list1ID, updateItem)
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(list1ID, updateItem))
 		require.NoError(t, err)
 
 		// Fetch and verify
@@ -80,7 +80,7 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 			Status: domain.TaskStatusDone,
 		}
 
-		err := todoService.UpdateItem(ctx, list2ID, maliciousUpdate) // WRONG: item belongs to list1
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(list2ID, maliciousUpdate)) // WRONG: item belongs to list1
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found", "Cross-list update should return NotFound error")
 	})
@@ -108,7 +108,7 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 			Status: domain.TaskStatusDone,
 		}
 
-		err = todoService.UpdateItem(ctx, fakeListID, maliciousUpdate) // Non-existent list
+		_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(fakeListID, maliciousUpdate)) // Non-existent list
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
@@ -179,7 +179,7 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 		item.Title = "Updated via Repository"
 		item.UpdatedAt = time.Now().UTC()
 
-		err := store.UpdateItem(ctx, list1ID, item)
+		_, err := store.UpdateItem(ctx, ItemToUpdateParams(list1ID, item))
 		require.NoError(t, err)
 
 		// Verify update succeeded
@@ -193,7 +193,7 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 		item.UpdatedAt = time.Now().UTC()
 
 		// Try to update with wrong list_id
-		err := store.UpdateItem(ctx, list2ID, item)
+		_, err := store.UpdateItem(ctx, ItemToUpdateParams(list2ID, item))
 		require.Error(t, err)
 
 		// Should be a NotFound error (wrapped by domain error)
@@ -237,7 +237,7 @@ func TestUpdateItem_EmptyListId_ReturnsInvalidArgument(t *testing.T) {
 		Status: domain.TaskStatusTodo,
 	}
 
-	err = todoService.UpdateItem(ctx, "", updateItem) // Empty list_id
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams("", updateItem)) // Empty list_id
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list not found", "Empty list_id should return list not found error")
 }

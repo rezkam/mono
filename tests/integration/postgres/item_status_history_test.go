@@ -55,7 +55,7 @@ func TestStatusHistoryPreservation(t *testing.T) {
 
 	// Update the item's status from TODO to IN_PROGRESS
 	createdItem.Status = domain.TaskStatusInProgress
-	err = todoService.UpdateItem(ctx, listID, createdItem)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, createdItem))
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
@@ -141,7 +141,7 @@ func TestStatusHistoryPreservationMultipleUpdates(t *testing.T) {
 		existingItem, err := todoService.GetItem(ctx, itemID)
 		require.NoError(t, err)
 		existingItem.Status = status
-		err = todoService.UpdateItem(ctx, list.ID, existingItem)
+		_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(list.ID, existingItem))
 		require.NoError(t, err)
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -185,7 +185,7 @@ func TestCreateItemDoesNotWipeOtherItemsHistory(t *testing.T) {
 
 	// Update first item's status
 	createdItem1.Status = domain.TaskStatusDone
-	err = todoService.UpdateItem(ctx, list.ID, createdItem1)
+	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(list.ID, createdItem1))
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)

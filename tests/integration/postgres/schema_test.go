@@ -98,7 +98,7 @@ func TestCRUD_TodoLists(t *testing.T) {
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time)
 		VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	// Read
@@ -141,12 +141,12 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 	listID := "550e8400-e29b-41d4-a716-446655440001"
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	// Create item with all new fields
 	itemID := "550e8400-e29b-41d4-a716-446655440002"
-	dueTime := time.Now().Add(24 * time.Hour)
+	dueTime := time.Now().UTC().Add(24 * time.Hour)
 	tags := `["urgent", "bug", "backend"]`
 
 	_, err = db.ExecContext(ctx, `
@@ -155,7 +155,7 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 			estimated_duration, create_time, updated_at, due_time, tags
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`, itemID, listID, "Fix Auth Bug", "todo", "urgent",
-		"3 hours", time.Now(), time.Now(), dueTime, tags)
+		"3 hours", time.Now().UTC(), time.Now().UTC(), dueTime, tags)
 	require.NoError(t, err)
 
 	// Read and verify all fields
@@ -200,10 +200,10 @@ func TestTrigger_AutoUpdateTimestamp(t *testing.T) {
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
-	now := time.Now()
+	now := time.Now().UTC()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -239,13 +239,13 @@ func TestTrigger_StatusHistory(t *testing.T) {
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, itemID, listID, "Test", "todo", time.Now(), time.Now())
+	`, itemID, listID, "Test", "todo", time.Now().UTC(), time.Now().UTC())
 	require.NoError(t, err)
 
 	// Verify initial status was recorded
@@ -309,7 +309,7 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 	listID := "550e8400-e29b-41d4-a716-446655440007"
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	// Create test items
@@ -329,7 +329,7 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO todo_items (id, list_id, title, status, priority, create_time, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, item.id, listID, "Task", item.status, item.priority, time.Now(), time.Now())
+		`, item.id, listID, "Task", item.status, item.priority, time.Now().UTC(), time.Now().UTC())
 		require.NoError(t, err)
 	}
 
@@ -364,7 +364,7 @@ func TestQuery_TagsWithJSONB(t *testing.T) {
 	listID := "550e8400-e29b-41d4-a716-446655440008"
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	// Create items with different tag combinations
@@ -382,7 +382,7 @@ func TestQuery_TagsWithJSONB(t *testing.T) {
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at, tags)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, tc.id, listID, "Task", "todo", time.Now(), time.Now(), tc.tags)
+		`, tc.id, listID, "Task", "todo", time.Now().UTC(), time.Now().UTC(), tc.tags)
 		require.NoError(t, err)
 	}
 
@@ -412,7 +412,7 @@ func TestRecurringTemplate_Create(t *testing.T) {
 	listID := "550e8400-e29b-41d4-a716-446655440009"
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	templateID := "550e8400-e29b-41d4-a716-446655440010"
@@ -425,7 +425,7 @@ func TestRecurringTemplate_Create(t *testing.T) {
 			last_generated_until, generation_window_days
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`, templateID, listID, "Daily Standup", "weekly", config,
-		"2 hours", true, time.Now(), time.Now(), time.Now(), 30)
+		"2 hours", true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 30)
 	require.NoError(t, err)
 
 	// Verify
@@ -457,7 +457,7 @@ func TestFunction_ClaimGenerationJob(t *testing.T) {
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
@@ -466,7 +466,7 @@ func TestFunction_ClaimGenerationJob(t *testing.T) {
 			is_active, created_at, updated_at, last_generated_until, generation_window_days
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`, templateID, listID, "Template", "daily", `{}`,
-		true, time.Now(), time.Now(), time.Now(), 30)
+		true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 30)
 	require.NoError(t, err)
 
 	// Create pending job
@@ -476,8 +476,8 @@ func TestFunction_ClaimGenerationJob(t *testing.T) {
 			id, template_id, scheduled_for, status,
 			generate_from, generate_until, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, jobID, templateID, time.Now().Add(-1*time.Hour), "PENDING",
-		time.Now(), time.Now().Add(30*24*time.Hour), time.Now())
+	`, jobID, templateID, time.Now().UTC().Add(-1*time.Hour), "PENDING",
+		time.Now().UTC(), time.Now().UTC().Add(30*24*time.Hour), time.Now().UTC())
 	require.NoError(t, err)
 
 	// Claim job using function
@@ -507,13 +507,13 @@ func TestCascadeDelete(t *testing.T) {
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now())
+	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, itemID, listID, "Test", "todo", time.Now(), time.Now())
+	`, itemID, listID, "Test", "todo", time.Now().UTC(), time.Now().UTC())
 	require.NoError(t, err)
 
 	// Delete list - should cascade

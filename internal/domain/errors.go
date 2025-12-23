@@ -22,6 +22,19 @@ var (
 	ErrInvalidRecurrencePattern      = errors.New("invalid recurrence pattern")
 	ErrRecurringTaskRequiresTemplate = errors.New("recurring task must have template ID")
 	ErrInvalidGenerationWindow       = errors.New("generation window must be 1-365 days")
+	ErrInvalidEtagFormat             = errors.New("etag must be a numeric string (e.g., \"1\", \"2\")")
+	ErrInvalidOrderByField           = errors.New("invalid order_by field")
+	ErrInvalidDurationFormat         = errors.New("invalid duration format")
+	ErrDurationEmpty                 = errors.New("duration cannot be empty")
+	ErrInvalidRecurrenceDayOfWeek    = errors.New("invalid recurrence day of week")
+	ErrInvalidPageToken              = errors.New("invalid page token")
+	ErrInvalidLimit                  = errors.New("invalid limit value")
+	ErrInvalidCursorFormat           = errors.New("invalid cursor format")
+	ErrUnsupportedFilterOperator     = errors.New("unsupported filter operator")
+	ErrUnsupportedFieldType          = errors.New("unsupported field type")
+	ErrInvalidVersionFormat          = errors.New("invalid version format")
+	ErrInvalidSortDirection          = errors.New("invalid sort direction")
+	ErrFilterParsingNotImplemented   = errors.New("filter parsing not yet implemented")
 
 	// Business logic errors
 	ErrItemNotFound     = errors.New("item not found")
@@ -30,4 +43,21 @@ var (
 
 	// Concurrency errors
 	ErrVersionConflict = errors.New("resource was modified by another request")
+
+	// Configuration errors
+	ErrNameRequired              = errors.New("name is required")
+	ErrInvalidDays               = errors.New("days must be >= 0")
+	ErrUnsupportedStorageType    = errors.New("unsupported storage type")
+	ErrStorageDSNRequired        = errors.New("storage DSN is required")
+	ErrInvalidOperationTimeout   = errors.New("operation timeout must be at least 1 second")
+	ErrValidationTargetNotStruct = errors.New("validation target must be a struct pointer")
+	ErrUnsupportedType           = errors.New("unsupported type")
+	ErrInvalidAPIKeyFormat       = errors.New("invalid API key format")
+	ErrAPIKeyParsingFailed       = errors.New("could not parse API key from tool output")
+
+	// Test-only errors
+	ErrNotImplemented      = errors.New("not implemented")
+	ErrDatabaseUnavailable = errors.New("database unavailable")
+	ErrFailedToCreateTask  = errors.New("failed to create task")
+	ErrCompletionFailed    = errors.New("completion failed")
 )

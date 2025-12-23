@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/config"
+	"github.com/rezkam/mono/internal/domain"
 	httpRouter "github.com/rezkam/mono/internal/http"
 	"github.com/rezkam/mono/internal/http/handler"
 	"github.com/rezkam/mono/internal/http/middleware"
@@ -73,7 +75,7 @@ func TestMain(m *testing.M) {
 
 	httpServer := &http.Server{Handler: router}
 	go func() {
-		if err := httpServer.Serve(httpLis); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.Serve(httpLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
@@ -123,7 +125,7 @@ func generateAPIKeyWithTool(pgURL string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("could not parse API key from tool output:\n%s", outputStr)
+	return "", fmt.Errorf("%w:\n%s", domain.ErrAPIKeyParsingFailed, outputStr)
 }
 
 // TestE2E_CreateAndGetList tests the list creation and retrieval flow
@@ -160,7 +162,7 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 	assert.Equal(t, "Buy Milk", item1["title"])
 
 	// 3. Create Item with tags and due time
-	dueTime := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	dueTime := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
 	createItemWithTagsJSON := fmt.Sprintf(`{
 		"title": "Buy Milk",
 		"due_time": "%s",
@@ -495,7 +497,7 @@ func TestE2E_ListTasksWithFilter(t *testing.T) {
 	listID := createListResp["list"].(map[string]interface{})["id"].(string)
 
 	// Use unique tag to avoid interference from other tests
-	uniqueTag := fmt.Sprintf("urgent-%d", time.Now().Unix())
+	uniqueTag := fmt.Sprintf("urgent-%d", time.Now().UTC().Unix())
 
 	// Create items with different tags
 	items := []string{

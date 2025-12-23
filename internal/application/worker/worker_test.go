@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -40,7 +39,7 @@ func (m *mockRepository) GetRecurringTemplate(ctx context.Context, id string) (*
 	if m.getRecurringTemplateFunc != nil {
 		return m.getRecurringTemplateFunc(ctx, id)
 	}
-	return nil, errors.New("not implemented")
+	return nil, domain.ErrNotImplemented
 }
 
 func (m *mockRepository) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id string, until time.Time) error {
@@ -68,7 +67,7 @@ func (m *mockRepository) GetGenerationJob(ctx context.Context, id string) (*doma
 	if m.getGenerationJobFunc != nil {
 		return m.getGenerationJobFunc(ctx, id)
 	}
-	return nil, errors.New("not implemented")
+	return nil, domain.ErrNotImplemented
 }
 
 func (m *mockRepository) UpdateGenerationJobStatus(ctx context.Context, id, status string, errorMessage *string) error {
@@ -95,8 +94,8 @@ func (m *mockRepository) HasPendingOrRunningJob(ctx context.Context, templateID 
 // TestProcessOneJob_UpdateStatusError_TemplateNotFound tests that errors from
 // UpdateGenerationJobStatus are not ignored when marking job as FAILED after template error.
 func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
-	templateErr := errors.New("template not found")
-	statusUpdateErr := errors.New("database unavailable")
+	templateErr := domain.ErrTemplateNotFound
+	statusUpdateErr := domain.ErrDatabaseUnavailable
 
 	repo := &mockRepository{
 		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
@@ -106,8 +105,8 @@ func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
 			return &domain.GenerationJob{
 				ID:            "job-123",
 				TemplateID:    "template-456",
-				GenerateFrom:  time.Now(),
-				GenerateUntil: time.Now().Add(24 * time.Hour),
+				GenerateFrom:  time.Now().UTC(),
+				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
 			}, nil
 		},
 		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
@@ -144,7 +143,7 @@ func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
 // TestProcessOneJob_UpdateStatusError_GenerationFailed tests that errors from
 // UpdateGenerationJobStatus are not ignored when marking job as FAILED after generation error.
 func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
-	statusUpdateErr := errors.New("database unavailable")
+	statusUpdateErr := domain.ErrDatabaseUnavailable
 
 	repo := &mockRepository{
 		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
@@ -154,8 +153,8 @@ func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
 			return &domain.GenerationJob{
 				ID:            "job-123",
 				TemplateID:    "template-456",
-				GenerateFrom:  time.Now(),
-				GenerateUntil: time.Now().Add(24 * time.Hour),
+				GenerateFrom:  time.Now().UTC(),
+				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
 			}, nil
 		},
 		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
@@ -198,8 +197,8 @@ func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
 // TestProcessOneJob_UpdateStatusError_TaskCreationFailed tests that errors from
 // UpdateGenerationJobStatus are not ignored when marking job as FAILED after task creation error.
 func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
-	taskCreateErr := errors.New("failed to create task")
-	statusUpdateErr := errors.New("database unavailable")
+	taskCreateErr := domain.ErrFailedToCreateTask
+	statusUpdateErr := domain.ErrDatabaseUnavailable
 
 	repo := &mockRepository{
 		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
@@ -209,8 +208,8 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 			return &domain.GenerationJob{
 				ID:            "job-123",
 				TemplateID:    "template-456",
-				GenerateFrom:  time.Now(),
-				GenerateUntil: time.Now().Add(24 * time.Hour),
+				GenerateFrom:  time.Now().UTC(),
+				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
 			}, nil
 		},
 		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
@@ -257,7 +256,7 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 // TestProcessOneJob_UpdateStatusError_CompletionFailed tests that errors from
 // UpdateGenerationJobStatus are not ignored when marking job as COMPLETED.
 func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
-	statusUpdateErr := errors.New("database unavailable during completion")
+	statusUpdateErr := domain.ErrCompletionFailed
 	tasksCreated := 0
 
 	repo := &mockRepository{
@@ -268,8 +267,8 @@ func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
 			return &domain.GenerationJob{
 				ID:            "job-123",
 				TemplateID:    "template-456",
-				GenerateFrom:  time.Now(),
-				GenerateUntil: time.Now().Add(24 * time.Hour),
+				GenerateFrom:  time.Now().UTC(),
+				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
 			}, nil
 		},
 		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
@@ -319,7 +318,7 @@ func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
 // TestProcessOneJob_StatusUpdateSuccess tests that when UpdateGenerationJobStatus succeeds,
 // errors are still properly returned for the primary failure.
 func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
-	templateErr := errors.New("template not found")
+	templateErr := domain.ErrTemplateNotFound
 	statusUpdated := false
 
 	repo := &mockRepository{
@@ -330,8 +329,8 @@ func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
 			return &domain.GenerationJob{
 				ID:            "job-123",
 				TemplateID:    "template-456",
-				GenerateFrom:  time.Now(),
-				GenerateUntil: time.Now().Add(24 * time.Hour),
+				GenerateFrom:  time.Now().UTC(),
+				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
 			}, nil
 		},
 		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {

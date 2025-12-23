@@ -24,7 +24,7 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 
 	priorityLow := domain.TaskPriorityLow
 	timezone := "America/New_York"
-	dueTime := time.Now().Add(48 * time.Hour).UTC()
+	dueTime := time.Now().UTC().Add(48 * time.Hour).UTC()
 
 	item := &domain.TodoItem{
 		ID:         itemID,
@@ -34,8 +34,8 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 		Tags:       []string{"old-tag"},
 		DueTime:    &dueTime,
 		Timezone:   &timezone,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		CreateTime: time.Now().UTC().UTC(),
+		UpdatedAt:  time.Now().UTC().UTC(),
 	}
 	require.NoError(t, env.Store().CreateItem(env.Context(), listID, item))
 
@@ -43,7 +43,7 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 	existingItem, err := env.Service().GetItem(env.Context(), itemID)
 	require.NoError(t, err)
 
-	newDueTime := time.Now().Add(72 * time.Hour).UTC()
+	newDueTime := time.Now().UTC().Add(72 * time.Hour).UTC()
 	priorityHigh := domain.TaskPriorityHigh
 	existingItem.Title = "Updated Title"
 	existingItem.Status = domain.TaskStatusInProgress
@@ -51,7 +51,7 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 	existingItem.Tags = []string{"new-tag-1", "new-tag-2"}
 	existingItem.DueTime = &newDueTime
 
-	err = env.Service().UpdateItem(env.Context(), listID, existingItem)
+	_, err = env.Service().UpdateItem(env.Context(), ItemToUpdateParams(listID, existingItem))
 	require.NoError(t, err)
 
 	// Verify updated fields

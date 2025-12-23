@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/env"
 )
 
@@ -47,11 +48,11 @@ func (c *APIKeyGenConfig) Validate() error {
 	}
 
 	if c.Name == "" {
-		return fmt.Errorf("name is required (use -name flag)")
+		return fmt.Errorf("%w (use -name flag)", domain.ErrNameRequired)
 	}
 
 	if c.DaysValid < 0 {
-		return fmt.Errorf("days must be >= 0 (0 = never expires)")
+		return fmt.Errorf("%w (0 = never expires)", domain.ErrInvalidDays)
 	}
 
 	return nil

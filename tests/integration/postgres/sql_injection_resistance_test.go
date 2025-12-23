@@ -53,7 +53,7 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 		ID:         listID,
 		Title:      "SQL Injection Test List",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

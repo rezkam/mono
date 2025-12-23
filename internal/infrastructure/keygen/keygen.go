@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rezkam/mono/internal/domain"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -61,7 +62,7 @@ func ParseAPIKey(apiKey string) (*APIKeyParts, error) {
 	// This allows the long_secret (last part) to contain hyphens
 	parts := strings.SplitN(apiKey, "-", 5)
 	if len(parts) != 5 {
-		return nil, fmt.Errorf("invalid API key format: expected 5 parts, got %d", len(parts))
+		return nil, fmt.Errorf("%w: expected 5 parts, got %d", domain.ErrInvalidAPIKeyFormat, len(parts))
 	}
 
 	return &APIKeyParts{

@@ -27,7 +27,7 @@ func NewDomainGenerator(repo interface{}) *DomainGenerator {
 func (g *DomainGenerator) GenerateTasksForTemplate(ctx context.Context, template *domain.RecurringTemplate, start, end time.Time) ([]domain.TodoItem, error) {
 	calculator := GetCalculator(template.RecurrencePattern)
 	if calculator == nil {
-		return nil, fmt.Errorf("unsupported recurrence pattern: %s", template.RecurrencePattern)
+		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRecurrencePattern, template.RecurrencePattern)
 	}
 
 	// Parse recurrence config - it's already a map[string]interface{}

@@ -73,3 +73,12 @@ func NewRecurrencePattern(s string) (RecurrencePattern, error) {
 		return "", fmt.Errorf("%w: %s", ErrInvalidRecurrencePattern, s)
 	}
 }
+
+// ValidateGenerationWindowDays validates the generation window value.
+// Returns ErrInvalidGenerationWindow if days is not in valid range (1-365).
+func ValidateGenerationWindowDays(days int) error {
+	if days < 1 || days > 365 {
+		return ErrInvalidGenerationWindow
+	}
+	return nil
+}

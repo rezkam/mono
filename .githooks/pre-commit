@@ -3,14 +3,42 @@ set -e
 
 echo "Running pre-commit checks..."
 
-echo "Validating gofmt..."
-make fmt-check
+# Get list of staged Go files
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
 
-echo "Running lint..."
-make lint
+if [ -n "$STAGED_GO_FILES" ]; then
+    echo "Validating gofmt on staged files..."
+    for file in $STAGED_GO_FILES; do
+        if [ -f "$file" ]; then
+            # Check if file is properly formatted
+            if ! gofmt -l "$file" | grep -q .; then
+                :
+            else
+                echo "File $file is not properly formatted. Run 'make fmt' to fix."
+                exit 1
+            fi
+        fi
+    done
 
-echo "Running tests..."
-make test
+    echo "Running golangci-lint on staged files..."
+    if command -v golangci-lint >/dev/null 2>&1; then
+        golangci-lint run $STAGED_GO_FILES
+    else
+        echo "Warning: golangci-lint not found, skipping..."
+    fi
+
+    echo "Running timezone linter on staged files..."
+    # Build the linter if it doesn't exist
+    if [ ! -f "./timeutc" ]; then
+        make build-timeutc-linter
+    fi
+    ./timeutc $STAGED_GO_FILES
+
+    echo "Running tests..."
+    make test
+else
+    echo "No staged Go files to check."
+fi
 
 echo "All checks passed!"
 exit 0

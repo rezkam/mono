@@ -78,6 +78,7 @@ func MapListToDTO(list *domain.TodoList) openapi.TodoList {
 
 // MapItemToDTO converts domain.TodoItem to openapi.TodoItem.
 func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
+	etag := item.Etag()
 	dto := openapi.TodoItem{
 		Id:                  ptrUUID(item.ID),
 		Title:               ptrString(item.Title),
@@ -90,6 +91,7 @@ func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 		RecurringTemplateId: ptrUUID(stringValue(item.RecurringTemplateID)),
 		InstanceDate:        item.InstanceDate,
 		Timezone:            item.Timezone,
+		Etag:                &etag,
 	}
 
 	// Map status
@@ -157,7 +159,7 @@ func stringValue(s *string) string {
 // Supports both ISO 8601 format (e.g., "PT1H30M") and Go format (e.g., "1h30m").
 func parseDuration(s string) (time.Duration, error) {
 	if s == "" {
-		return 0, fmt.Errorf("duration cannot be empty")
+		return 0, domain.ErrDurationEmpty
 	}
 
 	// Try Go format first (more common in code)
@@ -170,14 +172,14 @@ func parseDuration(s string) (time.Duration, error) {
 		return d, nil
 	}
 
-	return 0, fmt.Errorf("invalid duration format (expected ISO 8601 like 'PT1H30M' or Go format like '1h30m')")
+	return 0, fmt.Errorf("%w (expected ISO 8601 like 'PT1H30M' or Go format like '1h30m')", domain.ErrInvalidDurationFormat)
 }
 
 // parseISO8601Duration parses ISO 8601 duration format (e.g., "PT1H30M10S").
 // Only supports time components (hours, minutes, seconds), not date components.
 func parseISO8601Duration(s string) (time.Duration, error) {
 	if len(s) < 2 || s[0] != 'P' {
-		return 0, fmt.Errorf("not ISO 8601 format")
+		return 0, fmt.Errorf("%w: not ISO 8601 format", domain.ErrInvalidDurationFormat)
 	}
 
 	// Remove 'P' prefix
@@ -190,7 +192,7 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 		s = s[1:]
 	} else {
 		// No 'T' means only date components, which we don't support
-		return 0, fmt.Errorf("ISO 8601 date durations not supported")
+		return 0, fmt.Errorf("%w: ISO 8601 date durations not supported", domain.ErrInvalidDurationFormat)
 	}
 
 	var duration time.Duration
@@ -202,7 +204,7 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 			numBuf.WriteByte(c)
 		} else {
 			if numBuf.Len() == 0 {
-				return 0, fmt.Errorf("missing number before %c", c)
+				return 0, fmt.Errorf("%w: missing number before %c", domain.ErrInvalidDurationFormat, c)
 			}
 			numStr := numBuf.String()
 			numBuf.Reset()
@@ -210,7 +212,7 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 			// Parse as float to support decimals
 			var num float64
 			if _, err := fmt.Sscanf(numStr, "%f", &num); err != nil {
-				return 0, fmt.Errorf("invalid number: %s", numStr)
+				return 0, fmt.Errorf("%w: invalid number: %s", domain.ErrInvalidDurationFormat, numStr)
 			}
 
 			switch c {
@@ -221,13 +223,13 @@ func parseISO8601Duration(s string) (time.Duration, error) {
 			case 'S':
 				duration += time.Duration(num * float64(time.Second))
 			default:
-				return 0, fmt.Errorf("unknown unit: %c", c)
+				return 0, fmt.Errorf("%w: unknown unit: %c", domain.ErrInvalidDurationFormat, c)
 			}
 		}
 	}
 
 	if numBuf.Len() > 0 {
-		return 0, fmt.Errorf("trailing number without unit")
+		return 0, fmt.Errorf("%w: trailing number without unit", domain.ErrInvalidDurationFormat)
 	}
 
 	return duration, nil

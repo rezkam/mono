@@ -7,6 +7,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/rezkam/mono/internal/config"
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/migrations"
 	"github.com/stretchr/testify/require"
 )
@@ -48,4 +49,33 @@ func GetTestStorageDSN(t *testing.T) string {
 	}
 
 	return cfg.StorageDSN
+}
+
+// ItemToUpdateParams converts a TodoItem to UpdateItemParams for all fields.
+// This is a test helper to simplify migration from old UpdateItem signature.
+func ItemToUpdateParams(listID string, item *domain.TodoItem) domain.UpdateItemParams {
+	return domain.UpdateItemParams{
+		ItemID:            item.ID,
+		ListID:            listID,
+		Etag:              nil, // Tests that don't care about OCC can pass nil
+		UpdateMask:        []string{"title", "status", "priority", "due_time", "tags", "timezone", "estimated_duration", "actual_duration"},
+		Title:             &item.Title,
+		Status:            &item.Status,
+		Priority:          item.Priority,
+		DueTime:           item.DueTime,
+		Tags:              &item.Tags,
+		Timezone:          item.Timezone,
+		EstimatedDuration: item.EstimatedDuration,
+		ActualDuration:    item.ActualDuration,
+	}
+}
+
+// ListToUpdateParams converts a TodoList to UpdateListParams.
+// This is a test helper to simplify migration from old UpdateList signature.
+func ListToUpdateParams(list *domain.TodoList) domain.UpdateListParams {
+	return domain.UpdateListParams{
+		ListID:     list.ID,
+		UpdateMask: []string{"title"},
+		Title:      &list.Title,
+	}
 }

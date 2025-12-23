@@ -52,16 +52,10 @@ func cleanupBenchmarkData(b *testing.B, storage todo.Repository) {
 		}
 	}
 
-	// Delete all lists (this will cascade to items)
-	for _, list := range lists {
-		// Set items to empty and update to effectively delete them
-		// NOTE: UpdateList deletes all items (and their status history) before recreating.
-		// This is acceptable for benchmark cleanup where history loss is expected.
-		list.Items = []domain.TodoItem{}
-		if err := storage.UpdateList(ctx, list); err != nil {
-			b.Logf("failed to clear list %s: %v", list.ID, err)
-		}
-	}
+	// Note: Lists and items will be cleaned up via CASCADE DELETE when the test database
+	// is truncated by SetupTestDB's cleanup function. The UpdateList method now only
+	// supports updating the title field via field mask, so we can't clear items this way.
+	// This is fine since benchmark cleanup happens at test boundaries anyway.
 }
 
 // setupBenchmarkData populates the real database with N lists, each having M items.
@@ -269,7 +263,7 @@ func BenchmarkUpdateItem(b *testing.B) {
 			Title:  "Updated Title",
 			Status: domain.TaskStatusDone,
 		}
-		err := todoService.UpdateItem(ctx, list.ID, updateItem)
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(list.ID, updateItem))
 		if err != nil {
 			b.Fatalf("failed: %v", err)
 		}

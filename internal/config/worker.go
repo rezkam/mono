@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/env"
 )
 
@@ -35,7 +36,7 @@ func (c *WorkerConfig) Validate() error {
 	}
 
 	if c.WorkerOperationTimeout < 1 {
-		return fmt.Errorf("MONO_WORKER_OPERATION_TIMEOUT must be at least 1 second")
+		return fmt.Errorf("%w: MONO_WORKER_OPERATION_TIMEOUT", domain.ErrInvalidOperationTimeout)
 	}
 
 	return nil

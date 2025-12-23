@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/rezkam/mono/internal/domain"
+)
 
 // StorageConfig holds storage connection configuration.
 type StorageConfig struct {
@@ -13,10 +17,10 @@ type StorageConfig struct {
 // Validate validates the storage configuration.
 func (c *StorageConfig) Validate() error {
 	if c.StorageType != "postgres" {
-		return fmt.Errorf("unsupported MONO_STORAGE_TYPE: %s (only 'postgres' is supported)", c.StorageType)
+		return fmt.Errorf("%w: %s (only 'postgres' is supported)", domain.ErrUnsupportedStorageType, c.StorageType)
 	}
 	if c.StorageDSN == "" {
-		return fmt.Errorf("MONO_STORAGE_DSN is required")
+		return domain.ErrStorageDSNRequired
 	}
 	return nil
 }

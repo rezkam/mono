@@ -41,7 +41,7 @@ func main() {
 	// Calculate expiration
 	var expiresAt *time.Time
 	if cfg.DaysValid > 0 {
-		expiry := time.Now().AddDate(0, 0, cfg.DaysValid)
+		expiry := time.Now().UTC().AddDate(0, 0, cfg.DaysValid)
 		expiresAt = &expiry
 	}
 

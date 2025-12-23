@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/ptr"
 )
 
@@ -61,26 +62,6 @@ func getPageSize(pageSize *int) int {
 	return size
 }
 
-// parseFilter parses an AIP-160 filter expression.
-// This is a simplified implementation that supports basic comparisons.
-// Full AIP-160 spec: https://google.aip.dev/160
-//
-// Examples:
-//   - status='TODO'
-//   - priority='HIGH' AND status='TODO'
-//   - due_time < '2024-01-01T00:00:00Z'
-//
-// For now, returns error for unsupported syntax.
-func parseFilter(filter string) (map[string]interface{}, error) {
-	if filter == "" {
-		return nil, nil
-	}
-
-	// TODO: Implement full AIP-160 parser
-	// For now, return error to indicate not implemented
-	return nil, fmt.Errorf("filter parsing not yet implemented")
-}
-
 // parseOrderBy parses an AIP-132 order_by expression.
 // Supports single-field sorting with optional direction.
 // Full AIP-132 spec: https://google.aip.dev/132
@@ -115,7 +96,7 @@ func parseOrderBy(orderBy string) (field string, direction string, err error) {
 		} else if dir == "desc" {
 			direction = "desc"
 		} else {
-			return "", "", fmt.Errorf("invalid direction '%s': must be 'asc' or 'desc'", parts[1])
+			return "", "", fmt.Errorf("%w: '%s' (must be 'asc' or 'desc')", domain.ErrInvalidSortDirection, parts[1])
 		}
 	}
 

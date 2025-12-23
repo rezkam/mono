@@ -23,9 +23,10 @@ type Repository interface {
 	// FindLists retrieves todo lists with filtering, sorting, and pagination.
 	FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error)
 
-	// UpdateList updates an existing todo list metadata (title, etc).
-	// Returns error if list not found.
-	UpdateList(ctx context.Context, list *domain.TodoList) error
+	// UpdateList updates a list using field mask.
+	// Only updates fields specified in UpdateMask.
+	// Returns the updated list.
+	UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error)
 
 	// === Item Operations ===
 
@@ -37,10 +38,11 @@ type Repository interface {
 	// Returns domain.ErrNotFound if item doesn't exist.
 	FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error)
 
-	// UpdateItem updates an existing todo item.
-	// Validates that the item belongs to the specified list (prevents cross-list updates).
-	// Returns domain.ErrNotFound if item doesn't exist or doesn't belong to the list.
-	UpdateItem(ctx context.Context, listID string, item *domain.TodoItem) error
+	// UpdateItem updates an item using field mask and optional etag.
+	// Only updates fields specified in UpdateMask.
+	// If etag is provided and doesn't match, returns domain.ErrVersionConflict.
+	// Returns the updated item with new version.
+	UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error)
 
 	// FindItems searches for items with filtering, sorting, and pagination.
 	FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error)
@@ -55,9 +57,10 @@ type Repository interface {
 	// Returns error if template not found.
 	FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error)
 
-	// UpdateRecurringTemplate updates an existing template.
-	// Returns error if template not found or invalid config.
-	UpdateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error
+	// UpdateRecurringTemplate updates a template using field mask.
+	// Only updates fields specified in UpdateMask.
+	// Returns the updated template.
+	UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error)
 
 	// DeleteRecurringTemplate deletes a template.
 	// Returns error if template not found.

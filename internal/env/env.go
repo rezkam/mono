@@ -5,6 +5,8 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+
+	"github.com/rezkam/mono/internal/domain"
 )
 
 // Parse parses environment variables into the provided struct pointer.
@@ -12,7 +14,7 @@ import (
 func Parse(v any) error {
 	ptrVal := reflect.ValueOf(v)
 	if ptrVal.Kind() != reflect.Pointer || ptrVal.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("env: validation target must be a struct pointer")
+		return fmt.Errorf("env: %w", domain.ErrValidationTargetNotStruct)
 	}
 
 	val := ptrVal.Elem()
@@ -72,7 +74,7 @@ func setField(field reflect.Value, value string) error {
 		}
 		field.SetInt(i)
 	default:
-		return fmt.Errorf("unsupported type %s", field.Kind())
+		return fmt.Errorf("%w: %s", domain.ErrUnsupportedType, field.Kind())
 	}
 	return nil
 }

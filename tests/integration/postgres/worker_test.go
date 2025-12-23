@@ -104,7 +104,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 				ID:         listID,
 				Title:      fmt.Sprintf("Test List - %s", tc.name),
 				Items:      []domain.TodoItem{},
-				CreateTime: time.Now(),
+				CreateTime: time.Now().UTC(),
 			}
 			err = store.CreateList(ctx, list)
 			require.NoError(t, err)
@@ -121,8 +121,8 @@ func TestWorker_CompleteFlow(t *testing.T) {
 				RecurrenceConfig:     tc.config,
 				GenerationWindowDays: tc.generationWindow,
 				IsActive:             true,
-				CreatedAt:            time.Now(),
-				UpdatedAt:            time.Now(),
+				CreatedAt:            time.Now().UTC(),
+				UpdatedAt:            time.Now().UTC(),
 			}
 			err = store.CreateRecurringTemplate(ctx, template)
 			require.NoError(t, err)
@@ -206,7 +206,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 		ID:         listID,
 		Title:      "Distribution Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -228,15 +228,15 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 			RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 			GenerationWindowDays: 7,
 			IsActive:             true,
-			CreatedAt:            time.Now(),
-			UpdatedAt:            time.Now(),
+			CreatedAt:            time.Now().UTC(),
+			UpdatedAt:            time.Now().UTC(),
 		}
 		err = store.CreateRecurringTemplate(ctx, template)
 		require.NoError(t, err)
 
 		// Create pending job directly (time.Time{} = schedule immediately)
 		_, err = store.CreateGenerationJob(ctx, templateID, time.Time{},
-			time.Now(), time.Now().AddDate(0, 0, 7))
+			time.Now().UTC(), time.Now().UTC().AddDate(0, 0, 7))
 		require.NoError(t, err)
 	}
 
@@ -328,7 +328,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 		ID:         listID,
 		Title:      "High Load Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -362,8 +362,8 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 				RecurrenceConfig:     p.config,
 				GenerationWindowDays: p.window,
 				IsActive:             true,
-				CreatedAt:            time.Now(),
-				UpdatedAt:            time.Now(),
+				CreatedAt:            time.Now().UTC(),
+				UpdatedAt:            time.Now().UTC(),
 			}
 
 			err = store.CreateRecurringTemplate(ctx, template)
@@ -371,7 +371,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 
 			// Create pending job (time.Time{} = schedule immediately)
 			_, err = store.CreateGenerationJob(ctx, templateID, time.Time{},
-				time.Now(), time.Now().AddDate(0, 0, p.window))
+				time.Now().UTC(), time.Now().UTC().AddDate(0, 0, p.window))
 			require.NoError(t, err)
 
 			templateCount++
@@ -384,7 +384,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	numWorkers := 10
 	var wg sync.WaitGroup
 	var processedCount atomic.Int32
-	startTime := time.Now()
+	startTime := time.Now().UTC()
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -472,7 +472,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 		ID:         listID,
 		Title:      "Window Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -492,14 +492,14 @@ func TestWorker_GenerationWindow(t *testing.T) {
 		GenerationWindowDays: 180,
 		LastGeneratedUntil:   lastGenerated,
 		IsActive:             true,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		CreatedAt:            time.Now().UTC(),
+		UpdatedAt:            time.Now().UTC(),
 	}
 	err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
 	// Create job with specific generation range (time.Time{} = schedule immediately)
-	targetDate := time.Now().AddDate(0, 0, 180)
+	targetDate := time.Now().UTC().AddDate(0, 0, 180)
 	_, err = store.CreateGenerationJob(ctx, templateID, time.Time{},
 		lastGenerated, targetDate)
 	require.NoError(t, err)
@@ -558,7 +558,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		ID:         listID,
 		Title:      "History Preservation Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -571,21 +571,21 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		ID:         existingTaskID,
 		Title:      "Existing Task - Do Not Delete",
 		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().Add(-24 * time.Hour), // Created yesterday
-		UpdatedAt:  time.Now().Add(-24 * time.Hour),
+		CreateTime: time.Now().UTC().Add(-24 * time.Hour), // Created yesterday
+		UpdatedAt:  time.Now().UTC().Add(-24 * time.Hour),
 	}
 	err = store.CreateItem(ctx, listID, &existingTask)
 	require.NoError(t, err)
 
 	// Update task status to create status history
 	existingTask.Status = domain.TaskStatusInProgress
-	existingTask.UpdatedAt = time.Now().Add(-1 * time.Hour)
-	err = store.UpdateItem(ctx, listID, &existingTask)
+	existingTask.UpdatedAt = time.Now().UTC().Add(-1 * time.Hour)
+	_, err = store.UpdateItem(ctx, ItemToUpdateParams(listID, &existingTask))
 	require.NoError(t, err)
 
 	existingTask.Status = domain.TaskStatusDone
-	existingTask.UpdatedAt = time.Now()
-	err = store.UpdateItem(ctx, listID, &existingTask)
+	existingTask.UpdatedAt = time.Now().UTC()
+	_, err = store.UpdateItem(ctx, ItemToUpdateParams(listID, &existingTask))
 	require.NoError(t, err)
 
 	// Verify status history was created (should have 3 entries: TODO, IN_PROGRESS, DONE)
@@ -608,8 +608,8 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 		GenerationWindowDays: 7,
 		IsActive:             true,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		CreatedAt:            time.Now().UTC(),
+		UpdatedAt:            time.Now().UTC(),
 	}
 	err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)

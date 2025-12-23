@@ -45,7 +45,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		ID:         listID,
 		Title:      "Duplicate Prevention Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -62,8 +62,8 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 		GenerationWindowDays: 30,
 		IsActive:             true,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		CreatedAt:            time.Now().UTC(),
+		UpdatedAt:            time.Now().UTC(),
 	}
 	err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 		ID:         listID,
 		Title:      "Running Job Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -190,8 +190,8 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 		GenerationWindowDays: 60,
 		IsActive:             true,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		CreatedAt:            time.Now().UTC(),
+		UpdatedAt:            time.Now().UTC(),
 	}
 	err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 		ID:         listID,
 		Title:      "Multi Template Test",
 		Items:      []domain.TodoItem{},
-		CreateTime: time.Now(),
+		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -275,8 +275,8 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 			RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
 			GenerationWindowDays: 30,
 			IsActive:             true,
-			CreatedAt:            time.Now(),
-			UpdatedAt:            time.Now(),
+			CreatedAt:            time.Now().UTC(),
+			UpdatedAt:            time.Now().UTC(),
 		}
 		err = store.CreateRecurringTemplate(ctx, template)
 		require.NoError(t, err)
