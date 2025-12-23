@@ -93,8 +93,8 @@ func TestFindItemByID_NotFound(t *testing.T) {
 
 	assert.Nil(t, item)
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, domain.ErrNotFound),
-		"expected ErrNotFound, got: %v", err)
+	assert.True(t, errors.Is(err, domain.ErrItemNotFound),
+		"expected ErrItemNotFound, got: %v", err)
 }
 
 // TestFindItemByID_InvalidID tests that invalid UUID format returns proper error.

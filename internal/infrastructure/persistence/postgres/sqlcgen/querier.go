@@ -159,8 +159,8 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Critical for worker: Detects if template was deleted between job claim and generation
 	UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error)
-	// DATA ACCESS PATTERN: Partial update with COALESCE pattern
-	// Supports field masks by passing NULL for unchanged fields
+	// DATA ACCESS PATTERN: Partial update with explicit flags
+	// Supports field masks by passing boolean flags for fields to update
 	// Returns updated row, or pgx.ErrNoRows if:
 	//   - Item doesn't exist
 	//   - Item belongs to different list (security: prevents cross-list updates)

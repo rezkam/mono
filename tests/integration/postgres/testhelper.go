@@ -53,11 +53,12 @@ func GetTestStorageDSN(t *testing.T) string {
 
 // ItemToUpdateParams converts a TodoItem to UpdateItemParams for all fields.
 // This is a test helper to simplify migration from old UpdateItem signature.
+// Does NOT pass etag - tests that need optimistic locking should pass it explicitly.
 func ItemToUpdateParams(listID string, item *domain.TodoItem) domain.UpdateItemParams {
 	return domain.UpdateItemParams{
 		ItemID:            item.ID,
 		ListID:            listID,
-		Etag:              nil, // Tests that don't care about OCC can pass nil
+		Etag:              nil, // Tests that need optimistic locking should pass etag explicitly
 		UpdateMask:        []string{"title", "status", "priority", "due_time", "tags", "timezone", "estimated_duration", "actual_duration"},
 		Title:             &item.Title,
 		Status:            &item.Status,
@@ -68,6 +69,14 @@ func ItemToUpdateParams(listID string, item *domain.TodoItem) domain.UpdateItemP
 		EstimatedDuration: item.EstimatedDuration,
 		ActualDuration:    item.ActualDuration,
 	}
+}
+
+// ItemToUpdateParamsWithEtag is like ItemToUpdateParams but includes the etag for optimistic locking.
+func ItemToUpdateParamsWithEtag(listID string, item *domain.TodoItem) domain.UpdateItemParams {
+	etag := item.Etag()
+	params := ItemToUpdateParams(listID, item)
+	params.Etag = &etag
+	return params
 }
 
 // ListToUpdateParams converts a TodoList to UpdateListParams.

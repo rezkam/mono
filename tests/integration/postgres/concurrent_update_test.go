@@ -199,13 +199,13 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, errA = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, requestA_item))
+		_, errA = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestA_item))
 	}()
 
 	go func() {
 		defer wg.Done()
 		time.Sleep(10 * time.Millisecond) // B slightly delayed
-		_, errB = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, requestB_item))
+		_, errB = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestB_item))
 	}()
 
 	wg.Wait()
@@ -331,7 +331,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		// Use the same version (simulating concurrent read-modify-write)
 		itemCopy := *originalItem
 		itemCopy.Title = "Updated Title"
-		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, &itemCopy))
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
 		results <- updateResult{"title", err}
 	}()
 
@@ -342,7 +342,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		time.Sleep(5 * time.Millisecond) // Slight delay to ensure title update goes first
 		itemCopy := *originalItem
 		itemCopy.Status = domain.TaskStatusInProgress
-		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, &itemCopy))
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
 		results <- updateResult{"status", err}
 	}()
 
@@ -353,7 +353,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // More delay
 		itemCopy := *originalItem
 		itemCopy.Tags = []string{"updated", "concurrent"}
-		_, err := todoService.UpdateItem(ctx, ItemToUpdateParams(listID, &itemCopy))
+		_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
 		results <- updateResult{"tags", err}
 	}()
 

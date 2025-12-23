@@ -8,20 +8,14 @@ import (
 type DailyCalculator struct{}
 
 func (c *DailyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
-	interval := 1
-	if v, ok := config["interval"].(float64); ok {
-		interval = int(v)
-	}
+	interval := getInterval(config)
 
 	next := after.AddDate(0, 0, interval)
 	return &next
 }
 
 func (c *DailyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
-	interval := 1
-	if v, ok := config["interval"].(float64); ok {
-		interval = int(v)
-	}
+	interval := getInterval(config)
 
 	var occurrences []time.Time
 	current := start
@@ -38,20 +32,14 @@ func (c *DailyCalculator) OccurrencesBetween(start, end time.Time, config map[st
 type WeeklyCalculator struct{}
 
 func (c *WeeklyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
-	interval := 1
-	if v, ok := config["interval"].(float64); ok {
-		interval = int(v)
-	}
+	interval := getInterval(config)
 
 	next := after.AddDate(0, 0, 7*interval)
 	return &next
 }
 
 func (c *WeeklyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
-	interval := 1
-	if v, ok := config["interval"].(float64); ok {
-		interval = int(v)
-	}
+	interval := getInterval(config)
 
 	var occurrences []time.Time
 	current := start
@@ -88,20 +76,14 @@ func (c *BiweeklyCalculator) OccurrencesBetween(start, end time.Time, config map
 type MonthlyCalculator struct{}
 
 func (c *MonthlyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
-	interval := 1
-	if v, ok := config["interval"].(float64); ok {
-		interval = int(v)
-	}
+	interval := getInterval(config)
 
 	next := after.AddDate(0, interval, 0)
 	return &next
 }
 
 func (c *MonthlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
-	interval := 1
-	if v, ok := config["interval"].(float64); ok {
-		interval = int(v)
-	}
+	interval := getInterval(config)
 
 	var occurrences []time.Time
 	current := start
@@ -180,4 +162,17 @@ func (c *WeekdaysCalculator) OccurrencesBetween(start, end time.Time, config map
 	}
 
 	return occurrences
+}
+
+// getInterval extracts and validates the interval from the config.
+// Defaults to 1 if missing or invalid (< 1).
+func getInterval(config map[string]interface{}) int {
+	interval := 1
+	if v, ok := config["interval"].(float64); ok {
+		interval = int(v)
+	}
+	if interval < 1 {
+		interval = 1
+	}
+	return interval
 }

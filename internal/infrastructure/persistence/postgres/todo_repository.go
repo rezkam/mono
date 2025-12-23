@@ -325,24 +325,29 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 
 	// Map field mask to sqlc params (nil = preserve existing value via COALESCE)
 	if maskSet["title"] {
+		sqlcParams.SetTitle = true
 		sqlcParams.Title = params.Title
 	}
 	if maskSet["status"] {
+		sqlcParams.SetStatus = true
 		if params.Status != nil {
 			statusStr := string(*params.Status)
 			sqlcParams.Status = &statusStr
 		}
 	}
 	if maskSet["priority"] {
+		sqlcParams.SetPriority = true
 		if params.Priority != nil {
 			priorityStr := string(*params.Priority)
 			sqlcParams.Priority = &priorityStr
 		}
 	}
 	if maskSet["due_time"] {
+		sqlcParams.SetDueTime = true
 		sqlcParams.DueTime = timePtrToPgtype(params.DueTime)
 	}
 	if maskSet["tags"] {
+		sqlcParams.SetTags = true
 		if params.Tags != nil {
 			sqlcParams.Tags, _ = json.Marshal(*params.Tags)
 		} else {
@@ -350,12 +355,15 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 		}
 	}
 	if maskSet["timezone"] {
+		sqlcParams.SetTimezone = true
 		sqlcParams.Timezone = params.Timezone
 	}
 	if maskSet["estimated_duration"] {
+		sqlcParams.SetEstimatedDuration = true
 		sqlcParams.EstimatedDuration = durationPtrToPgtypeInterval(params.EstimatedDuration)
 	}
 	if maskSet["actual_duration"] {
+		sqlcParams.SetActualDuration = true
 		sqlcParams.ActualDuration = durationPtrToPgtypeInterval(params.ActualDuration)
 	}
 

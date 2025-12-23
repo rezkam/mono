@@ -413,38 +413,46 @@ func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFil
 
 const updateTodoItem = `-- name: UpdateTodoItem :one
 UPDATE todo_items
-SET title = COALESCE($1, title),
-    status = COALESCE($2, status),
-    priority = COALESCE($3, priority),
-    estimated_duration = COALESCE($4, estimated_duration),
-    actual_duration = COALESCE($5, actual_duration),
-    due_time = COALESCE($6, due_time),
-    tags = COALESCE($7, tags),
-    timezone = COALESCE($8, timezone),
+SET title = CASE WHEN $1::boolean THEN $2 ELSE title END,
+    status = CASE WHEN $3::boolean THEN $4 ELSE status END,
+    priority = CASE WHEN $5::boolean THEN $6 ELSE priority END,
+    estimated_duration = CASE WHEN $7::boolean THEN $8 ELSE estimated_duration END,
+    actual_duration = CASE WHEN $9::boolean THEN $10 ELSE actual_duration END,
+    due_time = CASE WHEN $11::boolean THEN $12 ELSE due_time END,
+    tags = CASE WHEN $13::boolean THEN $14 ELSE tags END,
+    timezone = CASE WHEN $15::boolean THEN $16 ELSE timezone END,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $9
-  AND list_id = $10
-  AND ($11::integer IS NULL OR version = $11::integer)
+WHERE id = $17
+  AND list_id = $18
+  AND ($19::integer IS NULL OR version = $19::integer)
 RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version
 `
 
 type UpdateTodoItemParams struct {
-	Title             *string            `json:"title"`
-	Status            *string            `json:"status"`
-	Priority          *string            `json:"priority"`
-	EstimatedDuration pgtype.Interval    `json:"estimated_duration"`
-	ActualDuration    pgtype.Interval    `json:"actual_duration"`
-	DueTime           pgtype.Timestamptz `json:"due_time"`
-	Tags              []byte             `json:"tags"`
-	Timezone          *string            `json:"timezone"`
-	ID                pgtype.UUID        `json:"id"`
-	ListID            pgtype.UUID        `json:"list_id"`
-	ExpectedVersion   *int32             `json:"expected_version"`
+	SetTitle             bool               `json:"set_title"`
+	Title                *string            `json:"title"`
+	SetStatus            bool               `json:"set_status"`
+	Status               *string            `json:"status"`
+	SetPriority          bool               `json:"set_priority"`
+	Priority             *string            `json:"priority"`
+	SetEstimatedDuration bool               `json:"set_estimated_duration"`
+	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
+	SetActualDuration    bool               `json:"set_actual_duration"`
+	ActualDuration       pgtype.Interval    `json:"actual_duration"`
+	SetDueTime           bool               `json:"set_due_time"`
+	DueTime              pgtype.Timestamptz `json:"due_time"`
+	SetTags              bool               `json:"set_tags"`
+	Tags                 []byte             `json:"tags"`
+	SetTimezone          bool               `json:"set_timezone"`
+	Timezone             *string            `json:"timezone"`
+	ID                   pgtype.UUID        `json:"id"`
+	ListID               pgtype.UUID        `json:"list_id"`
+	ExpectedVersion      *int32             `json:"expected_version"`
 }
 
-// DATA ACCESS PATTERN: Partial update with COALESCE pattern
-// Supports field masks by passing NULL for unchanged fields
+// DATA ACCESS PATTERN: Partial update with explicit flags
+// Supports field masks by passing boolean flags for fields to update
 // Returns updated row, or pgx.ErrNoRows if:
 //   - Item doesn't exist
 //   - Item belongs to different list (security: prevents cross-list updates)
@@ -455,13 +463,21 @@ type UpdateTodoItemParams struct {
 // TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
 func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) (TodoItem, error) {
 	row := q.db.QueryRow(ctx, updateTodoItem,
+		arg.SetTitle,
 		arg.Title,
+		arg.SetStatus,
 		arg.Status,
+		arg.SetPriority,
 		arg.Priority,
+		arg.SetEstimatedDuration,
 		arg.EstimatedDuration,
+		arg.SetActualDuration,
 		arg.ActualDuration,
+		arg.SetDueTime,
 		arg.DueTime,
+		arg.SetTags,
 		arg.Tags,
+		arg.SetTimezone,
 		arg.Timezone,
 		arg.ID,
 		arg.ListID,

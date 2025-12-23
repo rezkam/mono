@@ -27,8 +27,8 @@ SELECT * FROM todo_items
 ORDER BY list_id, create_time ASC;
 
 -- name: UpdateTodoItem :one
--- DATA ACCESS PATTERN: Partial update with COALESCE pattern
--- Supports field masks by passing NULL for unchanged fields
+-- DATA ACCESS PATTERN: Partial update with explicit flags
+-- Supports field masks by passing boolean flags for fields to update
 -- Returns updated row, or pgx.ErrNoRows if:
 --   - Item doesn't exist
 --   - Item belongs to different list (security: prevents cross-list updates)
@@ -37,14 +37,14 @@ ORDER BY list_id, create_time ASC;
 -- CONCURRENCY: Optional version check for optimistic locking
 -- TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
 UPDATE todo_items
-SET title = COALESCE(sqlc.narg('title'), title),
-    status = COALESCE(sqlc.narg('status'), status),
-    priority = COALESCE(sqlc.narg('priority'), priority),
-    estimated_duration = COALESCE(sqlc.narg('estimated_duration'), estimated_duration),
-    actual_duration = COALESCE(sqlc.narg('actual_duration'), actual_duration),
-    due_time = COALESCE(sqlc.narg('due_time'), due_time),
-    tags = COALESCE(sqlc.narg('tags'), tags),
-    timezone = COALESCE(sqlc.narg('timezone'), timezone),
+SET title = CASE WHEN sqlc.arg('set_title')::boolean THEN sqlc.narg('title') ELSE title END,
+    status = CASE WHEN sqlc.arg('set_status')::boolean THEN sqlc.narg('status') ELSE status END,
+    priority = CASE WHEN sqlc.arg('set_priority')::boolean THEN sqlc.narg('priority') ELSE priority END,
+    estimated_duration = CASE WHEN sqlc.arg('set_estimated_duration')::boolean THEN sqlc.narg('estimated_duration') ELSE estimated_duration END,
+    actual_duration = CASE WHEN sqlc.arg('set_actual_duration')::boolean THEN sqlc.narg('actual_duration') ELSE actual_duration END,
+    due_time = CASE WHEN sqlc.arg('set_due_time')::boolean THEN sqlc.narg('due_time') ELSE due_time END,
+    tags = CASE WHEN sqlc.arg('set_tags')::boolean THEN sqlc.narg('tags') ELSE tags END,
+    timezone = CASE WHEN sqlc.arg('set_timezone')::boolean THEN sqlc.narg('timezone') ELSE timezone END,
     updated_at = NOW(),
     version = version + 1
 WHERE id = sqlc.arg('id')
