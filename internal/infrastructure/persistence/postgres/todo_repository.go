@@ -14,9 +14,6 @@ import (
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
 
-// === Todo Repository Implementation ===
-// Implements application/todo.Repository interface (12 methods)
-
 // checkRowsAffected validates that an UPDATE/DELETE operation affected exactly one row.
 // Returns domain.ErrNotFound if rowsAffected == 0, indicating the record doesn't exist.
 // This helper eliminates duplication of the :execrows existence check pattern.

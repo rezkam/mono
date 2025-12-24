@@ -195,6 +195,12 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 	item.CreateTime = now
 	item.UpdatedAt = now
 
+	// Ensure DueTime is UTC if provided
+	if item.DueTime != nil {
+		utc := item.DueTime.UTC()
+		item.DueTime = &utc
+	}
+
 	// Set default status if not provided
 	if item.Status == "" {
 		item.Status = domain.TaskStatusTodo

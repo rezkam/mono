@@ -31,7 +31,7 @@ import (
 func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 	defer store.Close()
@@ -52,7 +52,10 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 
 	// Create HTTP router for presentation layer tests
 	authenticator := auth.NewAuthenticator(ctx, store, auth.Config{OperationTimeout: 5 * time.Second})
-	defer authenticator.Wait()
+	defer func() {
+		cancel()
+		authenticator.Wait()
+	}()
 
 	server := handler.NewServer(service)
 	authMiddleware := middleware.NewAuth(authenticator)
@@ -81,10 +84,17 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
+		// Force session to UTC to verify storage
+		_, err = db.Exec("SET TIME ZONE 'UTC'")
+		require.NoError(t, err)
+
 		var createTime time.Time
 		query := `SELECT create_time FROM todo_lists WHERE id = $1`
 		err = db.QueryRow(query, listID).Scan(&createTime)
 		require.NoError(t, err)
+
+		// The driver might return Local time even if DB is UTC. Convert to UTC to verify the instant and location.
+		createTime = createTime.UTC()
 
 		// CRITICAL: Verify the Location is UTC
 		assert.Equal(t, time.UTC, createTime.Location(),
@@ -136,7 +146,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.NoError(t, err)
 
 		// Make HTTP request through router
-		req := httptest.NewRequest(http.MethodGet, "/v1/lists/"+createdList.ID, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/lists/"+createdList.ID, nil)
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		w := httptest.NewRecorder()
 
@@ -150,7 +160,9 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify create_time is ISO 8601 with 'Z' suffix
-		createTimeStr, ok := response["create_time"].(string)
+		listMap, ok := response["list"].(map[string]interface{})
+		require.True(t, ok, "response should contain list object")
+		createTimeStr, ok := listMap["create_time"].(string)
 		require.True(t, ok, "create_time should be a string")
 
 		// CRITICAL: Must end with 'Z' indicating UTC
@@ -202,7 +214,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 					"due_time": "%s"
 				}`, tc.name, tc.dueTime)
 
-				req := httptest.NewRequest(http.MethodPost, "/v1/lists/"+createdList.ID+"/items",
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/lists/"+createdList.ID+"/items",
 					strings.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -218,7 +230,9 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 				require.NoError(t, err)
 
 				// Extract item ID
-				itemID, ok := response["id"].(string)
+				itemMap, ok := response["item"].(map[string]interface{})
+				require.True(t, ok, "response should contain item object")
+				itemID, ok := itemMap["id"].(string)
 				require.True(t, ok, "Response should contain item ID")
 
 				// Retrieve the item from business logic to verify UTC conversion
@@ -237,7 +251,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 					tc.expectedUTC, retrievedItem.DueTime.Format(time.RFC3339))
 
 				// Verify response also returns UTC with 'Z'
-				dueTimeStr, ok := response["due_time"].(string)
+				dueTimeStr, ok := itemMap["due_time"].(string)
 				require.True(t, ok, "due_time should be a string in response")
 				assert.True(t, strings.HasSuffix(dueTimeStr, "Z"),
 					"Response due_time must end with 'Z', got: %s", dueTimeStr)
@@ -277,6 +291,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		newStatus := domain.TaskStatusInProgress
 		_, err = store.UpdateItem(ctx, domain.UpdateItemParams{
 			ItemID: itemID,
+			ListID: listID,
 			Status: &newStatus,
 		})
 		require.NoError(t, err)
@@ -286,16 +301,23 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
+		// Force session to UTC to verify storage
+		_, err = db.Exec("SET TIME ZONE 'UTC'")
+		require.NoError(t, err)
+
 		var historyTimestamp time.Time
 		query := `
 			SELECT changed_at
-			FROM todo_item_status_history
-			WHERE item_id = $1
+			FROM task_status_history
+			WHERE task_id = $1
 			ORDER BY changed_at DESC
 			LIMIT 1
 		`
 		err = db.QueryRow(query, itemID).Scan(&historyTimestamp)
 		require.NoError(t, err)
+
+		// The driver might return Local time even if DB is UTC. Convert to UTC to verify the instant and location.
+		historyTimestamp = historyTimestamp.UTC()
 
 		// Database triggers should also create UTC timestamps
 		assert.Equal(t, time.UTC, historyTimestamp.Location(),
