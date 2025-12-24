@@ -194,10 +194,12 @@ func createTestList(t *testing.T, ts *TestServer, title string) *openapi.TodoLis
 
 	require.Equal(t, http.StatusCreated, w.Code, "Failed to create test list")
 
-	var list openapi.TodoList
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+	var resp openapi.CreateListResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotNil(t, resp.List, "Response list should not be nil")
+	require.NotNil(t, resp.List.Id, "List ID should not be nil")
 
-	return &list
+	return resp.List
 }
 
 func ptrString(s string) *string {

@@ -665,7 +665,11 @@ func (s *Store) DeleteRecurringTemplate(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to delete template: %w", err)
 	}
 
-	return checkRowsAffected(rowsAffected, "template", id)
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
+	}
+
+	return nil
 }
 
 // FindRecurringTemplates lists all templates for a list, optionally filtered by active status.

@@ -36,7 +36,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			log.Printf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Calculate expiration
 	var expiresAt *time.Time

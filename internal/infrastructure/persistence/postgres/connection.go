@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -103,7 +104,11 @@ func runMigrationsWithDSN(ctx context.Context, dsn string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database for migrations: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			slog.Error("Failed to close migration database connection", "error", err)
+		}
+	}()
 
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("failed to ping database for migrations: %w", err)

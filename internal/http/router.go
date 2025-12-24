@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -23,8 +24,11 @@ func NewRouter(server *handler.Server, authMiddleware *mw.Auth) *chi.Mux {
 
 	// Health check endpoint (no auth required)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			slog.ErrorContext(r.Context(), "Failed to write health check response", "error", err)
+		}
 	})
 
 	// API routes (OpenAPI spec already includes /v1 prefix in paths)

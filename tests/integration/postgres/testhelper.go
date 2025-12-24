@@ -32,8 +32,8 @@ func SetupTestDB(t *testing.T) (*sql.DB, func()) {
 	require.NoError(t, goose.Up(db, "."))
 
 	cleanup := func() {
-		db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-		db.Close()
+		_, _ = db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		_ = db.Close()
 	}
 
 	return db, cleanup

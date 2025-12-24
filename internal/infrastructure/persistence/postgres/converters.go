@@ -136,110 +136,118 @@ func domainStatusesToStrings(statuses []domain.TaskStatus) []string {
 
 // === Todo Item Conversions ===
 
-func dbTodoItemToDomain(dbItem sqlcgen.TodoItem) (domain.TodoItem, error) {
+// todoItemFields holds the common fields present in both sqlcgen.TodoItem and sqlcgen.ListTasksWithFiltersRow
+type todoItemFields struct {
+	ID                  pgtype.UUID
+	ListID              pgtype.UUID
+	Title               string
+	Status              string
+	Priority            *string
+	CreateTime          pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DueTime             pgtype.Timestamptz
+	Timezone            *string
+	EstimatedDuration   pgtype.Interval
+	ActualDuration      pgtype.Interval
+	Tags                []byte
+	RecurringTemplateID pgtype.UUID
+	InstanceDate        pgtype.Date
+	Version             int32
+}
+
+// convertTodoItemFields converts common todo item fields from database to domain model.
+func convertTodoItemFields(fields todoItemFields) (domain.TodoItem, error) {
 	item := domain.TodoItem{
-		ID:         pgtypeToUUIDString(dbItem.ID),
-		ListID:     pgtypeToUUIDString(dbItem.ListID),
-		Title:      dbItem.Title,
-		Status:     domain.TaskStatus(dbItem.Status),
-		CreateTime: pgtypeToTime(dbItem.CreateTime),
-		UpdatedAt:  pgtypeToTime(dbItem.UpdatedAt),
-		DueTime:    pgtypeToTimePtr(dbItem.DueTime),
-		Timezone:   dbItem.Timezone,
-		Version:    int(dbItem.Version),
+		ID:         pgtypeToUUIDString(fields.ID),
+		ListID:     pgtypeToUUIDString(fields.ListID),
+		Title:      fields.Title,
+		Status:     domain.TaskStatus(fields.Status),
+		CreateTime: pgtypeToTime(fields.CreateTime),
+		UpdatedAt:  pgtypeToTime(fields.UpdatedAt),
+		DueTime:    pgtypeToTimePtr(fields.DueTime),
+		Timezone:   fields.Timezone,
+		Version:    int(fields.Version),
 	}
 
 	// Priority (now *string in pgx)
-	if dbItem.Priority != nil {
-		priority := domain.TaskPriority(*dbItem.Priority)
+	if fields.Priority != nil {
+		priority := domain.TaskPriority(*fields.Priority)
 		item.Priority = &priority
 	}
 
 	// Estimated Duration
-	if dbItem.EstimatedDuration.Valid {
-		duration := intervalToDuration(dbItem.EstimatedDuration)
+	if fields.EstimatedDuration.Valid {
+		duration := intervalToDuration(fields.EstimatedDuration)
 		item.EstimatedDuration = &duration
 	}
 
 	// Actual Duration
-	if dbItem.ActualDuration.Valid {
-		duration := intervalToDuration(dbItem.ActualDuration)
+	if fields.ActualDuration.Valid {
+		duration := intervalToDuration(fields.ActualDuration)
 		item.ActualDuration = &duration
 	}
 
 	// Tags (now []byte in pgx)
-	if len(dbItem.Tags) > 0 {
+	if len(fields.Tags) > 0 {
 		var tags []string
-		if err := json.Unmarshal(dbItem.Tags, &tags); err != nil {
-			return domain.TodoItem{}, fmt.Errorf("invalid tags JSON for item %s: %w", pgtypeToUUIDString(dbItem.ID), err)
+		if err := json.Unmarshal(fields.Tags, &tags); err != nil {
+			return domain.TodoItem{}, fmt.Errorf("invalid tags JSON for item %s: %w", pgtypeToUUIDString(fields.ID), err)
 		}
 		item.Tags = tags
 	}
 
 	// Recurring Template ID
-	if dbItem.RecurringTemplateID.Valid {
-		templateID := pgtypeToUUIDString(dbItem.RecurringTemplateID)
+	if fields.RecurringTemplateID.Valid {
+		templateID := pgtypeToUUIDString(fields.RecurringTemplateID)
 		item.RecurringTemplateID = &templateID
 	}
 
 	// Instance Date
-	item.InstanceDate = pgtypeToDatePtr(dbItem.InstanceDate)
+	item.InstanceDate = pgtypeToDatePtr(fields.InstanceDate)
 
 	return item, nil
+}
+
+func dbTodoItemToDomain(dbItem sqlcgen.TodoItem) (domain.TodoItem, error) {
+	return convertTodoItemFields(todoItemFields{
+		ID:                  dbItem.ID,
+		ListID:              dbItem.ListID,
+		Title:               dbItem.Title,
+		Status:              dbItem.Status,
+		Priority:            dbItem.Priority,
+		CreateTime:          dbItem.CreateTime,
+		UpdatedAt:           dbItem.UpdatedAt,
+		DueTime:             dbItem.DueTime,
+		Timezone:            dbItem.Timezone,
+		EstimatedDuration:   dbItem.EstimatedDuration,
+		ActualDuration:      dbItem.ActualDuration,
+		Tags:                dbItem.Tags,
+		RecurringTemplateID: dbItem.RecurringTemplateID,
+		InstanceDate:        dbItem.InstanceDate,
+		Version:             dbItem.Version,
+	})
 }
 
 // dbListTasksRowToDomain converts a ListTasksWithFiltersRow to a domain TodoItem.
 // This is needed because the query includes COUNT(*) OVER() which creates a different struct.
 func dbListTasksRowToDomain(dbItem sqlcgen.ListTasksWithFiltersRow) (domain.TodoItem, error) {
-	item := domain.TodoItem{
-		ID:         pgtypeToUUIDString(dbItem.ID),
-		ListID:     pgtypeToUUIDString(dbItem.ListID),
-		Title:      dbItem.Title,
-		Status:     domain.TaskStatus(dbItem.Status),
-		CreateTime: pgtypeToTime(dbItem.CreateTime),
-		UpdatedAt:  pgtypeToTime(dbItem.UpdatedAt),
-		DueTime:    pgtypeToTimePtr(dbItem.DueTime),
-		Timezone:   dbItem.Timezone,
-		Version:    int(dbItem.Version),
-	}
-
-	// Priority (now *string in pgx)
-	if dbItem.Priority != nil {
-		priority := domain.TaskPriority(*dbItem.Priority)
-		item.Priority = &priority
-	}
-
-	// Estimated Duration
-	if dbItem.EstimatedDuration.Valid {
-		duration := intervalToDuration(dbItem.EstimatedDuration)
-		item.EstimatedDuration = &duration
-	}
-
-	// Actual Duration
-	if dbItem.ActualDuration.Valid {
-		duration := intervalToDuration(dbItem.ActualDuration)
-		item.ActualDuration = &duration
-	}
-
-	// Tags (now []byte in pgx)
-	if len(dbItem.Tags) > 0 {
-		var tags []string
-		if err := json.Unmarshal(dbItem.Tags, &tags); err != nil {
-			return domain.TodoItem{}, fmt.Errorf("invalid tags JSON for item %s: %w", pgtypeToUUIDString(dbItem.ID), err)
-		}
-		item.Tags = tags
-	}
-
-	// Recurring Template ID
-	if dbItem.RecurringTemplateID.Valid {
-		templateID := pgtypeToUUIDString(dbItem.RecurringTemplateID)
-		item.RecurringTemplateID = &templateID
-	}
-
-	// Instance Date
-	item.InstanceDate = pgtypeToDatePtr(dbItem.InstanceDate)
-
-	return item, nil
+	return convertTodoItemFields(todoItemFields{
+		ID:                  dbItem.ID,
+		ListID:              dbItem.ListID,
+		Title:               dbItem.Title,
+		Status:              dbItem.Status,
+		Priority:            dbItem.Priority,
+		CreateTime:          dbItem.CreateTime,
+		UpdatedAt:           dbItem.UpdatedAt,
+		DueTime:             dbItem.DueTime,
+		Timezone:            dbItem.Timezone,
+		EstimatedDuration:   dbItem.EstimatedDuration,
+		ActualDuration:      dbItem.ActualDuration,
+		Tags:                dbItem.Tags,
+		RecurringTemplateID: dbItem.RecurringTemplateID,
+		InstanceDate:        dbItem.InstanceDate,
+		Version:             dbItem.Version,
+	})
 }
 
 func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTodoItemParams, error) {

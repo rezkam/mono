@@ -34,16 +34,6 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
-	defer store.Close()
-
-	// Cleanup
-	defer func() {
-		db, err := sql.Open("pgx", pgURL)
-		if err == nil {
-			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-			db.Close()
-		}
-	}()
 
 	service := todo.NewService(store, todo.Config{
 		DefaultPageSize: 25,
@@ -52,9 +42,19 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 
 	// Create HTTP router for presentation layer tests
 	authenticator := auth.NewAuthenticator(ctx, store, auth.Config{OperationTimeout: 5 * time.Second})
+
+	// Cleanup function - cancel context first to signal shutdown, then wait, then close resources
 	defer func() {
 		cancel()
 		authenticator.Wait()
+		store.Close()
+
+		// Truncate tables for next test
+		db, err := sql.Open("pgx", pgURL)
+		if err == nil {
+			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+			db.Close()
+		}
 	}()
 
 	server := handler.NewServer(service)

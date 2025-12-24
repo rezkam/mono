@@ -36,7 +36,7 @@ func BadRequest(w http.ResponseWriter, message string) {
 func ValidationError(w http.ResponseWriter, field, issue string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
 		Error: ErrorDetail{
 			Code:    "VALIDATION_ERROR",
 			Message: "validation failed",
@@ -44,7 +44,9 @@ func ValidationError(w http.ResponseWriter, field, issue string) {
 				{Field: field, Issue: issue},
 			},
 		},
-	})
+	}); err != nil {
+		slog.Error("Failed to encode validation error response", "error", err)
+	}
 }
 
 // NotFound sends a 404 Not Found error.
@@ -78,12 +80,14 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 func Error(w http.ResponseWriter, code, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	if err := json.NewEncoder(w).Encode(ErrorResponse{
 		Error: ErrorDetail{
 			Code:    code,
 			Message: message,
 		},
-	})
+	}); err != nil {
+		slog.Error("Failed to encode error response", "error", err)
+	}
 }
 
 // FromDomainError maps domain errors to HTTP responses.
@@ -108,6 +112,10 @@ func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		ValidationError(w, "generation_window_days", "must be between 1 and 365")
 	case errors.Is(err, domain.ErrInvalidEtagFormat):
 		ValidationError(w, "etag", "must be a numeric string (e.g., \"1\", \"2\")")
+	case errors.Is(err, domain.ErrInvalidDurationFormat):
+		ValidationError(w, "estimated_duration", "invalid duration format (expected ISO 8601 duration like 'PT1H30M')")
+	case errors.Is(err, domain.ErrDurationEmpty):
+		ValidationError(w, "estimated_duration", "duration cannot be empty")
 
 	// Not found errors (404)
 	case errors.Is(err, domain.ErrListNotFound):

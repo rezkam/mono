@@ -104,9 +104,9 @@ fmt-check: ## Ensure all staged Go files are gofmt'ed (used by pre-commit hook)
 		exit 1; \
 	fi
 
-test: ## Run all unit tests (no database required)
-	@echo "Running tests..."
-	go test -v ./...
+test: ## Run unit tests only (no database required)
+	@echo "Running unit tests..."
+	@go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -v
 
 bench: ## Run benchmarks (requires MONO_STORAGE_DSN env var)
 	@echo "Running benchmarks..."

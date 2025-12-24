@@ -22,7 +22,11 @@ if [ -n "$STAGED_GO_FILES" ]; then
 
     echo "Running golangci-lint on staged files..."
     if command -v golangci-lint >/dev/null 2>&1; then
-        golangci-lint run $STAGED_GO_FILES
+        # Extract unique package directories from staged files
+        PACKAGES=$(echo "$STAGED_GO_FILES" | xargs -n1 dirname | sort -u | sed 's|^|./|' | tr '\n' ' ')
+        if [ -n "$PACKAGES" ]; then
+            golangci-lint run $PACKAGES
+        fi
     else
         echo "Warning: golangci-lint not found, skipping..."
     fi
@@ -32,7 +36,10 @@ if [ -n "$STAGED_GO_FILES" ]; then
     if [ ! -f "./timeutc" ]; then
         make build-timeutc-linter
     fi
-    ./timeutc $STAGED_GO_FILES
+    # Run on packages instead of individual files
+    if [ -n "$PACKAGES" ]; then
+        ./timeutc $PACKAGES
+    fi
 
     echo "Running tests..."
     make test

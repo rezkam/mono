@@ -37,10 +37,11 @@ func SetupTestServer(t *testing.T) *TestServer {
 		t.Skipf("Skipping HTTP integration test: %v (set MONO_STORAGE_DSN to run)", err)
 	}
 
-	// Create database connection
-	ctx := context.Background()
+	// Create database connection with cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
 	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
 	if err != nil {
+		cancel()
 		t.Fatalf("failed to create store: %v", err)
 	}
 
@@ -58,12 +59,17 @@ func SetupTestServer(t *testing.T) *TestServer {
 	// Generate test API key
 	apiKey, err := auth.CreateAPIKey(ctx, store, "sk", "test", "v1", "test-key", nil)
 	if err != nil {
+		cancel()
+		_ = store.Close()
 		t.Fatalf("failed to create API key: %v", err)
 	}
 
-	// Cleanup function
+	// Cleanup function - cancel context first to signal shutdown, then wait for completion
 	cleanup := func() {
+		cancel()
 		authenticator.Wait()
+		// Truncate tables to ensure test isolation
+		_, _ = store.Pool().Exec(context.Background(), "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 		_ = store.Close()
 	}
 

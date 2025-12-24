@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Setup Server with PostgreSQL
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
 	if err != nil {
 		panic(err)
@@ -87,7 +87,9 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	httpServer.Shutdown(ctx)
+	// Shutdown: cancel context first to signal shutdown, then wait for completion
+	cancel()
+	httpServer.Shutdown(context.Background())
 	authenticator.Wait()
 	os.Exit(code)
 }
