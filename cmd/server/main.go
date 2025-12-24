@@ -4,10 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"github.com/rezkam/mono/internal/application/auth"
+	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/config"
+	httpRouter "github.com/rezkam/mono/internal/http"
+	httpHandler "github.com/rezkam/mono/internal/http/handler"
+	httpMiddleware "github.com/rezkam/mono/internal/http/middleware"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/pkg/observability"
 )
 
 func main() {
@@ -22,8 +33,8 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Initialize HTTP server using Wire
-	server, cleanup, err := InitializeHTTPServer(ctx)
+	// Initialize HTTP server
+	server, cleanup, err := initializeHTTPServer(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize server: %w", err)
 	}
@@ -55,5 +66,178 @@ func run() error {
 
 	case err := <-serverErr:
 		return err
+	}
+}
+
+// initializeHTTPServer wires all dependencies together for the HTTP server.
+// Returns the server, a cleanup function, and any initialization error.
+func initializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
+	var cleanups []func()
+	cleanup := func() {
+		// Execute cleanups in reverse order (LIFO)
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
+
+	// 1. Initialize observability (logger, tracer, meter)
+	otelEnabled := provideObservabilityEnabled()
+	logger, otelCleanup, err := provideObservability(ctx, otelEnabled)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize observability: %w", err)
+	}
+	cleanups = append(cleanups, otelCleanup)
+
+	// 2. Load configuration
+	serverConfig, err := config.LoadServerConfig()
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// 3. Initialize database store
+	dbConfig := provideDBConfig()
+	dbConfig.DSN = serverConfig.StorageConfig.StorageDSN
+	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+	cleanups = append(cleanups, func() {
+		if err := store.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close database: %v\n", err)
+		}
+	})
+
+	// 4. Initialize todo service
+	todoConfig := provideTodoConfig()
+	todoService := todo.NewService(store, todoConfig)
+
+	// 5. Initialize authenticator
+	authConfig := provideAuthConfig()
+	authenticator := auth.NewAuthenticator(ctx, store, authConfig)
+	cleanups = append(cleanups, func() {
+		authenticator.Wait()
+	})
+
+	// 6. Initialize HTTP handler and middleware
+	handler := httpHandler.NewServer(todoService)
+	authMiddleware := httpMiddleware.NewAuth(authenticator)
+
+	// 7. Create router
+	router := httpRouter.NewRouter(handler, authMiddleware)
+
+	// 8. Create HTTP server
+	httpServerConfig := provideHTTPServerConfig()
+	httpServer := NewHTTPServer(router, logger, httpServerConfig)
+
+	return httpServer, cleanup, nil
+}
+
+// provideDBConfig reads database pool config from environment.
+func provideDBConfig() postgres.DBConfig {
+	maxOpenConns, _ := config.GetEnv[int]("MONO_DB_MAX_OPEN_CONNS")
+	maxIdleConns, _ := config.GetEnv[int]("MONO_DB_MAX_IDLE_CONNS")
+	connMaxLifetimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_LIFETIME_SEC")
+	connMaxIdleTimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_IDLE_TIME_SEC")
+
+	return postgres.DBConfig{
+		MaxOpenConns:    maxOpenConns,
+		MaxIdleConns:    maxIdleConns,
+		ConnMaxLifetime: time.Duration(connMaxLifetimeSec) * time.Second,
+		ConnMaxIdleTime: time.Duration(connMaxIdleTimeSec) * time.Second,
+	}
+}
+
+// provideTodoConfig reads pagination config from environment.
+func provideTodoConfig() todo.Config {
+	defaultPageSize, _ := config.GetEnv[int]("MONO_DEFAULT_PAGE_SIZE")
+	maxPageSize, _ := config.GetEnv[int]("MONO_MAX_PAGE_SIZE")
+
+	return todo.Config{
+		DefaultPageSize: defaultPageSize,
+		MaxPageSize:     maxPageSize,
+	}
+}
+
+// provideAuthConfig reads authenticator config from environment.
+func provideAuthConfig() auth.Config {
+	operationTimeoutSec, _ := config.GetEnv[int]("MONO_AUTH_OPERATION_TIMEOUT_SEC")
+	updateQueueSize, _ := config.GetEnv[int]("MONO_AUTH_UPDATE_QUEUE_SIZE")
+
+	return auth.Config{
+		OperationTimeout: time.Duration(operationTimeoutSec) * time.Second,
+		UpdateQueueSize:  updateQueueSize,
+	}
+}
+
+// provideObservabilityEnabled reads MONO_OTEL_ENABLED from environment.
+func provideObservabilityEnabled() bool {
+	enabled, exists := config.GetEnv[bool]("MONO_OTEL_ENABLED")
+	if !exists {
+		return false
+	}
+	return enabled
+}
+
+// provideObservability initializes OpenTelemetry providers and returns cleanup function.
+func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func(), error) {
+	tracerProvider, err := observability.InitTracerProvider(ctx, enabled)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to init tracer provider: %w", err)
+	}
+
+	meterProvider, err := observability.InitMeterProvider(ctx, enabled)
+	if err != nil {
+		tracerProvider.Shutdown(ctx)
+		return nil, nil, fmt.Errorf("failed to init meter provider: %w", err)
+	}
+
+	loggerProvider, logger, err := observability.InitLogger(ctx, enabled)
+	if err != nil {
+		meterProvider.Shutdown(ctx)
+		tracerProvider.Shutdown(ctx)
+		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
+	}
+	slog.SetDefault(logger)
+
+	cleanup := func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := loggerProvider.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown logger provider: %v\n", err)
+		}
+		if err := meterProvider.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown meter provider: %v\n", err)
+		}
+		if err := tracerProvider.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown tracer provider: %v\n", err)
+		}
+	}
+
+	return logger, cleanup, nil
+}
+
+// provideHTTPServerConfig reads HTTP server config from environment.
+func provideHTTPServerConfig() HTTPServerConfig {
+	port, _ := config.GetEnv[string]("MONO_HTTP_PORT")
+	readTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_READ_TIMEOUT_SEC")
+	writeTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_WRITE_TIMEOUT_SEC")
+	idleTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_IDLE_TIMEOUT_SEC")
+	readHeaderTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_READ_HEADER_TIMEOUT_SEC")
+	shutdownTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_SHUTDOWN_TIMEOUT_SEC")
+	maxHeaderBytes, _ := config.GetEnv[int]("MONO_HTTP_MAX_HEADER_BYTES")
+	maxBodyBytes, _ := config.GetEnv[int]("MONO_HTTP_MAX_BODY_BYTES")
+
+	return HTTPServerConfig{
+		Port:              port,
+		ReadTimeout:       time.Duration(readTimeoutSec) * time.Second,
+		WriteTimeout:      time.Duration(writeTimeoutSec) * time.Second,
+		IdleTimeout:       time.Duration(idleTimeoutSec) * time.Second,
+		ReadHeaderTimeout: time.Duration(readHeaderTimeoutSec) * time.Second,
+		ShutdownTimeout:   time.Duration(shutdownTimeoutSec) * time.Second,
+		MaxHeaderBytes:    maxHeaderBytes,
+		MaxBodyBytes:      int64(maxBodyBytes),
 	}
 }

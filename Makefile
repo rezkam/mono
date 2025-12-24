@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -54,16 +54,14 @@ help: ## Display this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 gen-openapi: ## Generate Go code from OpenAPI spec
+	@command -v oapi-codegen >/dev/null 2>&1 || { echo "Error: oapi-codegen is not installed. Install with: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest"; exit 1; }
 	@echo "Generating OpenAPI code..."
-	@$(HOME)/go/bin/oapi-codegen -config tools/oapi-codegen.yaml api/openapi/mono.yaml
+	@oapi-codegen -config tools/oapi-codegen.yaml api/openapi/mono.yaml
 
-wire: ## Generate Wire dependency injection code
-	@echo "Running Wire..."
-	@cd cmd/server && $(HOME)/go/bin/wire
-
-gen: gen-openapi wire gen-sqlc ## Generate all code (OpenAPI, Wire, sqlc)
+gen: gen-openapi gen-sqlc ## Generate all code (OpenAPI, sqlc)
 
 gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
+	@command -v sqlc >/dev/null 2>&1 || { echo "Error: sqlc is not installed. Install from: https://docs.sqlc.dev/en/latest/overview/install.html"; exit 1; }
 	@echo "Generating sqlc code..."
 	sqlc generate
 	@echo "Fixing sqlc imports (removing legacy pgtype)..."
