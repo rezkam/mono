@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/rezkam/mono/internal/config"
 	"github.com/rezkam/mono/internal/domain"
+	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/migrations"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +39,29 @@ func SetupTestDB(t *testing.T) (*sql.DB, func()) {
 	}
 
 	return db, cleanup
+}
+
+// SetupTestStore initializes a PostgreSQL store with automatic cleanup.
+// Returns the store and context. Cleanup runs automatically via t.Cleanup().
+func SetupTestStore(t *testing.T) (*postgres.Store, context.Context) {
+	t.Helper()
+
+	pgURL := GetTestStorageDSN(t)
+	ctx := context.Background()
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
+	require.NoError(t, err)
+
+	// Cleanup at END - truncate tables and close connection
+	t.Cleanup(func() {
+		db, err := sql.Open("pgx", pgURL)
+		if err == nil {
+			_, _ = db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+			_ = db.Close()
+		}
+		_ = store.Close()
+	})
+
+	return store, ctx
 }
 
 // GetTestStorageDSN returns the storage DSN for tests.

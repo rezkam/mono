@@ -281,8 +281,10 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 	@$(MAKE) test-integration-up
 	@echo ""
 	@echo "=== Running integration tests ==="
+	@# -count=1 disables test caching to ensure tests run fresh against real database
+	@# -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
 	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
-		go test -v ./tests/integration/postgres -count=1; \
+		go test -v -p 1 ./tests/integration/postgres ./tests/integration/http -count=1; \
 	TEST_RESULT=$$?; \
 	echo ""; \
 	echo "=== Cleaning up test database ==="; \

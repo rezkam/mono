@@ -1,8 +1,6 @@
 package integration
 
 import (
-	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
-	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,22 +17,7 @@ import (
 // TestConcurrentUpdateItem_MultipleGoroutines verifies that concurrent updates
 // to the same item complete successfully without data loss or corruption.
 func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
-	pgURL := GetTestStorageDSN(t)
-
-	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, pgURL)
-	require.NoError(t, err)
-	defer store.Close()
-
-	// Cleanup
-	defer func() {
-		db, err := sql.Open("pgx", pgURL)
-		if err == nil {
-			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-			db.Close()
-		}
-	}()
-
+	store, ctx := SetupTestStore(t)
 	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
@@ -126,22 +108,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 //   - Other request fails with ErrVersionConflict
 //   - Successful update is preserved, failed request must refetch and retry
 func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
-	pgURL := GetTestStorageDSN(t)
-
-	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, pgURL)
-	require.NoError(t, err)
-	defer store.Close()
-
-	// Cleanup
-	defer func() {
-		db, err := sql.Open("pgx", pgURL)
-		if err == nil {
-			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-			db.Close()
-		}
-	}()
-
+	store, ctx := SetupTestStore(t)
 	todoService := todo.NewService(store, todo.Config{})
 
 	// Create list
@@ -263,22 +230,7 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 //   - Two requests fail with ErrVersionConflict
 //   - Failed requests can refetch (version=2) and retry
 func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
-	pgURL := GetTestStorageDSN(t)
-
-	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, pgURL)
-	require.NoError(t, err)
-	defer store.Close()
-
-	// Cleanup
-	defer func() {
-		db, err := sql.Open("pgx", pgURL)
-		if err == nil {
-			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-			db.Close()
-		}
-	}()
-
+	store, ctx := SetupTestStore(t)
 	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
@@ -393,22 +345,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 // TestConcurrentUpdateItem_UpdatedAtTimestamp verifies that the updated_at
 // timestamp is properly managed during concurrent updates.
 func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
-	pgURL := GetTestStorageDSN(t)
-
-	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, pgURL)
-	require.NoError(t, err)
-	defer store.Close()
-
-	// Cleanup
-	defer func() {
-		db, err := sql.Open("pgx", pgURL)
-		if err == nil {
-			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-			db.Close()
-		}
-	}()
-
+	store, ctx := SetupTestStore(t)
 	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
@@ -485,22 +422,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 // TestConcurrentUpdateItem_DifferentItems verifies that concurrent updates
 // to different items don't interfere with each other.
 func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
-	pgURL := GetTestStorageDSN(t)
-
-	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, pgURL)
-	require.NoError(t, err)
-	defer store.Close()
-
-	// Cleanup
-	defer func() {
-		db, err := sql.Open("pgx", pgURL)
-		if err == nil {
-			db.Exec("TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
-			db.Close()
-		}
-	}()
-
+	store, ctx := SetupTestStore(t)
 	todoService := todo.NewService(store, todo.Config{})
 
 	// Create a list
