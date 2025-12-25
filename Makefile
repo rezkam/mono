@@ -61,7 +61,7 @@ gen-openapi: ## Generate Go code from OpenAPI spec
 gen: gen-openapi gen-sqlc ## Generate all code (OpenAPI, sqlc)
 
 gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
-	@command -v sqlc >/dev/null 2>&1 || { echo "Error: sqlc is not installed. Install from: https://docs.sqlc.dev/en/latest/overview/install.html"; exit 1; }
+	@command -v sqlc >/dev/null 2>&1 || { echo "Error: sqlc is not installed. Install with: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest"; exit 1; }
 	@echo "Generating sqlc code..."
 	sqlc generate
 	@echo "Fixing sqlc imports (removing legacy pgtype)..."
