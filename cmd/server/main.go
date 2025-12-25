@@ -17,8 +17,8 @@ import (
 	httpRouter "github.com/rezkam/mono/internal/http"
 	httpHandler "github.com/rezkam/mono/internal/http/handler"
 	httpMiddleware "github.com/rezkam/mono/internal/http/middleware"
+	"github.com/rezkam/mono/internal/infrastructure/observability"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
-	"github.com/rezkam/mono/pkg/observability"
 )
 
 func main() {
@@ -97,7 +97,7 @@ func initializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
 
 	// 3. Initialize database store
 	dbConfig := provideDBConfig()
-	dbConfig.DSN = serverConfig.StorageConfig.StorageDSN
+	dbConfig.DSN = serverConfig.StorageDSN
 	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
 	if err != nil {
 		cleanup()
@@ -189,14 +189,14 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 
 	meterProvider, err := observability.InitMeterProvider(ctx, enabled)
 	if err != nil {
-		tracerProvider.Shutdown(ctx)
+		_ = tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init meter provider: %w", err)
 	}
 
 	loggerProvider, logger, err := observability.InitLogger(ctx, enabled)
 	if err != nil {
-		meterProvider.Shutdown(ctx)
-		tracerProvider.Shutdown(ctx)
+		_ = meterProvider.Shutdown(ctx)
+		_ = tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
 	}
 	slog.SetDefault(logger)
