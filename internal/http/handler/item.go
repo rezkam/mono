@@ -95,7 +95,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	}
 
 	// Determine update mask
-	if len(req.UpdateMask) == 0 {
+	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
 		// No mask specified - update all provided fields
 		params.UpdateMask = []string{}
 		if req.Item.Title != nil {
@@ -123,11 +123,9 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			params.UpdateMask = append(params.UpdateMask, "actual_duration")
 		}
 	} else {
-		// Convert []UpdateItemRequestUpdateMask to []string
-		params.UpdateMask = make([]string, len(req.UpdateMask))
-		for i, m := range req.UpdateMask {
-			params.UpdateMask[i] = string(m)
-		}
+		// Copy the update mask strings
+		params.UpdateMask = make([]string, len(*req.UpdateMask))
+		copy(params.UpdateMask, *req.UpdateMask)
 	}
 
 	// Map field values from request to params
