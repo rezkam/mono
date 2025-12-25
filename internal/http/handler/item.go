@@ -87,11 +87,6 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 		return
 	}
 
-	if req.Item == nil {
-		response.BadRequest(w, "item is required")
-		return
-	}
-
 	// Build UpdateItemParams from request
 	params := domain.UpdateItemParams{
 		ItemID: itemID.String(),
@@ -100,7 +95,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	}
 
 	// Determine update mask
-	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
+	if len(req.UpdateMask) == 0 {
 		// No mask specified - update all provided fields
 		params.UpdateMask = []string{}
 		if req.Item.Title != nil {
@@ -128,7 +123,11 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			params.UpdateMask = append(params.UpdateMask, "actual_duration")
 		}
 	} else {
-		params.UpdateMask = *req.UpdateMask
+		// Convert []UpdateItemRequestUpdateMask to []string
+		params.UpdateMask = make([]string, len(req.UpdateMask))
+		for i, m := range req.UpdateMask {
+			params.UpdateMask[i] = string(m)
+		}
 	}
 
 	// Map field values from request to params

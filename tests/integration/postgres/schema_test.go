@@ -333,11 +333,11 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Query: Active (not done/archived/CANCELLED) + high priority
+	// Query: Active (not done/archived/cancelled) + high priority
 	rows, err := db.QueryContext(ctx, `
 		SELECT id FROM todo_items
 		WHERE list_id = $1
-		  AND status NOT IN ('done', 'archived', 'CANCELLED')
+		  AND status NOT IN ('done', 'archived', 'cancelled')
 		  AND priority = 'high'
 		ORDER BY status
 	`, listID)
@@ -476,7 +476,7 @@ func TestFunction_ClaimGenerationJob(t *testing.T) {
 			id, template_id, scheduled_for, status,
 			generate_from, generate_until, created_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, jobID, templateID, time.Now().UTC().Add(-1*time.Hour), "PENDING",
+	`, jobID, templateID, time.Now().UTC().Add(-1*time.Hour), "pending",
 		time.Now().UTC(), time.Now().UTC().Add(30*24*time.Hour), time.Now().UTC())
 	require.NoError(t, err)
 
@@ -493,7 +493,191 @@ func TestFunction_ClaimGenerationJob(t *testing.T) {
 		SELECT status FROM recurring_generation_jobs WHERE id = $1
 	`, jobID).Scan(&status)
 	require.NoError(t, err)
-	assert.Equal(t, "RUNNING", status)
+	assert.Equal(t, "running", status)
+}
+
+// TestQuery_AllTaskStatusValues verifies that queries work correctly with ALL status values.
+// This test catches case sensitivity bugs: if any query uses uppercase status values
+// (e.g., 'CANCELLED' instead of 'cancelled'), it will fail because the data uses lowercase.
+func TestQuery_AllTaskStatusValues(t *testing.T) {
+	db, cleanup := SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Setup
+	listID := "550e8400-e29b-41d4-a716-446655440050"
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+	`, listID, "Status Test List", time.Now().UTC())
+	require.NoError(t, err)
+
+	// Create one item for EACH possible status value
+	// All status values MUST be lowercase to match CHECK constraints
+	allStatuses := []struct {
+		id       string
+		status   string
+		priority string
+	}{
+		{"550e8400-e29b-41d4-a716-446655440051", "todo", "high"},
+		{"550e8400-e29b-41d4-a716-446655440052", "in_progress", "high"},
+		{"550e8400-e29b-41d4-a716-446655440053", "blocked", "medium"},
+		{"550e8400-e29b-41d4-a716-446655440054", "done", "low"},
+		{"550e8400-e29b-41d4-a716-446655440055", "archived", "low"},
+		{"550e8400-e29b-41d4-a716-446655440056", "cancelled", "high"},
+	}
+
+	for _, item := range allStatuses {
+		_, err = db.ExecContext(ctx, `
+			INSERT INTO todo_items (id, list_id, title, status, priority, create_time, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, item.id, listID, "Task with "+item.status, item.status, item.priority, time.Now().UTC(), time.Now().UTC())
+		require.NoError(t, err, "inserting item with status %q should succeed", item.status)
+	}
+
+	// Test 1: Count items by each status individually (catches case mismatch in WHERE clause)
+	statusCounts := map[string]int{
+		"todo":        1,
+		"in_progress": 1,
+		"blocked":     1,
+		"done":        1,
+		"archived":    1,
+		"cancelled":   1,
+	}
+
+	for status, expectedCount := range statusCounts {
+		var count int
+		err = db.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM todo_items WHERE list_id = $1 AND status = $2
+		`, listID, status).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, expectedCount, count, "status %q should have %d item(s)", status, expectedCount)
+	}
+
+	// Test 2: Active items filter (not done/archived/cancelled) - tests partial index usage
+	var activeCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM todo_items
+		WHERE list_id = $1 AND status NOT IN ('done', 'archived', 'cancelled')
+	`, listID).Scan(&activeCount)
+	require.NoError(t, err)
+	assert.Equal(t, 3, activeCount, "should find 3 active items (todo, in_progress, blocked)")
+
+	// Test 3: High priority active items - combines status and priority filtering
+	var highPriorityActiveCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM todo_items
+		WHERE list_id = $1
+		  AND status NOT IN ('done', 'archived', 'cancelled')
+		  AND priority = 'high'
+	`, listID).Scan(&highPriorityActiveCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, highPriorityActiveCount, "should find 2 high priority active items (todo, in_progress)")
+
+	// Test 4: Items with due times (tests idx_todo_items_active_due partial index)
+	// The partial index covers: status IN ('todo', 'in_progress', 'blocked')
+	var indexCoveredCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM todo_items
+		WHERE list_id = $1 AND status IN ('todo', 'in_progress', 'blocked')
+	`, listID).Scan(&indexCoveredCount)
+	require.NoError(t, err)
+	assert.Equal(t, 3, indexCoveredCount, "partial index should cover 3 statuses")
+}
+
+// TestQuery_AllJobStatusValues verifies that job queue queries work with ALL status values.
+// This test catches case sensitivity bugs in job status handling.
+func TestQuery_AllJobStatusValues(t *testing.T) {
+	db, cleanup := SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Setup list and template (required for job foreign key)
+	listID := "550e8400-e29b-41d4-a716-446655440060"
+	templateID := "550e8400-e29b-41d4-a716-446655440061"
+
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+	`, listID, "Job Status Test List", time.Now().UTC())
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO recurring_task_templates (
+			id, list_id, title, recurrence_pattern, recurrence_config,
+			is_active, created_at, updated_at, last_generated_until, generation_window_days
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, templateID, listID, "Test Template", "daily", `{}`,
+		true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 30)
+	require.NoError(t, err)
+
+	// Create one job for EACH possible status value
+	// All status values MUST be lowercase to match CHECK constraints
+	now := time.Now().UTC()
+	allJobStatuses := []struct {
+		id     string
+		status string
+	}{
+		{"550e8400-e29b-41d4-a716-446655440062", "pending"},
+		{"550e8400-e29b-41d4-a716-446655440063", "running"},
+		{"550e8400-e29b-41d4-a716-446655440064", "completed"},
+		{"550e8400-e29b-41d4-a716-446655440065", "failed"},
+	}
+
+	for _, job := range allJobStatuses {
+		_, err = db.ExecContext(ctx, `
+			INSERT INTO recurring_generation_jobs (
+				id, template_id, scheduled_for, status,
+				generate_from, generate_until, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, job.id, templateID, now.Add(-1*time.Hour), job.status,
+			now, now.Add(30*24*time.Hour), now)
+		require.NoError(t, err, "inserting job with status %q should succeed", job.status)
+	}
+
+	// Test 1: Count jobs by each status individually
+	jobStatusCounts := map[string]int{
+		"pending":   1,
+		"running":   1,
+		"completed": 1,
+		"failed":    1,
+	}
+
+	for status, expectedCount := range jobStatusCounts {
+		var count int
+		err = db.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id = $1 AND status = $2
+		`, templateID, status).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, expectedCount, count, "job status %q should have %d job(s)", status, expectedCount)
+	}
+
+	// Test 2: Pending jobs query (tests idx_generation_jobs_pending partial index)
+	var pendingCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM recurring_generation_jobs
+		WHERE template_id = $1 AND status = 'pending'
+	`, templateID).Scan(&pendingCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, pendingCount, "should find 1 pending job")
+
+	// Test 3: Active jobs (pending or running) - used by HasPendingOrRunningJob
+	var activeJobCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM recurring_generation_jobs
+		WHERE template_id = $1 AND status IN ('pending', 'running')
+	`, templateID).Scan(&activeJobCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, activeJobCount, "should find 2 active jobs (pending, running)")
+
+	// Test 4: Terminal jobs (completed or failed)
+	var terminalCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM recurring_generation_jobs
+		WHERE template_id = $1 AND status IN ('completed', 'failed')
+	`, templateID).Scan(&terminalCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, terminalCount, "should find 2 terminal jobs (completed, failed)")
 }
 
 func TestCascadeDelete(t *testing.T) {

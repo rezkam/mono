@@ -40,7 +40,7 @@ type Repository interface {
 	GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error)
 
 	// UpdateGenerationJobStatus updates job status and optionally records an error.
-	// status: "PENDING", "RUNNING", "COMPLETED", "FAILED"
+	// status: "pending", "running", "completed", "failed"
 	// errorMessage: nil for successful completion, non-nil for failures
 	// Returns error if job not found.
 	UpdateGenerationJobStatus(ctx context.Context, id, status string, errorMessage *string) error

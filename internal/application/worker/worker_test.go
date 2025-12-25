@@ -92,7 +92,7 @@ func (m *mockRepository) HasPendingOrRunningJob(ctx context.Context, templateID 
 }
 
 // TestProcessOneJob_UpdateStatusError_TemplateNotFound tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as FAILED after template error.
+// UpdateGenerationJobStatus are not ignored when marking job as failed after template error.
 func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
 	templateErr := domain.ErrTemplateNotFound
 	statusUpdateErr := domain.ErrDatabaseUnavailable
@@ -113,7 +113,7 @@ func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
 			return nil, templateErr
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "FAILED" {
+			if status == "failed" {
 				return statusUpdateErr
 			}
 			return nil
@@ -141,7 +141,7 @@ func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
 }
 
 // TestProcessOneJob_UpdateStatusError_GenerationFailed tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as FAILED after generation error.
+// UpdateGenerationJobStatus are not ignored when marking job as failed after generation error.
 func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
 	statusUpdateErr := domain.ErrDatabaseUnavailable
 
@@ -167,7 +167,7 @@ func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
 			}, nil
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "FAILED" {
+			if status == "failed" {
 				return statusUpdateErr
 			}
 			return nil
@@ -195,7 +195,7 @@ func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
 }
 
 // TestProcessOneJob_UpdateStatusError_TaskCreationFailed tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as FAILED after task creation error.
+// UpdateGenerationJobStatus are not ignored when marking job as failed after task creation error.
 func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 	taskCreateErr := domain.ErrFailedToCreateTask
 	statusUpdateErr := domain.ErrDatabaseUnavailable
@@ -226,7 +226,7 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 			return taskCreateErr
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "FAILED" {
+			if status == "failed" {
 				return statusUpdateErr
 			}
 			return nil
@@ -254,7 +254,7 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 }
 
 // TestProcessOneJob_UpdateStatusError_CompletionFailed tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as COMPLETED.
+// UpdateGenerationJobStatus are not ignored when marking job as completed.
 func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
 	statusUpdateErr := domain.ErrCompletionFailed
 	tasksCreated := 0
@@ -286,7 +286,7 @@ func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
 			return nil
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "COMPLETED" {
+			if status == "completed" {
 				return statusUpdateErr
 			}
 			return nil
@@ -337,7 +337,7 @@ func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
 			return nil, templateErr
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "FAILED" {
+			if status == "failed" {
 				statusUpdated = true
 			}
 			return nil
@@ -356,7 +356,7 @@ func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
 		t.Fatal("expected error when template not found")
 	}
 	if !statusUpdated {
-		t.Error("expected status to be updated to FAILED")
+		t.Error("expected status to be updated to failed")
 	}
 	// Error should only mention template failure (status update succeeded)
 	if !strings.Contains(err.Error(), "failed to get template") {

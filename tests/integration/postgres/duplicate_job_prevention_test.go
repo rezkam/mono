@@ -123,7 +123,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		var completedCount int
 		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
-			WHERE template_id = $1 AND status = 'COMPLETED'
+			WHERE template_id = $1 AND status = 'completed'
 		`, templateID).Scan(&completedCount)
 		require.NoError(t, err)
 		assert.Equal(t, 1, completedCount, "Job should be completed")
@@ -138,7 +138,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		var pendingCount int
 		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
-			WHERE template_id = $1 AND status = 'PENDING'
+			WHERE template_id = $1 AND status = 'pending'
 		`, templateID).Scan(&pendingCount)
 		require.NoError(t, err)
 		assert.Equal(t, 0, pendingCount, "No new pending job needed after window is covered")
@@ -146,7 +146,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 }
 
 // TestWorker_DuplicateJobPrevention_RunningJob verifies that templates with
-// RUNNING jobs also don't get duplicate jobs created.
+// running jobs also don't get duplicate jobs created.
 func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
 
@@ -196,23 +196,23 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
-	// Create a job and claim it (putting it in RUNNING state)
+	// Create a job and claim it (putting it in running state)
 	err = w.RunScheduleOnce(ctx)
 	require.NoError(t, err)
 
-	// Claim the job (changes status from PENDING to RUNNING)
+	// Claim the job (changes status from pending to running)
 	jobID, err := store.ClaimNextGenerationJob(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, jobID, "Should have claimed a job")
 
-	// Verify job is RUNNING
+	// Verify job is running
 	var runningCount int
 	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
-		WHERE template_id = $1 AND status = 'RUNNING'
+		WHERE template_id = $1 AND status = 'running'
 	`, templateID).Scan(&runningCount)
 	require.NoError(t, err)
-	assert.Equal(t, 1, runningCount, "Job should be in RUNNING state")
+	assert.Equal(t, 1, runningCount, "Job should be in running state")
 
 	// Try to schedule again - should NOT create another job
 	err = w.RunScheduleOnce(ctx)
@@ -224,7 +224,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 		WHERE template_id = $1
 	`, templateID).Scan(&totalJobs)
 	require.NoError(t, err)
-	assert.Equal(t, 1, totalJobs, "Should NOT create duplicate job while one is RUNNING")
+	assert.Equal(t, 1, totalJobs, "Should NOT create duplicate job while one is running")
 }
 
 // TestWorker_MultipleTemplates_IndependentDuplicatePrevention verifies that
@@ -320,7 +320,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	var pendingJobs int
 	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
-		WHERE status = 'PENDING'
+		WHERE status = 'pending'
 	`).Scan(&pendingJobs)
 	require.NoError(t, err)
 	assert.Equal(t, 2, pendingJobs, "Should still have exactly 2 pending jobs")

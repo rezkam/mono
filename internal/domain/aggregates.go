@@ -181,13 +181,13 @@ type RecurringTemplate struct {
 //
 // The worker uses these jobs to:
 //  1. Schedule when to generate tasks
-//  2. Track job status (PENDING, RUNNING, COMPLETED, FAILED)
+//  2. Track job status (pending, running, completed, failed)
 //  3. Record errors and retry attempts
 type GenerationJob struct {
 	ID           string
 	TemplateID   string
 	ScheduledFor time.Time
-	Status       string // PENDING, RUNNING, COMPLETED, FAILED
+	Status       string // pending, running, completed, failed
 
 	GenerateFrom  time.Time
 	GenerateUntil time.Time

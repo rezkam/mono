@@ -107,7 +107,7 @@ func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, sche
 		ID:            uuidToPgtype(jobID),
 		TemplateID:    uuidToPgtype(templateUUID),
 		Column3:       scheduledForParam,
-		Status:        "PENDING",
+		Status:        "pending",
 		GenerateFrom:  dateToPgtype(from),
 		GenerateUntil: dateToPgtype(until),
 		CreatedAt:     timeToPgtype(time.Now().UTC()),

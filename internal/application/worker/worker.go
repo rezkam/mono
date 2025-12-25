@@ -195,9 +195,9 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	template, err := w.repo.GetRecurringTemplate(ctx, job.TemplateID)
 	if err != nil {
 		errMsg := fmt.Sprintf("template not found: %v", err)
-		updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "FAILED", &errMsg)
+		updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
 		if updateErr != nil {
-			log.Printf("ERROR: Failed to mark job %s as FAILED after template error: %v", jobID, updateErr)
+			log.Printf("ERROR: Failed to mark job %s as failed after template error: %v", jobID, updateErr)
 			return false, fmt.Errorf("failed to get template: %w (additionally, failed to update job status: %v)", err, updateErr)
 		}
 		return false, fmt.Errorf("failed to get template: %w", err)
@@ -208,9 +208,9 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	tasks, err := w.generator.GenerateTasksForTemplate(ctx, template, job.GenerateFrom, job.GenerateUntil)
 	if err != nil {
 		errMsg := fmt.Sprintf("generation failed: %v", err)
-		updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "FAILED", &errMsg)
+		updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
 		if updateErr != nil {
-			log.Printf("ERROR: Failed to mark job %s as FAILED after generation error: %v", jobID, updateErr)
+			log.Printf("ERROR: Failed to mark job %s as failed after generation error: %v", jobID, updateErr)
 			return false, fmt.Errorf("failed to generate tasks: %w (additionally, failed to update job status: %v)", err, updateErr)
 		}
 		return false, fmt.Errorf("failed to generate tasks: %w", err)
@@ -221,9 +221,9 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 			err := w.repo.CreateTodoItem(ctx, template.ListID, &task)
 			if err != nil {
 				errMsg := fmt.Sprintf("failed to create task: %v", err)
-				updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "FAILED", &errMsg)
+				updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
 				if updateErr != nil {
-					log.Printf("ERROR: Failed to mark job %s as FAILED after task creation error: %v", jobID, updateErr)
+					log.Printf("ERROR: Failed to mark job %s as failed after task creation error: %v", jobID, updateErr)
 					return false, fmt.Errorf("failed to create task: %w (additionally, failed to update job status: %v)", err, updateErr)
 				}
 				return false, fmt.Errorf("failed to create task: %w", err)
@@ -237,9 +237,9 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 		log.Printf("Warning: Failed to update template %s generation window: %v", template.ID, err)
 	}
 
-	err = w.repo.UpdateGenerationJobStatus(ctx, jobID, "COMPLETED", nil)
+	err = w.repo.UpdateGenerationJobStatus(ctx, jobID, "completed", nil)
 	if err != nil {
-		log.Printf("ERROR: Failed to mark job %s as COMPLETED (tasks were created, job stuck in RUNNING): %v", jobID, err)
+		log.Printf("ERROR: Failed to mark job %s as completed (tasks were created, job stuck in running): %v", jobID, err)
 		return false, fmt.Errorf("tasks created successfully but failed to mark job as completed: %w", err)
 	}
 

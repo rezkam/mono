@@ -54,7 +54,7 @@ CREATE TABLE todo_items (
 CREATE INDEX idx_todo_items_list_id ON todo_items(list_id);
 
 CREATE INDEX idx_todo_items_status ON todo_items(status)
-    WHERE status NOT IN ('ARCHIVED', 'CANCELLED');
+    WHERE status NOT IN ('archived', 'cancelled');
 
 CREATE INDEX idx_todo_items_priority ON todo_items(priority)
     WHERE priority IS NOT NULL;
@@ -77,7 +77,7 @@ CREATE INDEX idx_todo_items_timezone ON todo_items(timezone)
 
 -- Composite index for common query: active tasks by due date
 CREATE INDEX idx_todo_items_active_due ON todo_items(status, due_time)
-    WHERE status IN ('TODO', 'IN_PROGRESS', 'BLOCKED');
+    WHERE status IN ('todo', 'in_progress', 'blocked');
 
 CREATE INDEX idx_todo_items_recurring_template ON todo_items(recurring_template_id)
     WHERE recurring_template_id IS NOT NULL;
@@ -105,7 +105,7 @@ CREATE TABLE task_status_history (
 CREATE INDEX idx_status_history_task_time ON task_status_history(task_id, changed_at DESC);
 
 CREATE INDEX idx_status_history_in_progress ON task_status_history(task_id, to_status, changed_at)
-    WHERE to_status IN ('IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELLED');
+    WHERE to_status IN ('in_progress', 'blocked', 'done', 'cancelled');
 
 -- ============================================================================
 -- Recurring Tasks
@@ -190,8 +190,8 @@ CREATE TABLE recurring_generation_jobs (
     failed_at timestamptz,
 
     -- Job state
-    status TEXT NOT NULL DEFAULT 'PENDING'
-        CHECK (status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED')),
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'running', 'completed', 'failed')),
 
     error_message TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
@@ -206,7 +206,7 @@ CREATE TABLE recurring_generation_jobs (
 );
 
 CREATE INDEX idx_generation_jobs_pending ON recurring_generation_jobs(scheduled_for, status)
-    WHERE status = 'PENDING';
+    WHERE status = 'pending';
 
 CREATE INDEX idx_generation_jobs_template ON recurring_generation_jobs(template_id, created_at DESC);
 
@@ -293,7 +293,7 @@ BEGIN
         WHERE task_id = p_task_id
         ORDER BY changed_at
     ) LOOP
-        IF rec.to_status = 'IN_PROGRESS' AND rec.next_status IS NOT NULL THEN
+        IF rec.to_status = 'in_progress' AND rec.next_status IS NOT NULL THEN
             v_total_duration := v_total_duration + (rec.end_time - rec.start_time);
         END IF;
     END LOOP;
@@ -311,9 +311,9 @@ BEGIN
         INSERT INTO task_status_history (task_id, from_status, to_status, changed_at)
         VALUES (NEW.id, OLD.status, NEW.status, now());
 
-        -- Auto-calculate actual_duration when leaving IN_PROGRESS
+        -- Auto-calculate actual_duration when leaving in_progress
         -- (unless user manually set it - we'll add a flag for this later if needed)
-        IF OLD.status = 'IN_PROGRESS' AND NEW.status != 'IN_PROGRESS' THEN
+        IF OLD.status = 'in_progress' AND NEW.status != 'in_progress' THEN
             NEW.actual_duration := calculate_actual_duration(NEW.id);
         END IF;
     END IF;
@@ -353,7 +353,7 @@ DECLARE
 BEGIN
     SELECT id INTO v_job_id
     FROM recurring_generation_jobs
-    WHERE status = 'PENDING'
+    WHERE status = 'pending'
         AND scheduled_for <= now()
     ORDER BY scheduled_for
     LIMIT 1
@@ -361,7 +361,7 @@ BEGIN
 
     IF v_job_id IS NOT NULL THEN
         UPDATE recurring_generation_jobs
-        SET status = 'RUNNING',
+        SET status = 'running',
             started_at = now()
         WHERE id = v_job_id;
     END IF;

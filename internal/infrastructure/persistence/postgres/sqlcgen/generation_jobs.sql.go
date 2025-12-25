@@ -49,7 +49,7 @@ func (q *Queries) CreateGenerationJob(ctx context.Context, arg CreateGenerationJ
 
 const deleteCompletedGenerationJobs = `-- name: DeleteCompletedGenerationJobs :exec
 DELETE FROM recurring_generation_jobs
-WHERE status = 'COMPLETED' AND completed_at < $1
+WHERE status = 'completed' AND completed_at < $1
 `
 
 func (q *Queries) DeleteCompletedGenerationJobs(ctx context.Context, completedAt pgtype.Timestamptz) error {
@@ -85,7 +85,7 @@ func (q *Queries) GetGenerationJob(ctx context.Context, id pgtype.UUID) (Recurri
 const hasPendingOrRunningJob = `-- name: HasPendingOrRunningJob :one
 SELECT EXISTS(
     SELECT 1 FROM recurring_generation_jobs
-    WHERE template_id = $1 AND status IN ('PENDING', 'RUNNING')
+    WHERE template_id = $1 AND status IN ('pending', 'running')
 ) AS has_job
 `
 
@@ -100,7 +100,7 @@ func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID pgtype.
 
 const listPendingGenerationJobs = `-- name: ListPendingGenerationJobs :many
 SELECT id, template_id, scheduled_for, started_at, completed_at, failed_at, status, error_message, retry_count, generate_from, generate_until, created_at FROM recurring_generation_jobs
-WHERE status = 'PENDING' AND scheduled_for <= $1
+WHERE status = 'pending' AND scheduled_for <= $1
 ORDER BY scheduled_for ASC
 LIMIT $2
 `
@@ -146,9 +146,9 @@ func (q *Queries) ListPendingGenerationJobs(ctx context.Context, arg ListPending
 const updateGenerationJobStatus = `-- name: UpdateGenerationJobStatus :execrows
 UPDATE recurring_generation_jobs
 SET status = $1,
-    started_at = CASE WHEN $1 = 'RUNNING' THEN $2 ELSE started_at END,
-    completed_at = CASE WHEN $1 = 'COMPLETED' THEN $2 ELSE completed_at END,
-    failed_at = CASE WHEN $1 = 'FAILED' THEN $2 ELSE failed_at END,
+    started_at = CASE WHEN $1 = 'running' THEN $2 ELSE started_at END,
+    completed_at = CASE WHEN $1 = 'completed' THEN $2 ELSE completed_at END,
+    failed_at = CASE WHEN $1 = 'failed' THEN $2 ELSE failed_at END,
     error_message = $3
 WHERE id = $4
 `

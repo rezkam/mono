@@ -135,7 +135,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			var jobCount int
 			err = store.Pool().QueryRow(ctx, `
 				SELECT COUNT(*) FROM recurring_generation_jobs
-				WHERE template_id = $1 AND status = 'PENDING'
+				WHERE template_id = $1 AND status = 'pending'
 			`, template.ID).Scan(&jobCount)
 			require.NoError(t, err)
 			assert.Equal(t, 1, jobCount, "Should have created one pending job")
@@ -149,7 +149,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			var completedCount int
 			err = store.Pool().QueryRow(ctx, `
 				SELECT COUNT(*) FROM recurring_generation_jobs
-				WHERE template_id = $1 AND status = 'COMPLETED'
+				WHERE template_id = $1 AND status = 'completed'
 			`, template.ID).Scan(&completedCount)
 			require.NoError(t, err)
 			assert.Equal(t, 1, completedCount, "Job should be completed")
@@ -303,7 +303,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	// Verify all jobs are completed in DB
 	var completedJobs int
 	err = store.Pool().QueryRow(ctx, `
-		SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'COMPLETED'
+		SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'completed'
 	`).Scan(&completedJobs)
 	require.NoError(t, err)
 	assert.Equal(t, numTemplates, completedJobs)
@@ -536,7 +536,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	var pendingJobs int
 	err = store.Pool().QueryRow(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
-		WHERE template_id = $1 AND status = 'PENDING'
+		WHERE template_id = $1 AND status = 'pending'
 	`, templateID).Scan(&pendingJobs)
 	require.NoError(t, err)
 	assert.Equal(t, 0, pendingJobs, "Should not create duplicate job")
