@@ -37,9 +37,10 @@ if [ -n "$STAGED_GO_FILES" ]; then
     if [ ! -f "./timeutc" ]; then
         make build-timeutc-linter
     fi
-    # Run on packages instead of individual files
-    if [ -n "$PACKAGES" ]; then
-        ./timeutc $PACKAGES
+    # Run on packages instead of individual files, excluding testdata
+    LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | tr '\n' ' ')
+    if [ -n "$LINT_PACKAGES" ]; then
+        ./timeutc $LINT_PACKAGES
     fi
 
     echo "Running tests..."
