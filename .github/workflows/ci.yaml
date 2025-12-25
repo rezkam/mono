@@ -60,8 +60,9 @@ jobs:
           sleep 10
 
       - name: Run PostgreSQL Integration Tests
-        run: |
-          MONO_STORAGE_DSN="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" go test -v ./tests/integration/...
+        run: make test-integration-run
+        env:
+          MONO_STORAGE_DSN: "postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable"
 
       - name: Stop PostgreSQL
         run: docker compose down

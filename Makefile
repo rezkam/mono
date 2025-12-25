@@ -281,10 +281,8 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 	@$(MAKE) test-integration-up
 	@echo ""
 	@echo "=== Running integration tests ==="
-	@# -count=1 disables test caching to ensure tests run fresh against real database
-	@# -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
 	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
-		go test -v -p 1 ./tests/integration/postgres ./tests/integration/http -count=1; \
+		$(MAKE) test-integration-run; \
 	TEST_RESULT=$$?; \
 	echo ""; \
 	echo "=== Cleaning up test database ==="; \
@@ -296,6 +294,14 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 		echo "❌ Integration tests FAILED"; \
 		exit $$TEST_RESULT; \
 	fi
+
+test-integration-run: ## Run integration tests (requires MONO_STORAGE_DSN env var)
+ifndef MONO_STORAGE_DSN
+	$(error MONO_STORAGE_DSN is required. Set it to your PostgreSQL connection string.)
+endif
+	@# -count=1 disables test caching to ensure tests run fresh against real database
+	@# -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
+	go test -v -p 1 ./tests/integration/... -count=1
 
 test-e2e: ## [TEST DB] Run end-to-end tests (auto-cleanup before/after)
 	@echo "=== Cleaning any existing test database ==="
