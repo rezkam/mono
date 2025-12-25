@@ -186,7 +186,7 @@ setup-hooks: ## Configure git hooks to run automatically
 
 run: build ## Build and run server using dev database
 	@echo "Running server..."
-	MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" MONO_REST_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
+	MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."
