@@ -169,6 +169,8 @@ build-timeutc-linter: ## Build custom timezone linter
 	@cd tools/linters/timeutc && go build -o ../../../timeutc ./cmd/timeutc
 
 lint: build-timeutc-linter ## Run linters (golangci-lint + custom timezone linter)
+	@echo "Verifying golangci-lint config..."
+	golangci-lint config verify
 	@echo "Running golangci-lint..."
 	golangci-lint run
 	@echo "Running custom timezone linter..."
