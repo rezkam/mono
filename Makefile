@@ -56,7 +56,7 @@ help: ## Display this help message
 gen-openapi: ## Generate Go code from OpenAPI spec
 	@command -v oapi-codegen >/dev/null 2>&1 || { echo "Error: oapi-codegen is not installed. Install with: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest"; exit 1; }
 	@echo "Generating OpenAPI code..."
-	@oapi-codegen -config tools/oapi-codegen.yaml api/openapi/mono.yaml
+	@oapi-codegen -config api/openapi/oapi-codegen.yaml api/openapi/mono.yaml
 
 gen: gen-openapi gen-sqlc ## Generate all code (OpenAPI, sqlc)
 
