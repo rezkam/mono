@@ -30,6 +30,7 @@ package todo
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -249,11 +250,8 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 	if params.Etag != nil {
 		etag := *params.Etag
 		// Etag should be a numeric string (version number)
-		var version int
-		if _, err := fmt.Sscanf(etag, "%d", &version); err != nil {
-			return nil, domain.ErrInvalidEtagFormat
-		}
-		if version < 1 {
+		version, err := strconv.Atoi(etag)
+		if err != nil || version < 1 {
 			return nil, domain.ErrInvalidEtagFormat
 		}
 	}
