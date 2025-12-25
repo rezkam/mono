@@ -54,24 +54,15 @@ func ptrDuration(d *time.Duration) *string {
 // Domain → DTO mappers
 
 // MapListToDTO converts domain.TodoList to openapi.TodoList.
+// Note: Items are fetched separately via GET /v1/lists/{list_id}/items
 func MapListToDTO(list *domain.TodoList) openapi.TodoList {
-	dto := openapi.TodoList{
+	return openapi.TodoList{
 		Id:          ptrUUID(list.ID),
 		Title:       ptrString(list.Title),
 		CreateTime:  ptrTime(list.CreateTime),
 		TotalItems:  ptrInt(list.TotalItems),
 		UndoneItems: ptrInt(list.UndoneItems),
 	}
-
-	if len(list.Items) > 0 {
-		items := make([]openapi.TodoItem, len(list.Items))
-		for i, item := range list.Items {
-			items[i] = MapItemToDTO(&item)
-		}
-		dto.Items = &items
-	}
-
-	return dto
 }
 
 // MapItemToDTO converts domain.TodoItem to openapi.TodoItem.
@@ -94,22 +85,22 @@ func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 
 	// Map status
 	if item.Status != "" {
-		status := openapi.TaskStatus(item.Status)
+		status := openapi.ItemStatus(item.Status)
 		dto.Status = &status
 	}
 
 	// Map priority
 	if item.Priority != nil {
-		priority := openapi.TaskPriority(*item.Priority)
+		priority := openapi.ItemPriority(*item.Priority)
 		dto.Priority = &priority
 	}
 
 	return dto
 }
 
-// MapTemplateToDTO converts domain.RecurringTemplate to openapi.RecurringTaskTemplate.
-func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringTaskTemplate {
-	dto := openapi.RecurringTaskTemplate{
+// MapTemplateToDTO converts domain.RecurringTemplate to openapi.RecurringItemTemplate.
+func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringItemTemplate {
+	dto := openapi.RecurringItemTemplate{
 		Id:                   ptrUUID(template.ID),
 		ListId:               ptrUUID(template.ListID),
 		Title:                ptrString(template.Title),
@@ -125,7 +116,7 @@ func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringTaskT
 
 	// Map priority
 	if template.Priority != nil {
-		priority := openapi.TaskPriority(*template.Priority)
+		priority := openapi.ItemPriority(*template.Priority)
 		dto.Priority = &priority
 	}
 

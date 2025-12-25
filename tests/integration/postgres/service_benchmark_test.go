@@ -146,9 +146,10 @@ func BenchmarkListTasks(b *testing.B) {
 			ctx := context.Background()
 
 			b.Run("NoFilter", func(b *testing.B) {
-				params := domain.ListTasksParams{}
+				filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
+				params := domain.ListTasksParams{Filter: filter}
 				for b.Loop() {
-					_, err := todoService.ListTasks(ctx, params)
+					_, err := todoService.ListItems(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -157,12 +158,14 @@ func BenchmarkListTasks(b *testing.B) {
 
 			b.Run("Filter_Tags_HighSelectivity", func(b *testing.B) {
 				// "tag-1" is present in 1/100 items (1%)
-				tag := "tag-1"
+				filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{
+					Tags: []string{"tag-1"},
+				})
 				params := domain.ListTasksParams{
-					Tag: &tag,
+					Filter: filter,
 				}
 				for b.Loop() {
-					_, err := todoService.ListTasks(ctx, params)
+					_, err := todoService.ListItems(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -170,11 +173,14 @@ func BenchmarkListTasks(b *testing.B) {
 			})
 
 			b.Run("Sort_DueTime", func(b *testing.B) {
+				filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{
+					OrderBy: ptrString("due_time"),
+				})
 				params := domain.ListTasksParams{
-					OrderBy: "due_time",
+					Filter: filter,
 				}
 				for b.Loop() {
-					_, err := todoService.ListTasks(ctx, params)
+					_, err := todoService.ListItems(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -182,13 +188,15 @@ func BenchmarkListTasks(b *testing.B) {
 			})
 
 			b.Run("Combined_FilterTag_SortTime", func(b *testing.B) {
-				tag := "tag-1"
+				filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{
+					Tags:    []string{"tag-1"},
+					OrderBy: ptrString("due_time"),
+				})
 				params := domain.ListTasksParams{
-					Tag:     &tag,
-					OrderBy: "due_time",
+					Filter: filter,
 				}
 				for b.Loop() {
-					_, err := todoService.ListTasks(ctx, params)
+					_, err := todoService.ListItems(ctx, params)
 					if err != nil {
 						b.Fatalf("failed: %v", err)
 					}
@@ -342,267 +350,3 @@ func BenchmarkListLists(b *testing.B) {
 // NOTE: BenchmarkRecurringTemplates and BenchmarkAccessPatterns are commented out
 // as they were testing gRPC-specific patterns. These can be re-implemented with
 // REST API patterns if needed for performance benchmarking.
-
-/*
-// BenchmarkRecurringTemplates benchmarks recurring template operations.
-func BenchmarkRecurringTemplates(b *testing.B) {
-	storage := getBenchmarkStorage(b)
-	defer storage.Close()
-	defer cleanupBenchmarkData(b, storage)
-
-	todoService := todo.NewService(storage, todo.Config{})
-	svc := service.NewMonoService(todoService, 50, 100)
-	ctx := context.Background()
-
-	// Create a list for templates
-	listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{
-		Title: "Template List",
-	})
-
-	b.Run("CreateTemplate", func(b *testing.B) {
-		for b.Loop() {
-			_, err := svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
-				ListId:            listResp.List.Id,
-				Title:             "Daily Task",
-				RecurrencePattern: monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-		}
-	})
-
-	// Create a template for get/update benchmarks
-	tmplResp, _ := svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
-		ListId:            listResp.List.Id,
-		Title:             "Benchmark Template",
-		RecurrencePattern: monov1.RecurrencePattern_RECURRENCE_PATTERN_WEEKLY,
-	})
-
-	b.Run("GetTemplate", func(b *testing.B) {
-		for b.Loop() {
-			_, err := svc.GetRecurringTemplate(ctx, &monov1.GetRecurringTemplateRequest{
-				Id: tmplResp.Template.Id,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-		}
-	})
-
-	b.Run("UpdateTemplate", func(b *testing.B) {
-		for b.Loop() {
-			_, err := svc.UpdateRecurringTemplate(ctx, &monov1.UpdateRecurringTemplateRequest{
-				Template: &monov1.RecurringTaskTemplate{
-					Id:                tmplResp.Template.Id,
-					ListId:            listResp.List.Id,
-					Title:             "Updated Template",
-					RecurrencePattern: monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY,
-				},
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-		}
-	})
-
-	b.Run("ListTemplates", func(b *testing.B) {
-		// Create some templates
-		for i := 0; i < 10; i++ {
-			svc.CreateRecurringTemplate(ctx, &monov1.CreateRecurringTemplateRequest{
-				ListId:            listResp.List.Id,
-				Title:             fmt.Sprintf("Template %d", i),
-				RecurrencePattern: monov1.RecurrencePattern_RECURRENCE_PATTERN_DAILY,
-			})
-		}
-
-		for b.Loop() {
-			_, err := svc.ListRecurringTemplates(ctx, &monov1.ListRecurringTemplatesRequest{
-				ListId: listResp.List.Id,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-		}
-	})
-}
-
-// BenchmarkAccessPatterns benchmarks real-world access patterns to verify optimizations.
-//
-// ACCESS PATTERN DOCUMENTATION:
-// This benchmark suite validates the performance characteristics of common user operations:
-//
-// 1. LIST VIEW (Dashboard):
-//   - User opens app, sees all lists with counts
-//   - Expected: O(lists) with single SQL aggregation query
-//   - Scales: Independent of total item count
-//
-// 2. SEARCH/FILTER (Find Tasks):
-//   - User searches "show me overdue high-priority tasks"
-//   - Expected: O(matching_results) using database indexes
-//   - Scales: Pagination keeps memory constant
-//
-// 3. DETAIL VIEW (Single List):
-//   - User clicks a list to see all items
-//   - Expected: O(items_in_list) loading only one list's items
-//   - Scales: Per-list, not affected by other lists
-//
-// Run with real database:
-//
-//	MONO_STORAGE_DSN="postgres://..." go test -bench=BenchmarkAccessPatterns -benchmem ./tests/integration/postgres/...
-func BenchmarkAccessPatterns(b *testing.B) {
-	storage := getBenchmarkStorage(b)
-	defer storage.Close()
-	defer cleanupBenchmarkData(b, storage)
-
-	todoService := todo.NewService(storage, todo.Config{})
-	svc := service.NewMonoService(todoService, 50, 100)
-	ctx := context.Background()
-
-	// Setup: Create realistic dataset
-	// 10 lists with varying item counts (10-100 items each)
-	// Total: ~550 items across all lists
-	listIDs := make([]string, 10)
-	for i := 0; i < 10; i++ {
-		listResp, _ := svc.CreateList(ctx, &monov1.CreateListRequest{
-			Title: fmt.Sprintf("List %d", i),
-		})
-		listIDs[i] = listResp.List.Id
-
-		// Create items (10 * i items per list, so list 0 has 10, list 9 has 90)
-		itemCount := 10 + (i * 10)
-		for j := 0; j < itemCount; j++ {
-			priority := monov1.TaskPriority_TASK_PRIORITY_MEDIUM
-
-			// Make some items high priority
-			if j%3 == 0 {
-				priority = monov1.TaskPriority_TASK_PRIORITY_HIGH
-			}
-
-			svc.CreateItem(ctx, &monov1.CreateItemRequest{
-				ListId:   listResp.List.Id,
-				Title:    fmt.Sprintf("Item %d-%d", i, j),
-				Priority: priority,
-			})
-
-			// Update some items to done status
-			if j%4 == 0 {
-				items, _ := svc.GetList(ctx, &monov1.GetListRequest{Id: listResp.List.Id})
-				if len(items.List.Items) > 0 {
-					lastItem := items.List.Items[len(items.List.Items)-1]
-					svc.UpdateItem(ctx, &monov1.UpdateItemRequest{
-						Item: &monov1.TodoItem{
-							Id:     lastItem.Id,
-							Status: monov1.TaskStatus_TASK_STATUS_DONE,
-						},
-					})
-				}
-			}
-		}
-	}
-
-	b.ResetTimer()
-
-	// ACCESS PATTERN 1: LIST VIEW (Dashboard showing all lists with counts)
-	// Expected: Fast regardless of total item count (uses SQL aggregation)
-	b.Run("AccessPattern_ListView_DashboardWithCounts", func(b *testing.B) {
-		b.ReportMetric(float64(len(listIDs)), "lists")
-		b.ReportMetric(550, "total_items")
-
-		for b.Loop() {
-			resp, err := svc.ListLists(ctx, &monov1.ListListsRequest{})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-
-			// Verify counts are populated (not zero)
-			if len(resp.Lists) > 0 && resp.Lists[0].TotalItems == 0 {
-				b.Fatal("counts not populated - optimization not working")
-			}
-		}
-	})
-
-	// ACCESS PATTERN 2: SEARCH/FILTER (Find specific tasks across lists)
-	b.Run("AccessPattern_Search_HighPriorityTasks", func(b *testing.B) {
-		b.ReportMetric(550, "total_items_searched")
-
-		for b.Loop() {
-			resp, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
-				Filter:   "priority:HIGH",
-				PageSize: 20,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-
-			// Should return filtered results with pagination
-			if len(resp.Items) > 20 {
-				b.Fatal("pagination not working - returned too many items")
-			}
-		}
-	})
-
-	// ACCESS PATTERN 3: SEARCH/FILTER (Paginated results)
-	b.Run("AccessPattern_Search_PaginatedResults", func(b *testing.B) {
-		b.ReportMetric(550, "total_items")
-		b.ReportMetric(50, "page_size")
-
-		for b.Loop() {
-			// First page
-			resp, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
-				PageSize: 50,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-
-			// Should have next page token
-			if resp.NextPageToken == "" && len(resp.Items) >= 50 {
-				b.Fatal("pagination token not generated")
-			}
-		}
-	})
-
-	// ACCESS PATTERN 4: DETAIL VIEW (Single list with all items)
-	b.Run("AccessPattern_DetailView_SingleListFullLoad", func(b *testing.B) {
-		targetList := listIDs[5] // List with ~60 items
-		b.ReportMetric(60, "items_in_list")
-
-		for b.Loop() {
-			resp, err := svc.GetList(ctx, &monov1.GetListRequest{
-				Id: targetList,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-
-			// Should load all items for this specific list
-			if len(resp.List.Items) == 0 {
-				b.Fatal("items not loaded in detail view")
-			}
-		}
-	})
-
-	// ACCESS PATTERN 5: FILTER BY LIST (Tasks in specific list)
-	b.Run("AccessPattern_FilterByList_SingleListTasks", func(b *testing.B) {
-		targetList := listIDs[8] // List with ~90 items
-		b.ReportMetric(90, "items_in_list")
-		b.ReportMetric(25, "page_size")
-
-		for b.Loop() {
-			resp, err := svc.ListTasks(ctx, &monov1.ListTasksRequest{
-				Parent:   targetList,
-				PageSize: 25,
-			})
-			if err != nil {
-				b.Fatalf("failed: %v", err)
-			}
-
-			// Should return paginated results from single list
-			if len(resp.Items) > 25 {
-				b.Fatal("pagination not working for list filter")
-			}
-		}
-	})
-}
-*/

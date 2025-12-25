@@ -80,13 +80,18 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 	}
 
 	t.Run("created_at_asc_returns_oldest_first", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "created_at",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("created_at"),
+			OrderDir: ptrString("asc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 5)
 
@@ -105,13 +110,18 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 	})
 
 	t.Run("created_at_desc_returns_newest_first", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "created_at",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("created_at"),
+			OrderDir: ptrString("desc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 5)
 
@@ -130,22 +140,32 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 	})
 
 	t.Run("asc_and_desc_produce_different_orders", func(t *testing.T) {
+		ascFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("created_at"),
+			OrderDir: ptrString("asc"),
+		})
+		require.NoError(t, err)
+
 		ascResult, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "created_at",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+			ListID: &listID,
+			Filter: ascFilter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
+		require.NoError(t, err)
+
+		descFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("created_at"),
+			OrderDir: ptrString("desc"),
 		})
 		require.NoError(t, err)
 
 		descResult, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "created_at",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
-		})
+			ListID: &listID,
+			Filter: descFilter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 
 		require.Len(t, ascResult.Items, 5)
@@ -220,13 +240,18 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 	}
 
 	t.Run("due_time_asc_returns_earliest_due_first", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "due_time",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("due_time"),
+			OrderDir: ptrString("asc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 3)
 
@@ -238,13 +263,18 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 	})
 
 	t.Run("due_time_desc_returns_latest_due_first", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "due_time",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("due_time"),
+			OrderDir: ptrString("desc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 3)
 
@@ -311,22 +341,32 @@ func TestOrderByDirection_Priority(t *testing.T) {
 	}
 
 	t.Run("priority_asc_and_desc_produce_different_orders", func(t *testing.T) {
+		ascFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("asc"),
+		})
+		require.NoError(t, err)
+
 		ascResult, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+			ListID: &listID,
+			Filter: ascFilter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
+		require.NoError(t, err)
+
+		descFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("desc"),
 		})
 		require.NoError(t, err)
 
 		descResult, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
-		})
+			ListID: &listID,
+			Filter: descFilter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 
 		require.Len(t, ascResult.Items, 3)

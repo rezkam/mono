@@ -34,6 +34,9 @@ var (
 	ErrUnsupportedFieldType          = errors.New("unsupported field type")
 	ErrInvalidVersionFormat          = errors.New("invalid version format")
 	ErrInvalidSortDirection          = errors.New("invalid sort direction")
+	ErrTooManyStatuses               = errors.New("too many statuses in filter")
+	ErrTooManyPriorities             = errors.New("too many priorities in filter")
+	ErrTooManyTags                   = errors.New("too many tags in filter")
 	ErrFilterParsingNotImplemented   = errors.New("filter parsing not yet implemented")
 
 	// Business logic errors

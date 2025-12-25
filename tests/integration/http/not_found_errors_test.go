@@ -102,9 +102,11 @@ func TestNotFoundErrors_GetNonexistentRecurringTemplate_ReturnsTemplateNotFound(
 	ts := SetupTestServer(t)
 	defer ts.Cleanup()
 
+	// Create a list first (templates are nested under lists)
+	list := createTestList(t, ts, "Template Test List")
 	nonexistentTemplateID := uuid.Must(uuid.NewV7()).String()
 
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/recurring-templates/%s", nonexistentTemplateID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", list.Id.String(), nonexistentTemplateID), nil)
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
 	w := httptest.NewRecorder()
@@ -125,10 +127,12 @@ func TestNotFoundErrors_UpdateNonexistentRecurringTemplate_ReturnsTemplateNotFou
 	ts := SetupTestServer(t)
 	defer ts.Cleanup()
 
+	// Create a list first (templates are nested under lists)
+	list := createTestList(t, ts, "Template Test List")
 	nonexistentTemplateID := uuid.Must(uuid.NewV7()).String()
 
 	reqBody := openapi.UpdateRecurringTemplateRequest{
-		Template: &openapi.RecurringTaskTemplate{
+		Template: &openapi.RecurringItemTemplate{
 			Title: ptrString("Updated Title"),
 		},
 	}
@@ -136,7 +140,7 @@ func TestNotFoundErrors_UpdateNonexistentRecurringTemplate_ReturnsTemplateNotFou
 	body, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/recurring-templates/%s", nonexistentTemplateID), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", list.Id.String(), nonexistentTemplateID), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
@@ -156,9 +160,11 @@ func TestNotFoundErrors_DeleteNonexistentRecurringTemplate_ReturnsTemplateNotFou
 	ts := SetupTestServer(t)
 	defer ts.Cleanup()
 
+	// Create a list first (templates are nested under lists)
+	list := createTestList(t, ts, "Template Test List")
 	nonexistentTemplateID := uuid.Must(uuid.NewV7()).String()
 
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/recurring-templates/%s", nonexistentTemplateID), nil)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", list.Id.String(), nonexistentTemplateID), nil)
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
 	w := httptest.NewRecorder()

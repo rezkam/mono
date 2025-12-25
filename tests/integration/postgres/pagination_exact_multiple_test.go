@@ -63,14 +63,19 @@ func TestListTasksPaginationExactMultiple(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// Create default filter (empty)
+	filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+
 	// Test: Request first page with limit=10
 	// Expected: Should get 10 items and HasMore=false (no more pages)
 	// CURRENT BUG: HasMore=true because len(items) == limit
 	result, err := store.FindItems(ctx, domain.ListTasksParams{
 		ListID: &listID,
+		Filter: filter,
 		Limit:  10,
 		Offset: 0,
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 10, "Should return all 10 items")
 	assert.False(t, result.HasMore, "HasMore should be false when we've returned all items (10 total, limit=10)")
@@ -78,9 +83,10 @@ func TestListTasksPaginationExactMultiple(t *testing.T) {
 	// Verify second page is empty (if buggy HasMore=true causes client to request it)
 	result2, err := store.FindItems(ctx, domain.ListTasksParams{
 		ListID: &listID,
+		Filter: filter,
 		Limit:  10,
 		Offset: 10,
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.Len(t, result2.Items, 0, "Second page should be empty")
 	assert.False(t, result2.HasMore, "HasMore should be false on empty page")

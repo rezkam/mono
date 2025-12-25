@@ -73,7 +73,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 	// Get the list with counts (domain defines which statuses are "undone")
 	dbList, err := s.queries.GetTodoListWithCounts(ctx, sqlcgen.GetTodoListWithCountsParams{
 		ID:             uuidToPgtype(listUUID),
-		UndoneStatuses: domainStatusesToStrings(domain.UndoneStatuses()),
+		UndoneStatuses: taskStatusesToStrings(domain.UndoneStatuses()),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -112,7 +112,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 // FindAllLists retrieves all todo lists with counts but without items.
 func (s *Store) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
 	// Get lists with counts (domain defines which statuses are "undone")
-	dbListsWithCounts, err := s.queries.ListTodoListsWithCounts(ctx, domainStatusesToStrings(domain.UndoneStatuses()))
+	dbListsWithCounts, err := s.queries.ListTodoListsWithCounts(ctx, taskStatusesToStrings(domain.UndoneStatuses()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list lists: %w", err)
 	}
@@ -137,7 +137,7 @@ func (s *Store) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
 func (s *Store) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Build sqlc params from domain params
 	sqlcParams := sqlcgen.FindTodoListsWithFiltersParams{
-		UndoneStatuses: domainStatusesToStrings(domain.UndoneStatuses()),
+		UndoneStatuses: taskStatusesToStrings(domain.UndoneStatuses()),
 		PageLimit:      int32(params.Limit),
 		PageOffset:     int32(params.Offset),
 	}
@@ -420,8 +420,9 @@ func parseEtagToVersion(etag string) (int32, error) {
 }
 
 // FindItems searches for items with filtering, sorting, and pagination.
-func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
-	// Build the query parameters for sqlc - uses zero values to skip filters
+// excludedStatuses is provided by service layer based on business rules.
+func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
+	// Build the query parameters for sqlc - uses empty arrays to skip filters
 	var zeroUUID uuid.UUID
 
 	// Column1: list_id (zero UUID to search all lists)
@@ -434,22 +435,16 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		listUUID = parsed
 	}
 
-	// Column2: status (empty string to skip)
-	status := ""
-	if params.Status != nil {
-		status = string(*params.Status)
-	}
+	// Column2: statuses array (empty array to skip filter)
+	statuses := taskStatusesToStrings(params.Filter.Statuses())
 
-	// Column3: priority (empty string to skip)
-	priority := ""
-	if params.Priority != nil {
-		priority = string(*params.Priority)
-	}
+	// Column3: priorities array (empty array to skip filter)
+	priorities := taskPrioritiesToStrings(params.Filter.Priorities())
 
-	// Column4: tag (empty string to skip)
-	tag := ""
-	if params.Tag != nil {
-		tag = *params.Tag
+	// Column4: tags array (empty array to skip filter)
+	tags := params.Filter.Tags()
+	if tags == nil {
+		tags = []string{}
 	}
 
 	// Column5: due_before (zero time to skip filter)
@@ -463,24 +458,27 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 	createdAt := timePtrToPgtypeForFilter(nil)
 
 	// Column9: order_by combined with direction (e.g., "created_at_desc", "due_time_asc")
-	// If direction is specified, append it; otherwise use bare field name (SQL uses defaults)
-	orderBy := params.OrderBy
-	if params.OrderDir != "" {
-		orderBy = params.OrderBy + "_" + params.OrderDir
+	orderBy := params.Filter.OrderBy()
+	if params.Filter.OrderDir() != "" {
+		orderBy = params.Filter.OrderBy() + "_" + params.Filter.OrderDir()
 	}
 
+	// Column12: excluded_statuses (provided by service layer)
+	excludedStatusStrings := taskStatusesToStrings(excludedStatuses)
+
 	sqlcParams := sqlcgen.ListTasksWithFiltersParams{
-		Column1: uuidToPgtype(listUUID),
-		Column2: status,
-		Column3: priority,
-		Column4: tag,
-		Column5: dueBefore,
-		Column6: dueAfter,
-		Column7: updatedAt,
-		Column8: createdAt,
-		Column9: orderBy,
-		Limit:   int32(params.Limit),
-		Offset:  int32(params.Offset),
+		Column1:  uuidToPgtype(listUUID),
+		Column2:  statuses,
+		Column3:  priorities,
+		Column4:  tags,
+		Column5:  dueBefore,
+		Column6:  dueAfter,
+		Column7:  updatedAt,
+		Column8:  createdAt,
+		Column9:  orderBy,
+		Limit:    int32(params.Limit),
+		Offset:   int32(params.Offset),
+		Column12: excludedStatusStrings,
 	}
 
 	// Execute query - includes COUNT(*) OVER() as total_count in each row
@@ -499,13 +497,14 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams) (*
 		// This handles the case where offset >= total items
 		countParams := sqlcgen.CountTasksWithFiltersParams{
 			Column1: uuidToPgtype(listUUID),
-			Column2: status,
-			Column3: priority,
-			Column4: tag,
+			Column2: statuses,
+			Column3: priorities,
+			Column4: tags,
 			Column5: dueBefore,
 			Column6: dueAfter,
 			Column7: updatedAt,
 			Column8: createdAt,
+			Column9: excludedStatusStrings,
 		}
 		count, err := s.queries.CountTasksWithFilters(ctx, countParams)
 		if err != nil {

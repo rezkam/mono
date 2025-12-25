@@ -66,13 +66,18 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// Create default filter (empty)
+	filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+
 	t.Run("FirstPage_TotalCountShouldBe50", func(t *testing.T) {
 		// Request first page with limit=10
 		result, err := store.FindItems(ctx, domain.ListTasksParams{
 			ListID: &listID,
+			Filter: filter,
 			Limit:  10,
 			Offset: 0,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, result.Items, 10, "Should return 10 items on first page")
@@ -85,9 +90,10 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 		// Request third page (offset=20)
 		result, err := store.FindItems(ctx, domain.ListTasksParams{
 			ListID: &listID,
+			Filter: filter,
 			Limit:  10,
 			Offset: 20,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, result.Items, 10, "Should return 10 items on middle page")
@@ -100,9 +106,10 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 		// Request last page (offset=40)
 		result, err := store.FindItems(ctx, domain.ListTasksParams{
 			ListID: &listID,
+			Filter: filter,
 			Limit:  10,
 			Offset: 40,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, result.Items, 10, "Should return 10 items on last page")
@@ -115,9 +122,10 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 		// Request beyond last page (offset=50)
 		result, err := store.FindItems(ctx, domain.ListTasksParams{
 			ListID: &listID,
+			Filter: filter,
 			Limit:  10,
 			Offset: 50,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, result.Items, 0, "Should return 0 items beyond last page")
@@ -191,13 +199,17 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 	}
 
 	t.Run("FilterByStatus_TotalCountReflectsFilter", func(t *testing.T) {
-		todoStatus := domain.TaskStatusTodo
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			Statuses: []string{"todo"},
+		})
+		require.NoError(t, err)
+
 		result, err := store.FindItems(ctx, domain.ListTasksParams{
 			ListID: &listID,
-			Status: &todoStatus,
+			Filter: filter,
 			Limit:  10,
 			Offset: 0,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, result.Items, 10, "Should return 10 TODO items")
@@ -207,13 +219,17 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 	})
 
 	t.Run("FilterByStatus_Done_TotalCountReflectsFilter", func(t *testing.T) {
-		doneStatus := domain.TaskStatusDone
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			Statuses: []string{"done"},
+		})
+		require.NoError(t, err)
+
 		result, err := store.FindItems(ctx, domain.ListTasksParams{
 			ListID: &listID,
-			Status: &doneStatus,
+			Filter: filter,
 			Limit:  10,
 			Offset: 0,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		assert.Len(t, result.Items, 10, "Should return 10 DONE items")

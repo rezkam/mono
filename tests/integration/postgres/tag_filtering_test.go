@@ -65,8 +65,11 @@ func TestTagFiltering(t *testing.T) {
 	require.Len(t, fetchedList.Items, 4, "should have 4 items in the list")
 
 	// Test 1: Filter by "urgent" tag
-	tag := "urgent"
-	result, err := todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
+	filter1, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+		Tags: []string{"urgent"},
+	})
+	require.NoError(t, err)
+	result, err := todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter1})
 	require.NoError(t, err)
 	t.Logf("Items with 'urgent' tag: %d", len(result.Items))
 	assert.Len(t, result.Items, 2, "should return 2 items with 'urgent' tag")
@@ -76,8 +79,11 @@ func TestTagFiltering(t *testing.T) {
 	assert.Contains(t, ids, item3.ID)
 
 	// Test 2: Filter by "personal" tag
-	tag = "personal"
-	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
+	filter2, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+		Tags: []string{"personal"},
+	})
+	require.NoError(t, err)
+	result, err = todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter2})
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 2, "should return 2 items with 'personal' tag")
 	ids = []string{result.Items[0].ID, result.Items[1].ID}
@@ -85,20 +91,47 @@ func TestTagFiltering(t *testing.T) {
 	assert.Contains(t, ids, item3.ID)
 
 	// Test 3: Filter by "work" tag
-	tag = "work"
-	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
+	filter3, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+		Tags: []string{"work"},
+	})
+	require.NoError(t, err)
+	result, err = todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter3})
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 1, "should return 1 item with 'work' tag")
 	assert.Equal(t, item1.ID, result.Items[0].ID)
 
 	// Test 4: Filter by non-existent tag
-	tag = "nonexistent"
-	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{Tag: &tag})
+	filter4, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+		Tags: []string{"nonexistent"},
+	})
+	require.NoError(t, err)
+	result, err = todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter4})
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 0, "should return 0 items with 'nonexistent' tag")
 
-	// Test 5: No filter (returns all items)
-	result, err = todoService.ListTasks(ctx, domain.ListTasksParams{})
+	// Test 5: No filter (returns all items excluding archived/cancelled)
+	filter5, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+	result, err = todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter5})
 	require.NoError(t, err)
 	assert.Len(t, result.Items, 4, "should return all 4 items when no filter is applied")
+
+	// Test 6: Multiple tags with AND logic
+	filter6, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+		Tags: []string{"urgent", "personal"},
+	})
+	require.NoError(t, err)
+	result, err = todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter6})
+	require.NoError(t, err)
+	assert.Len(t, result.Items, 1, "should return 1 item with BOTH 'urgent' AND 'personal' tags")
+	assert.Equal(t, item3.ID, result.Items[0].ID, "should return item3 which has both tags")
+
+	// Test 7: Multiple tags where no item has all
+	filter7, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+		Tags: []string{"work", "personal"},
+	})
+	require.NoError(t, err)
+	result, err = todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter7})
+	require.NoError(t, err)
+	assert.Len(t, result.Items, 0, "should return 0 items as no item has BOTH 'work' AND 'personal' tags")
 }

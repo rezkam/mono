@@ -48,12 +48,17 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 	}
 
 	t.Run("order_by_priority_asc_nulls_last", func(t *testing.T) {
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("asc"),
+		})
+		require.NoError(t, err)
+
 		params := domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "asc",
+			ListID: &listID,
+			Filter: filter,
 		}
-		result, err := env.Service().ListTasks(env.Context(), params)
+		result, err := env.Service().ListItems(env.Context(), params)
 		require.NoError(t, err)
 		assert.Equal(t, 5, len(result.Items))
 
@@ -71,12 +76,17 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 	})
 
 	t.Run("order_by_due_time_asc_nulls_last", func(t *testing.T) {
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("due_time"),
+			OrderDir: ptrString("asc"),
+		})
+		require.NoError(t, err)
+
 		params := domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "due_time",
-			OrderDir: "asc",
+			ListID: &listID,
+			Filter: filter,
 		}
-		result, err := env.Service().ListTasks(env.Context(), params)
+		result, err := env.Service().ListItems(env.Context(), params)
 		require.NoError(t, err)
 		assert.Equal(t, 5, len(result.Items))
 
@@ -96,12 +106,17 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 	})
 
 	t.Run("order_by_priority_desc_nulls_last", func(t *testing.T) {
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("desc"),
+		})
+		require.NoError(t, err)
+
 		params := domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "desc",
+			ListID: &listID,
+			Filter: filter,
 		}
-		result, err := env.Service().ListTasks(env.Context(), params)
+		result, err := env.Service().ListItems(env.Context(), params)
 		require.NoError(t, err)
 		assert.Equal(t, 5, len(result.Items))
 

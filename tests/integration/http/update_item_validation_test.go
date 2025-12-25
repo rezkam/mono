@@ -33,7 +33,7 @@ func TestUpdateItem_InvalidStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to update with invalid status
-	invalidStatus := openapi.TaskStatus("INVALID_STATUS")
+	invalidStatus := openapi.ItemStatus("INVALID_STATUS")
 	updateMask := []string{"status"}
 	reqBody := openapi.UpdateItemRequest{
 		Item: &openapi.TodoItem{
@@ -81,7 +81,7 @@ func TestUpdateItem_InvalidPriority(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to update with invalid priority
-	invalidPriority := openapi.TaskPriority("SUPER_URGENT")
+	invalidPriority := openapi.ItemPriority("SUPER_URGENT")
 	updateMask := []string{"priority"}
 	reqBody := openapi.UpdateItemRequest{
 		Item: &openapi.TodoItem{
@@ -127,7 +127,7 @@ func TestUpdateItem_InvalidStatusWithoutMask(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to update with invalid status (no update_mask = update all provided fields)
-	invalidStatus := openapi.TaskStatus("BAD_STATUS")
+	invalidStatus := openapi.ItemStatus("BAD_STATUS")
 	reqBody := openapi.UpdateItemRequest{
 		Item: &openapi.TodoItem{
 			Status: &invalidStatus,

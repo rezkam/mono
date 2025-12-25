@@ -43,7 +43,7 @@ func TestListTasks_DefaultPageSizeFromService(t *testing.T) {
 
 	// Make HTTP request WITHOUT specifying page_size
 	// The service layer should apply its default of 25
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/lists/%s/items", list.ID), nil)
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
 	w := httptest.NewRecorder()
@@ -51,7 +51,7 @@ func TestListTasks_DefaultPageSizeFromService(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var resp openapi.ListTasksResponse
+	var resp openapi.ListItemsResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotNil(t, resp.Items)
 
@@ -89,7 +89,7 @@ func TestListTasks_MaxPageSizeFromService(t *testing.T) {
 	}
 
 	// Request more than max page size
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?page_size=200", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/lists/%s/items?page_size=200", list.ID), nil)
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
 	w := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestListTasks_MaxPageSizeFromService(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var resp openapi.ListTasksResponse
+	var resp openapi.ListItemsResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotNil(t, resp.Items)
 
@@ -130,7 +130,7 @@ func TestListTasks_ExplicitPageSizeRespected(t *testing.T) {
 
 	// Request specific page size
 	requestedSize := 10
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/tasks?page_size=%d", requestedSize), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/lists/%s/items?page_size=%d", list.ID, requestedSize), nil)
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
 	w := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestListTasks_ExplicitPageSizeRespected(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var resp openapi.ListTasksResponse
+	var resp openapi.ListItemsResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotNil(t, resp.Items)
 

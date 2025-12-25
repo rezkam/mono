@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Mono Task Management API
+  title: Mono API
   version: 1.0.0
-  description: RESTful API for task and list management with recurring templates
+  description: RESTful API for todo list and item management with recurring templates
 
 servers:
   - url: http://localhost:8081/api
@@ -104,6 +104,7 @@ paths:
     get:
       operationId: getList
       summary: Get a todo list by ID
+      description: Returns list metadata. Use GET /v1/lists/{list_id}/items to fetch items with filtering.
       tags: [Lists]
       parameters:
         - name: id
@@ -128,6 +129,95 @@ paths:
           $ref: '#/components/responses/InternalError'
 
   /v1/lists/{list_id}/items:
+    get:
+      operationId: listItems
+      summary: List items in a list with filtering and sorting
+      description: Returns items in a list. By default, archived and cancelled items are excluded.
+      tags: [Items]
+      parameters:
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: |
+            Filter by item status (can specify multiple).
+            If not specified, archived and cancelled items are excluded by default.
+            Use status=archived to explicitly include archived items.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [todo, in_progress, blocked, done, archived, cancelled]
+            maxItems: 6
+        - name: priority
+          in: query
+          description: Filter by item priority (can specify multiple for OR logic)
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [low, medium, high, urgent]
+            maxItems: 4
+        - name: tags
+          in: query
+          description: Filter by tags (items must have all specified tags)
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            maxItems: 5
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [due_time, priority, created_at, updated_at]
+            default: created_at
+        - name: sort_dir
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: page_token
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Items retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListItemsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
     post:
       operationId: createItem
       summary: Create a new item in a list
@@ -204,73 +294,10 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /v1/tasks:
-    get:
-      operationId: listTasks
-      summary: Search tasks globally with filtering and sorting
-      tags: [Tasks]
-      parameters:
-        - name: parent
-          in: query
-          description: Optional parent list ID to filter by
-          schema:
-            type: string
-            format: uuid
-        - name: status
-          in: query
-          description: Filter by task status
-          schema:
-            type: string
-            enum: [todo, in_progress, blocked, done, archived, cancelled]
-        - name: priority
-          in: query
-          description: Filter by task priority
-          schema:
-            type: string
-            enum: [low, medium, high, urgent]
-        - name: sort_by
-          in: query
-          description: Field to sort by
-          schema:
-            type: string
-            enum: [due_time, priority, created_at, updated_at]
-            default: created_at
-        - name: sort_dir
-          in: query
-          description: Sort direction
-          schema:
-            type: string
-            enum: [asc, desc]
-            default: desc
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-        - name: page_token
-          in: query
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Tasks retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListTasksResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /v1/lists/{list_id}/recurring-templates:
     post:
       operationId: createRecurringTemplate
-      summary: Create a recurring task template
+      summary: Create a recurring item template
       tags: [RecurringTemplates]
       parameters:
         - name: list_id
@@ -334,13 +361,20 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /v1/recurring-templates/{id}:
+  /v1/lists/{list_id}/recurring-templates/{template_id}:
     get:
       operationId: getRecurringTemplate
       summary: Get a recurring template by ID
       tags: [RecurringTemplates]
       parameters:
-        - name: id
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
           in: path
           required: true
           description: Template ID
@@ -366,7 +400,14 @@ paths:
       summary: Update a recurring template
       tags: [RecurringTemplates]
       parameters:
-        - name: id
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
           in: path
           required: true
           description: Template ID
@@ -400,7 +441,14 @@ paths:
       summary: Delete a recurring template
       tags: [RecurringTemplates]
       parameters:
-        - name: id
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
           in: path
           required: true
           description: Template ID
@@ -470,7 +518,7 @@ components:
           items:
             type: string
         priority:
-          $ref: '#/components/schemas/TaskPriority'
+          $ref: '#/components/schemas/ItemPriority'
         estimated_duration:
           type: string
           description: ISO 8601 duration
@@ -510,7 +558,7 @@ components:
         item:
           $ref: '#/components/schemas/TodoItem'
 
-    ListTasksResponse:
+    ListItemsResponse:
       type: object
       properties:
         items:
@@ -535,7 +583,7 @@ components:
           items:
             type: string
         priority:
-          $ref: '#/components/schemas/TaskPriority'
+          $ref: '#/components/schemas/ItemPriority'
         estimated_duration:
           type: string
           description: ISO 8601 duration
@@ -557,19 +605,19 @@ components:
       type: object
       properties:
         template:
-          $ref: '#/components/schemas/RecurringTaskTemplate'
+          $ref: '#/components/schemas/RecurringItemTemplate'
 
     GetRecurringTemplateResponse:
       type: object
       properties:
         template:
-          $ref: '#/components/schemas/RecurringTaskTemplate'
+          $ref: '#/components/schemas/RecurringItemTemplate'
 
     UpdateRecurringTemplateRequest:
       type: object
       properties:
         template:
-          $ref: '#/components/schemas/RecurringTaskTemplate'
+          $ref: '#/components/schemas/RecurringItemTemplate'
         update_mask:
           type: array
           items:
@@ -580,7 +628,7 @@ components:
       type: object
       properties:
         template:
-          $ref: '#/components/schemas/RecurringTaskTemplate'
+          $ref: '#/components/schemas/RecurringItemTemplate'
 
     ListRecurringTemplatesResponse:
       type: object
@@ -588,7 +636,7 @@ components:
         templates:
           type: array
           items:
-            $ref: '#/components/schemas/RecurringTaskTemplate'
+            $ref: '#/components/schemas/RecurringItemTemplate'
 
     # Domain models
     TodoList:
@@ -599,10 +647,6 @@ components:
           format: uuid
         title:
           type: string
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/TodoItem'
         create_time:
           type: string
           format: date-time
@@ -622,9 +666,9 @@ components:
         title:
           type: string
         status:
-          $ref: '#/components/schemas/TaskStatus'
+          $ref: '#/components/schemas/ItemStatus'
         priority:
-          $ref: '#/components/schemas/TaskPriority'
+          $ref: '#/components/schemas/ItemPriority'
         create_time:
           type: string
           format: date-time
@@ -657,7 +701,7 @@ components:
           type: string
           description: Entity tag for optimistic concurrency control (RFC 7232). Quoted string format like "1", "2", etc.
 
-    RecurringTaskTemplate:
+    RecurringItemTemplate:
       type: object
       properties:
         id:
@@ -673,7 +717,7 @@ components:
           items:
             type: string
         priority:
-          $ref: '#/components/schemas/TaskPriority'
+          $ref: '#/components/schemas/ItemPriority'
         estimated_duration:
           type: string
           description: ISO 8601 duration
@@ -700,7 +744,7 @@ components:
           type: integer
 
     # Enums
-    TaskStatus:
+    ItemStatus:
       type: string
       enum:
         - todo
@@ -710,7 +754,7 @@ components:
         - archived
         - cancelled
 
-    TaskPriority:
+    ItemPriority:
       type: string
       enum:
         - low

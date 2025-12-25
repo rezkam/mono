@@ -81,13 +81,18 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	}
 
 	t.Run("priority_asc_returns_LOW_first", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("asc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 4)
 
@@ -109,13 +114,18 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	})
 
 	t.Run("priority_desc_returns_URGENT_first", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("desc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 4)
 
@@ -137,22 +147,32 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	})
 
 	t.Run("asc_and_desc_are_exact_reverses", func(t *testing.T) {
+		ascFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("asc"),
+		})
+		require.NoError(t, err)
+
 		ascResult, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+			ListID: &listID,
+			Filter: ascFilter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
+		require.NoError(t, err)
+
+		descFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("desc"),
 		})
 		require.NoError(t, err)
 
 		descResult, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
-		})
+			ListID: &listID,
+			Filter: descFilter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 
 		require.Len(t, ascResult.Items, 4)
@@ -227,13 +247,18 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("asc_LOW_before_HIGH_not_alphabetical", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("asc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 2)
 
@@ -246,13 +271,18 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 	})
 
 	t.Run("desc_HIGH_before_LOW_not_alphabetical", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("desc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 2)
 
@@ -338,13 +368,18 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("asc_nulls_last", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "asc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("asc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 3)
 
@@ -355,13 +390,18 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 	})
 
 	t.Run("desc_nulls_last", func(t *testing.T) {
-		result, err := store.FindItems(ctx, domain.ListTasksParams{
-			ListID:   &listID,
-			OrderBy:  "priority",
-			OrderDir: "desc",
-			Limit:    10,
-			Offset:   0,
+		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
+			OrderBy:  ptrString("priority"),
+			OrderDir: ptrString("desc"),
 		})
+		require.NoError(t, err)
+
+		result, err := store.FindItems(ctx, domain.ListTasksParams{
+			ListID: &listID,
+			Filter: filter,
+			Limit:  10,
+			Offset: 0,
+		}, nil)
 		require.NoError(t, err)
 		require.Len(t, result.Items, 3)
 

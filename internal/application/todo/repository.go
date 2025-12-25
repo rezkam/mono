@@ -45,7 +45,8 @@ type Repository interface {
 	UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error)
 
 	// FindItems searches for items with filtering, sorting, and pagination.
-	FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error)
+	// excludedStatuses is provided by service layer based on business rules.
+	FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error)
 
 	// === Recurring Template Operations ===
 

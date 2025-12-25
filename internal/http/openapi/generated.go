@@ -25,6 +25,24 @@ const (
 	BearerAuthScopes = "BearerAuth.Scopes"
 )
 
+// Defines values for ItemPriority.
+const (
+	ItemPriorityHigh   ItemPriority = "high"
+	ItemPriorityLow    ItemPriority = "low"
+	ItemPriorityMedium ItemPriority = "medium"
+	ItemPriorityUrgent ItemPriority = "urgent"
+)
+
+// Defines values for ItemStatus.
+const (
+	ItemStatusArchived   ItemStatus = "archived"
+	ItemStatusBlocked    ItemStatus = "blocked"
+	ItemStatusCancelled  ItemStatus = "cancelled"
+	ItemStatusDone       ItemStatus = "done"
+	ItemStatusInProgress ItemStatus = "in_progress"
+	ItemStatusTodo       ItemStatus = "todo"
+)
+
 // Defines values for RecurrencePattern.
 const (
 	Biweekly  RecurrencePattern = "biweekly"
@@ -34,24 +52,6 @@ const (
 	Weekdays  RecurrencePattern = "weekdays"
 	Weekly    RecurrencePattern = "weekly"
 	Yearly    RecurrencePattern = "yearly"
-)
-
-// Defines values for TaskPriority.
-const (
-	TaskPriorityHigh   TaskPriority = "high"
-	TaskPriorityLow    TaskPriority = "low"
-	TaskPriorityMedium TaskPriority = "medium"
-	TaskPriorityUrgent TaskPriority = "urgent"
-)
-
-// Defines values for TaskStatus.
-const (
-	TaskStatusArchived   TaskStatus = "archived"
-	TaskStatusBlocked    TaskStatus = "blocked"
-	TaskStatusCancelled  TaskStatus = "cancelled"
-	TaskStatusDone       TaskStatus = "done"
-	TaskStatusInProgress TaskStatus = "in_progress"
-	TaskStatusTodo       TaskStatus = "todo"
 )
 
 // Defines values for ListListsParamsSortBy.
@@ -66,36 +66,36 @@ const (
 	ListListsParamsSortDirDesc ListListsParamsSortDir = "desc"
 )
 
-// Defines values for ListTasksParamsStatus.
+// Defines values for ListItemsParamsStatus.
 const (
-	ListTasksParamsStatusArchived   ListTasksParamsStatus = "archived"
-	ListTasksParamsStatusBlocked    ListTasksParamsStatus = "blocked"
-	ListTasksParamsStatusCancelled  ListTasksParamsStatus = "cancelled"
-	ListTasksParamsStatusDone       ListTasksParamsStatus = "done"
-	ListTasksParamsStatusInProgress ListTasksParamsStatus = "in_progress"
-	ListTasksParamsStatusTodo       ListTasksParamsStatus = "todo"
+	ListItemsParamsStatusArchived   ListItemsParamsStatus = "archived"
+	ListItemsParamsStatusBlocked    ListItemsParamsStatus = "blocked"
+	ListItemsParamsStatusCancelled  ListItemsParamsStatus = "cancelled"
+	ListItemsParamsStatusDone       ListItemsParamsStatus = "done"
+	ListItemsParamsStatusInProgress ListItemsParamsStatus = "in_progress"
+	ListItemsParamsStatusTodo       ListItemsParamsStatus = "todo"
 )
 
-// Defines values for ListTasksParamsPriority.
+// Defines values for ListItemsParamsPriority.
 const (
-	ListTasksParamsPriorityHigh   ListTasksParamsPriority = "high"
-	ListTasksParamsPriorityLow    ListTasksParamsPriority = "low"
-	ListTasksParamsPriorityMedium ListTasksParamsPriority = "medium"
-	ListTasksParamsPriorityUrgent ListTasksParamsPriority = "urgent"
+	ListItemsParamsPriorityHigh   ListItemsParamsPriority = "high"
+	ListItemsParamsPriorityLow    ListItemsParamsPriority = "low"
+	ListItemsParamsPriorityMedium ListItemsParamsPriority = "medium"
+	ListItemsParamsPriorityUrgent ListItemsParamsPriority = "urgent"
 )
 
-// Defines values for ListTasksParamsSortBy.
+// Defines values for ListItemsParamsSortBy.
 const (
-	CreatedAt ListTasksParamsSortBy = "created_at"
-	DueTime   ListTasksParamsSortBy = "due_time"
-	Priority  ListTasksParamsSortBy = "priority"
-	UpdatedAt ListTasksParamsSortBy = "updated_at"
+	CreatedAt ListItemsParamsSortBy = "created_at"
+	DueTime   ListItemsParamsSortBy = "due_time"
+	Priority  ListItemsParamsSortBy = "priority"
+	UpdatedAt ListItemsParamsSortBy = "updated_at"
 )
 
-// Defines values for ListTasksParamsSortDir.
+// Defines values for ListItemsParamsSortDir.
 const (
-	ListTasksParamsSortDirAsc  ListTasksParamsSortDir = "asc"
-	ListTasksParamsSortDirDesc ListTasksParamsSortDir = "desc"
+	ListItemsParamsSortDirAsc  ListItemsParamsSortDir = "asc"
+	ListItemsParamsSortDirDesc ListItemsParamsSortDir = "desc"
 )
 
 // CreateItemRequest defines model for CreateItemRequest.
@@ -105,7 +105,7 @@ type CreateItemRequest struct {
 	// EstimatedDuration ISO 8601 duration
 	EstimatedDuration   *string             `json:"estimated_duration,omitempty"`
 	InstanceDate        *time.Time          `json:"instance_date,omitempty"`
-	Priority            *TaskPriority       `json:"priority,omitempty"`
+	Priority            *ItemPriority       `json:"priority,omitempty"`
 	RecurringTemplateId *openapi_types.UUID `json:"recurring_template_id,omitempty"`
 	Tags                *[]string           `json:"tags,omitempty"`
 
@@ -137,7 +137,7 @@ type CreateRecurringTemplateRequest struct {
 	// EstimatedDuration ISO 8601 duration
 	EstimatedDuration    *string       `json:"estimated_duration,omitempty"`
 	GenerationWindowDays *int          `json:"generation_window_days,omitempty"`
-	Priority             *TaskPriority `json:"priority,omitempty"`
+	Priority             *ItemPriority `json:"priority,omitempty"`
 
 	// RecurrenceConfig JSON config for pattern-specific settings
 	RecurrenceConfig  *string           `json:"recurrence_config,omitempty"`
@@ -148,7 +148,7 @@ type CreateRecurringTemplateRequest struct {
 
 // CreateRecurringTemplateResponse defines model for CreateRecurringTemplateResponse.
 type CreateRecurringTemplateResponse struct {
-	Template *RecurringTaskTemplate `json:"template,omitempty"`
+	Template *RecurringItemTemplate `json:"template,omitempty"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -170,7 +170,19 @@ type GetListResponse struct {
 
 // GetRecurringTemplateResponse defines model for GetRecurringTemplateResponse.
 type GetRecurringTemplateResponse struct {
-	Template *RecurringTaskTemplate `json:"template,omitempty"`
+	Template *RecurringItemTemplate `json:"template,omitempty"`
+}
+
+// ItemPriority defines model for ItemPriority.
+type ItemPriority string
+
+// ItemStatus defines model for ItemStatus.
+type ItemStatus string
+
+// ListItemsResponse defines model for ListItemsResponse.
+type ListItemsResponse struct {
+	Items         *[]TodoItem `json:"items,omitempty"`
+	NextPageToken *string     `json:"next_page_token,omitempty"`
 }
 
 // ListListsResponse defines model for ListListsResponse.
@@ -181,20 +193,14 @@ type ListListsResponse struct {
 
 // ListRecurringTemplatesResponse defines model for ListRecurringTemplatesResponse.
 type ListRecurringTemplatesResponse struct {
-	Templates *[]RecurringTaskTemplate `json:"templates,omitempty"`
-}
-
-// ListTasksResponse defines model for ListTasksResponse.
-type ListTasksResponse struct {
-	Items         *[]TodoItem `json:"items,omitempty"`
-	NextPageToken *string     `json:"next_page_token,omitempty"`
+	Templates *[]RecurringItemTemplate `json:"templates,omitempty"`
 }
 
 // RecurrencePattern defines model for RecurrencePattern.
 type RecurrencePattern string
 
-// RecurringTaskTemplate defines model for RecurringTaskTemplate.
-type RecurringTaskTemplate struct {
+// RecurringItemTemplate defines model for RecurringItemTemplate.
+type RecurringItemTemplate struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 
 	// DueOffset ISO 8601 duration
@@ -207,7 +213,7 @@ type RecurringTaskTemplate struct {
 	IsActive             *bool               `json:"is_active,omitempty"`
 	LastGeneratedUntil   *time.Time          `json:"last_generated_until,omitempty"`
 	ListId               *openapi_types.UUID `json:"list_id,omitempty"`
-	Priority             *TaskPriority       `json:"priority,omitempty"`
+	Priority             *ItemPriority       `json:"priority,omitempty"`
 
 	// RecurrenceConfig JSON configuration
 	RecurrenceConfig  *string            `json:"recurrence_config,omitempty"`
@@ -216,12 +222,6 @@ type RecurringTaskTemplate struct {
 	Title             *string            `json:"title,omitempty"`
 	UpdatedAt         *time.Time         `json:"updated_at,omitempty"`
 }
-
-// TaskPriority defines model for TaskPriority.
-type TaskPriority string
-
-// TaskStatus defines model for TaskStatus.
-type TaskStatus string
 
 // TodoItem defines model for TodoItem.
 type TodoItem struct {
@@ -237,9 +237,9 @@ type TodoItem struct {
 	Etag                *string             `json:"etag,omitempty"`
 	Id                  *openapi_types.UUID `json:"id,omitempty"`
 	InstanceDate        *time.Time          `json:"instance_date,omitempty"`
-	Priority            *TaskPriority       `json:"priority,omitempty"`
+	Priority            *ItemPriority       `json:"priority,omitempty"`
 	RecurringTemplateId *openapi_types.UUID `json:"recurring_template_id,omitempty"`
-	Status              *TaskStatus         `json:"status,omitempty"`
+	Status              *ItemStatus         `json:"status,omitempty"`
 	Tags                *[]string           `json:"tags,omitempty"`
 
 	// Timezone IANA timezone
@@ -252,7 +252,6 @@ type TodoItem struct {
 type TodoList struct {
 	CreateTime *time.Time          `json:"create_time,omitempty"`
 	Id         *openapi_types.UUID `json:"id,omitempty"`
-	Items      *[]TodoItem         `json:"items,omitempty"`
 	Title      *string             `json:"title,omitempty"`
 
 	// TotalItems Total items in this list
@@ -277,7 +276,7 @@ type UpdateItemResponse struct {
 
 // UpdateRecurringTemplateRequest defines model for UpdateRecurringTemplateRequest.
 type UpdateRecurringTemplateRequest struct {
-	Template *RecurringTaskTemplate `json:"template,omitempty"`
+	Template *RecurringItemTemplate `json:"template,omitempty"`
 
 	// UpdateMask Fields to update (field mask)
 	UpdateMask *[]string `json:"update_mask,omitempty"`
@@ -285,7 +284,7 @@ type UpdateRecurringTemplateRequest struct {
 
 // UpdateRecurringTemplateResponse defines model for UpdateRecurringTemplateResponse.
 type UpdateRecurringTemplateResponse struct {
-	Template *RecurringTaskTemplate `json:"template,omitempty"`
+	Template *RecurringItemTemplate `json:"template,omitempty"`
 }
 
 // BadRequest defines model for BadRequest.
@@ -330,43 +329,45 @@ type ListListsParamsSortBy string
 // ListListsParamsSortDir defines parameters for ListLists.
 type ListListsParamsSortDir string
 
+// ListItemsParams defines parameters for ListItems.
+type ListItemsParams struct {
+	// Status Filter by item status (can specify multiple).
+	// If not specified, archived and cancelled items are excluded by default.
+	// Use status=archived to explicitly include archived items.
+	Status *[]ListItemsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Priority Filter by item priority (can specify multiple for OR logic)
+	Priority *[]ListItemsParamsPriority `form:"priority,omitempty" json:"priority,omitempty"`
+
+	// Tags Filter by tags (items must have all specified tags)
+	Tags *[]string `form:"tags,omitempty" json:"tags,omitempty"`
+
+	// SortBy Field to sort by
+	SortBy *ListItemsParamsSortBy `form:"sort_by,omitempty" json:"sort_by,omitempty"`
+
+	// SortDir Sort direction
+	SortDir   *ListItemsParamsSortDir `form:"sort_dir,omitempty" json:"sort_dir,omitempty"`
+	PageSize  *int                    `form:"page_size,omitempty" json:"page_size,omitempty"`
+	PageToken *string                 `form:"page_token,omitempty" json:"page_token,omitempty"`
+}
+
+// ListItemsParamsStatus defines parameters for ListItems.
+type ListItemsParamsStatus string
+
+// ListItemsParamsPriority defines parameters for ListItems.
+type ListItemsParamsPriority string
+
+// ListItemsParamsSortBy defines parameters for ListItems.
+type ListItemsParamsSortBy string
+
+// ListItemsParamsSortDir defines parameters for ListItems.
+type ListItemsParamsSortDir string
+
 // ListRecurringTemplatesParams defines parameters for ListRecurringTemplates.
 type ListRecurringTemplatesParams struct {
 	// ActiveOnly Filter for active templates only
 	ActiveOnly *bool `form:"active_only,omitempty" json:"active_only,omitempty"`
 }
-
-// ListTasksParams defines parameters for ListTasks.
-type ListTasksParams struct {
-	// Parent Optional parent list ID to filter by
-	Parent *openapi_types.UUID `form:"parent,omitempty" json:"parent,omitempty"`
-
-	// Status Filter by task status
-	Status *ListTasksParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-
-	// Priority Filter by task priority
-	Priority *ListTasksParamsPriority `form:"priority,omitempty" json:"priority,omitempty"`
-
-	// SortBy Field to sort by
-	SortBy *ListTasksParamsSortBy `form:"sort_by,omitempty" json:"sort_by,omitempty"`
-
-	// SortDir Sort direction
-	SortDir   *ListTasksParamsSortDir `form:"sort_dir,omitempty" json:"sort_dir,omitempty"`
-	PageSize  *int                    `form:"page_size,omitempty" json:"page_size,omitempty"`
-	PageToken *string                 `form:"page_token,omitempty" json:"page_token,omitempty"`
-}
-
-// ListTasksParamsStatus defines parameters for ListTasks.
-type ListTasksParamsStatus string
-
-// ListTasksParamsPriority defines parameters for ListTasks.
-type ListTasksParamsPriority string
-
-// ListTasksParamsSortBy defines parameters for ListTasks.
-type ListTasksParamsSortBy string
-
-// ListTasksParamsSortDir defines parameters for ListTasks.
-type ListTasksParamsSortDir string
 
 // CreateListJSONRequestBody defines body for CreateList for application/json ContentType.
 type CreateListJSONRequestBody = CreateListRequest
@@ -394,6 +395,9 @@ type ServerInterface interface {
 	// Get a todo list by ID
 	// (GET /v1/lists/{id})
 	GetList(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List items in a list with filtering and sorting
+	// (GET /v1/lists/{list_id}/items)
+	ListItems(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, params ListItemsParams)
 	// Create a new item in a list
 	// (POST /v1/lists/{list_id}/items)
 	CreateItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID)
@@ -403,21 +407,18 @@ type ServerInterface interface {
 	// List recurring templates for a list
 	// (GET /v1/lists/{list_id}/recurring-templates)
 	ListRecurringTemplates(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, params ListRecurringTemplatesParams)
-	// Create a recurring task template
+	// Create a recurring item template
 	// (POST /v1/lists/{list_id}/recurring-templates)
 	CreateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID)
 	// Delete a recurring template
-	// (DELETE /v1/recurring-templates/{id})
-	DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// (DELETE /v1/lists/{list_id}/recurring-templates/{template_id})
+	DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID)
 	// Get a recurring template by ID
-	// (GET /v1/recurring-templates/{id})
-	GetRecurringTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// (GET /v1/lists/{list_id}/recurring-templates/{template_id})
+	GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID)
 	// Update a recurring template
-	// (PATCH /v1/recurring-templates/{id})
-	UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Search tasks globally with filtering and sorting
-	// (GET /v1/tasks)
-	ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams)
+	// (PATCH /v1/lists/{list_id}/recurring-templates/{template_id})
+	UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -442,6 +443,12 @@ func (_ Unimplemented) GetList(w http.ResponseWriter, r *http.Request, id openap
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// List items in a list with filtering and sorting
+// (GET /v1/lists/{list_id}/items)
+func (_ Unimplemented) ListItems(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, params ListItemsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Create a new item in a list
 // (POST /v1/lists/{list_id}/items)
 func (_ Unimplemented) CreateItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID) {
@@ -460,33 +467,27 @@ func (_ Unimplemented) ListRecurringTemplates(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Create a recurring task template
+// Create a recurring item template
 // (POST /v1/lists/{list_id}/recurring-templates)
 func (_ Unimplemented) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // Delete a recurring template
-// (DELETE /v1/recurring-templates/{id})
-func (_ Unimplemented) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// (DELETE /v1/lists/{list_id}/recurring-templates/{template_id})
+func (_ Unimplemented) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // Get a recurring template by ID
-// (GET /v1/recurring-templates/{id})
-func (_ Unimplemented) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+// (GET /v1/lists/{list_id}/recurring-templates/{template_id})
+func (_ Unimplemented) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // Update a recurring template
-// (PATCH /v1/recurring-templates/{id})
-func (_ Unimplemented) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Search tasks globally with filtering and sorting
-// (GET /v1/tasks)
-func (_ Unimplemented) ListTasks(w http.ResponseWriter, r *http.Request, params ListTasksParams) {
+// (PATCH /v1/lists/{list_id}/recurring-templates/{template_id})
+func (_ Unimplemented) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -622,6 +623,96 @@ func (siw *ServerInterfaceWrapper) GetList(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetList(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListItems operation middleware
+func (siw *ServerInterfaceWrapper) ListItems(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "list_id" -------------
+	var listId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListItemsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "priority" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "priority", r.URL.Query(), &params.Priority)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "priority", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "tags" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "tags", r.URL.Query(), &params.Tags)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tags", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort_by" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort_by", r.URL.Query(), &params.SortBy)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_by", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort_dir" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort_dir", r.URL.Query(), &params.SortDir)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_dir", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page_token" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page_token", r.URL.Query(), &params.PageToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListItems(w, r, listId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -780,12 +871,21 @@ func (siw *ServerInterfaceWrapper) DeleteRecurringTemplate(w http.ResponseWriter
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "list_id" -------------
+	var listId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "template_id" -------------
+	var templateId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "template_id", chi.URLParam(r, "template_id"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "template_id", Err: err})
 		return
 	}
 
@@ -796,7 +896,7 @@ func (siw *ServerInterfaceWrapper) DeleteRecurringTemplate(w http.ResponseWriter
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteRecurringTemplate(w, r, id)
+		siw.Handler.DeleteRecurringTemplate(w, r, listId, templateId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -811,12 +911,21 @@ func (siw *ServerInterfaceWrapper) GetRecurringTemplate(w http.ResponseWriter, r
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "list_id" -------------
+	var listId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "template_id" -------------
+	var templateId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "template_id", chi.URLParam(r, "template_id"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "template_id", Err: err})
 		return
 	}
 
@@ -827,7 +936,7 @@ func (siw *ServerInterfaceWrapper) GetRecurringTemplate(w http.ResponseWriter, r
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetRecurringTemplate(w, r, id)
+		siw.Handler.GetRecurringTemplate(w, r, listId, templateId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -842,12 +951,21 @@ func (siw *ServerInterfaceWrapper) UpdateRecurringTemplate(w http.ResponseWriter
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "list_id" -------------
+	var listId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "template_id" -------------
+	var templateId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "template_id", chi.URLParam(r, "template_id"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "template_id", Err: err})
 		return
 	}
 
@@ -858,88 +976,7 @@ func (siw *ServerInterfaceWrapper) UpdateRecurringTemplate(w http.ResponseWriter
 	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateRecurringTemplate(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListTasks operation middleware
-func (siw *ServerInterfaceWrapper) ListTasks(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListTasksParams
-
-	// ------------- Optional query parameter "parent" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "parent", r.URL.Query(), &params.Parent)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "parent", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "priority" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "priority", r.URL.Query(), &params.Priority)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "priority", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "sort_by" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "sort_by", r.URL.Query(), &params.SortBy)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_by", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "sort_dir" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "sort_dir", r.URL.Query(), &params.SortDir)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort_dir", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "page_size" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "page_token" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "page_token", r.URL.Query(), &params.PageToken)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_token", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListTasks(w, r, params)
+		siw.Handler.UpdateRecurringTemplate(w, r, listId, templateId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1072,6 +1109,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/v1/lists/{id}", wrapper.GetList)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/lists/{list_id}/items", wrapper.ListItems)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/v1/lists/{list_id}/items", wrapper.CreateItem)
 	})
 	r.Group(func(r chi.Router) {
@@ -1084,16 +1124,13 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/v1/lists/{list_id}/recurring-templates", wrapper.CreateRecurringTemplate)
 	})
 	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/v1/recurring-templates/{id}", wrapper.DeleteRecurringTemplate)
+		r.Delete(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}", wrapper.DeleteRecurringTemplate)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/v1/recurring-templates/{id}", wrapper.GetRecurringTemplate)
+		r.Get(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}", wrapper.GetRecurringTemplate)
 	})
 	r.Group(func(r chi.Router) {
-		r.Patch(options.BaseURL+"/v1/recurring-templates/{id}", wrapper.UpdateRecurringTemplate)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/v1/tasks", wrapper.ListTasks)
+		r.Patch(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}", wrapper.UpdateRecurringTemplate)
 	})
 
 	return r
@@ -1102,47 +1139,49 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"9jwAAA==",
+	"H4sIAAAAAAAC/+xbX2/bOBL/KgTvgG0B1XaSdq8wcA/pbtvLodv2kvTh0AQGI41tbihSJUdJ3MDf/UBS",
+	"liWLspU/TprrPhSRJZIzHP7mP3tNY5VmSoJEQ4fXVIPJlDTgfrxhySF8y8Gg/RUriSDdI8sywWOGXMn+",
+	"n0ZJ+87EU0iZffq7hjEd0r/1l0v3/VfTf6u10ocFETqfzyOagIk1z+xidEgP5AUTPCG6IDyP6IFE0JIJ",
+	"N/chOfFkiQF9AZqAIz+P6EeF71Quk4dj5RCMynUMRCokY0d7HtEvkuU4VZp/hwfkpUqVvCC8OC+lScqN",
+	"4XJC9j8fkHOYUTu3WNZS/U0DQzhASCugyrTKQCP3gEtyGCFPwT6PlU4Z0iFNGMIL9zaiOMuADqlBzeXE",
+	"ygAM8pQhJKMk18yzeL16kEefyOtfBzukHBJRuGJpJuxan493/7U3+CO0OJcGmYxhZFnozlOmudIcZ5tE",
+	"bUXxeTF2HlENca7tIiOENBMMYcSTGtk850mIIrKJkx9HSN1Dc4R/wbRmjpbl/buSEJDW/sd9svhMnkFv",
+	"0ovIL29ze1D9I1Tx+VSJ9JfnNSHup6B5zPof4XL0X6XPg0xyFI5eyq4+gJzglA53X72KaMrl4vdOY56T",
+	"y7eca4vxr8Uip+UwdfYnxM5KVOFVoLeBLyufTadyrBJlV3GkW6h84AZbQVzucymeo6nKMqsadiKNtioB",
+	"z1ubBAT3LG+SgGN0jQQOF1g9LqC6VqfVeGwAO2gm8SPJWKuULNSPOPW7R+VvLDQBCf7r6JLLRF2OEjbz",
+	"3MOY5QLpcG/gjo2neUqHe7/6Q/O/lkfGJcIE9N2NAFirEys55pPmlv599Okj8R/JWGmSMbSe6oXJIOZj",
+	"HhMDiFxOTGirlfWLeZs4PCxnfC4m3NLi3Jv6B3dxehOstqnHwvB2kwmXE3t8i2XD+lJ3qA2KsAhq6q9j",
+	"lUBQrAkg46Iu+/rUMQeRBOdyY/LQqiG2V48vBWPYpNvs0HrvAbdtmd4DPu5R13TZnq205uErFerSGn1I",
+	"eJ7SiE75ZEojmuuJjdZOA0pqFzpChrmpLoMqUdRGJaNMq4kGYxX8TKj4HGxUkFh3HlGm4ym/cG9iaz2F",
+	"gCRIxArSEjLr/WX9oZvnbMJHwhWOMjaBEapzkB1BaFm0/8x62NyMRQ+g+2SxgTqzGXbdeW4B4OoGQsw1",
+	"TXcFTgnjYkYjeglw7h7OePmYKolT9zQDpt3Dt5xpBF1OcR4yhKswv00L52xzMmLYPbK+USzxSBFDMxTo",
+	"GMRzM2Ix8ouqjT1TSgBzHlcwg6OCLCSjXCIX3SVn1aRrNvEwocsa4T5+jNIYmWfJDdEa0sfSQja0gcWY",
+	"M3FXVHqdumEK/XBJd3MhZAGQvJXIcUaQ+fBWZchTbpDHFjnFOc/sM2olyLPDd7+Rf+zu7T7vkf/kCiEh",
+	"ngDxmyGCnwM5oTsnNCIndNf+AYx7QRXsqKlPpS5gyhhiE70i2thmLWFtTWCLCveBh9LSW6lK13JM665Q",
+	"IROjUrR1aR3bj8R9JFwSnHJDhC8YNJ1KLm2817aUi+tctXAGSJKa9MtFQgL74sS+tkh3syLK4iRHKTPn",
+	"TUbf2WTFEFTEDyPPXPpC7OhaiWmZ+xWgrujTadQZrZv2vL3KkafSvW5yx/zkjnK/uzwfMxWzps+O5Tg7",
+	"snOLdgYwDXo/x2lTHkXNmmTMGEgIM8SPJi4XsOq4X1S9fZ1qCiwBTYsCtwvV3Pilmk0RM18/53KsmhQP",
+	"3x4dj3PhquXWzdnszqk7YTJxVoCkTLIJpCCRXHKcktIRkGUWUVob+oeSyq5GI3oB2ngqO71Bb2APRWUg",
+	"WcbpkO71Br09qz4Mp04u/YudfplGTXxsbY/H7fQgocNlHuamaZYCgjZ0+HV1Ux/z9Aw0UWO3E0My0MSm",
+	"VC5tpUP6LQdtEwjJnMxctmX4d1gIktVqbrvVmtvOYLC+5jaPVrn5zCZQHKArKGYaLrjKDVl0udax5ZPA",
+	"Kl8Nf9NUKoGgydmMuDMhJj8rQpFnMTPwgksD0nAb4z9vIe0m2vAZGZfmVuS95Iv0irCxfed8SeHVQmTL",
+	"ZMyOrlHt5nk7sXIGY6WhMy9++L0wYy0bKmKURnI2a6Frv47c1wAUa/FCVObQ9berpfl2lo4sJwnXEBeh",
+	"cStDCdctHNkVK6ww98u9DHBwGtVbu7uDwb21DJtVmkDb0A0gGlBzuLAxeh7HYMw4F8IFkS89QyE6JeP9",
+	"SkPaTdnZPKXWJJ1H9FUXOvWOs3MneZoyPSs2QpgQS4NtvHXO2ITLMtVxUfRXv216aqN/ZQKWddmzob7S",
+	"DQbfqGR2b4fTbFjN60V11DnMG+jY2QoD6+FRGooniw2/V8KIhMslPgJwmEdLr9u/5sm84npXW/+Ya+kT",
+	"AZICsoQh65EvBsj7t8ekskpR4pn3fQaBiowB42mRUDiIjp1Z5nJis986EIv6/CYH787p4PeFxbIxxNJg",
+	"uWyojqyg9Q7nTVu1UavthzYIlpcrbgWgl4OXmyeV10fuA3HvAQmrxI5nM3866wFXh8pG7JUpKXNEeuTN",
+	"jBR+KCKLfoMLW8uOQzGHaSBwFYs8gaSJubIDcSfULUqbd4HemlDOReI+57RhnCS+zTojaS6QZwKe907k",
+	"wdgl20UHFpIbiMXSKITZO5FWrz2xf5YroCJwZYHPUcwIl27ekoBbsnfib7VkwjUO/f6DQcUie14KpwTB",
+	"lhpNKbvypzz8tVk8Mjhz2Ys9IbrxHBYpf/gkXB716ZAINeHx827yKIsIayVy4w7ecs8v77Bnq8XkmcdM",
+	"mhskU3YBLvgokebGdNyrMwrBfa7h/9Ut+L+3eNvV/5YxblmqjqrnVhtaqRv+kIF4dP0wmfAd8tpt5wr1",
+	"pnPo5qUD/OPnCg/vzp2jW3G3K6GbcygWkfawlo7ea+umRMOVJx/b2Z5uM9Oplq4fJdOp1ZFbwP3omc7D",
+	"I7uWGjlfXgI8gOJ14Wr/2v4ZFUlTxjCeNuG+rOn/eLGlQ0BrDuX39iMqWLM31EnBBlthYIOCFWHAT6Rg",
+	"XjiESQJX3Fjv4NSsu3KV3YUXtTtKrQ2B5q2nHzaNs3mBv1uz7JwQJUVbaOrHjooRgXhszISBqHFLZ+uh",
+	"05qbZgFNKAetjaWeTmAU6H/5o111IwFoboqMGlP+v8Ok1j70o8RM7b3iNaj+mYOopSa4UAqXmF2rAt0t",
+	"f/+6ctdo7m2fAN+ir6vP7+79j6c+DV9Q4qaNavV21f3WsV8GLvssuPFyfbKG2R9/DZJd0RiFY4vQNf6/",
+	"0LStrsjtTO/TbJM0Idrol7RFDuuyzL/Q+kCp592ClsH2uemgOT9vYnoLD1G9yOf0qHqF7+upRZv/z/lB",
+	"LVMxEySBCxAqS+2hRzTXoriaN+z3hR0wVQaHrwevd/os43R+Ov9fAAAA//8SDn57EkEAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

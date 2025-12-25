@@ -101,10 +101,11 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 }
 
 // GetRecurringTemplate implements ServerInterface.GetRecurringTemplate.
-// GET /v1/recurring-templates/{id}
-func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, id types.UUID) {
+// GET /v1/lists/{list_id}/recurring-templates/{template_id}
+func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Call service layer
-	template, err := s.todoService.GetRecurringTemplate(r.Context(), id.String())
+	// Note: listID is available for validation if needed in the future
+	template, err := s.todoService.GetRecurringTemplate(r.Context(), templateID.String())
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -120,8 +121,8 @@ func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, id
 }
 
 // UpdateRecurringTemplate implements ServerInterface.UpdateRecurringTemplate.
-// PATCH /v1/recurring-templates/{id}
-func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, id types.UUID) {
+// PATCH /v1/lists/{list_id}/recurring-templates/{template_id}
+func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Parse request body
 	var req openapi.UpdateRecurringTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -135,8 +136,9 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Build UpdateRecurringTemplateParams
+	// Note: listID is available for validation if needed in the future
 	params := domain.UpdateRecurringTemplateParams{
-		TemplateID: id.String(),
+		TemplateID: templateID.String(),
 	}
 
 	// Determine update mask
@@ -250,10 +252,11 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 }
 
 // DeleteRecurringTemplate implements ServerInterface.DeleteRecurringTemplate.
-// DELETE /v1/recurring-templates/{id}
-func (s *Server) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, id types.UUID) {
+// DELETE /v1/lists/{list_id}/recurring-templates/{template_id}
+func (s *Server) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Call service layer
-	if err := s.todoService.DeleteRecurringTemplate(r.Context(), id.String()); err != nil {
+	// Note: listID is available for validation if needed in the future
+	if err := s.todoService.DeleteRecurringTemplate(r.Context(), templateID.String()); err != nil {
 		response.FromDomainError(w, r, err)
 		return
 	}
@@ -279,7 +282,7 @@ func (s *Server) ListRecurringTemplates(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Map domain models to DTOs
-	templateDTOs := make([]openapi.RecurringTaskTemplate, len(templates))
+	templateDTOs := make([]openapi.RecurringItemTemplate, len(templates))
 	for i, template := range templates {
 		templateDTOs[i] = MapTemplateToDTO(template)
 	}

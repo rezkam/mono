@@ -3,24 +3,25 @@ package domain
 import "time"
 
 // ListTasksParams contains parameters for listing tasks with filtering, sorting, and pagination.
+// Uses ItemsFilter value object for validated filtering and sorting.
 //
 // Common use cases:
-//   - "My overdue tasks": DueBefore=now(), OrderBy="due_time"
+//   - "My overdue tasks": DueBefore=now(), Filter with OrderBy="due_time"
 //   - "Tasks in list X": ListID=X, default ordering
-//   - "High priority TODO items": Priority=HIGH, Status=TODO
+//   - "High priority TODO items": Filter with Priorities=[high], Statuses=[todo]
+//   - "Active work": Filter with Statuses=[todo, in_progress]
 //   - Paginated search: Limit=50, Offset=100 for page 3
 type ListTasksParams struct {
-	// Optional filters (nil = no filter applied)
-	ListID    *string       // Filter by specific list (nil = search all lists)
-	Status    *TaskStatus   // Filter by status
-	Priority  *TaskPriority // Filter by priority
-	Tag       *string       // Filter by tag (JSONB array contains)
-	DueBefore *time.Time    // Filter tasks due before this time
-	DueAfter  *time.Time    // Filter tasks due after this time
+	// Filter by specific list (nil = search all lists)
+	ListID *string
 
-	// Sorting (empty uses defaults: created_at field, desc direction)
-	OrderBy  string // Supported: "due_time", "priority", "created_at", "updated_at"
-	OrderDir string // Sort direction: "asc" or "desc" (empty = field's default)
+	// Validated filter (statuses, priorities, tags, orderBy, orderDir)
+	// Created via NewItemsFilter which validates all fields at construction.
+	Filter ItemsFilter
+
+	// Date filters (nil = no filter applied)
+	DueBefore *time.Time // Filter tasks due before this time
+	DueAfter  *time.Time // Filter tasks due after this time
 
 	// Pagination (both required for correct pagination)
 	Limit  int // Maximum number of items to return (page size)

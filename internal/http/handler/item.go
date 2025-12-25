@@ -199,45 +199,38 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	})
 }
 
-// ListTasks implements ServerInterface.ListTasks.
-// GET /v1/tasks
-func (s *Server) ListTasks(w http.ResponseWriter, r *http.Request, params openapi.ListTasksParams) {
-	// Build domain params from query params
+// ListItems implements ServerInterface.ListItems.
+// GET /v1/lists/{list_id}/items
+func (s *Server) ListItems(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListItemsParams) {
 	offset := parsePageToken(params.PageToken)
+	listIDStr := listID.String()
 
+	// Map OpenAPI params to domain filter input - just pass through values
+	filterInput := domain.ItemsFilterInput{
+		Statuses:   mapStatusesToStrings(params.Status),
+		Priorities: mapPrioritiesToStrings(params.Priority),
+		Tags:       derefStringSlice(params.Tags),
+		OrderBy:    mapSortByToString(params.SortBy),
+		OrderDir:   mapSortDirToString(params.SortDir),
+	}
+
+	// Create validated filter - domain layer validates all fields
+	filter, err := domain.NewItemsFilter(filterInput)
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
+
+	// Build domain params with validated filter
 	domainParams := domain.ListTasksParams{
 		Limit:  getPageSize(params.PageSize),
 		Offset: offset,
-	}
-
-	// Set parent list if specified
-	if params.Parent != nil {
-		parentStr := params.Parent.String()
-		domainParams.ListID = &parentStr
-	}
-
-	// Set status filter if specified
-	if params.Status != nil {
-		status := domain.TaskStatus(*params.Status)
-		domainParams.Status = &status
-	}
-
-	// Set priority filter if specified
-	if params.Priority != nil {
-		priority := domain.TaskPriority(*params.Priority)
-		domainParams.Priority = &priority
-	}
-
-	// Set sorting if specified
-	if params.SortBy != nil {
-		domainParams.OrderBy = string(*params.SortBy)
-	}
-	if params.SortDir != nil {
-		domainParams.OrderDir = string(*params.SortDir)
+		ListID: &listIDStr,
+		Filter: filter,
 	}
 
 	// Call service layer
-	result, err := s.todoService.ListTasks(r.Context(), domainParams)
+	result, err := s.todoService.ListItems(r.Context(), domainParams)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -253,10 +246,52 @@ func (s *Server) ListTasks(w http.ResponseWriter, r *http.Request, params openap
 	nextToken := generatePageToken(offset+len(result.Items), result.HasMore)
 
 	// Return success response
-	response.OK(w, openapi.ListTasksResponse{
+	response.OK(w, openapi.ListItemsResponse{
 		Items:         &itemDTOs,
 		NextPageToken: nextToken,
 	})
+}
+
+// mapStatusesToStrings converts OpenAPI status slice to string slice
+func mapStatusesToStrings(statuses *[]openapi.ListItemsParamsStatus) []string {
+	if statuses == nil {
+		return nil
+	}
+	result := make([]string, len(*statuses))
+	for i, s := range *statuses {
+		result[i] = string(s)
+	}
+	return result
+}
+
+// mapPrioritiesToStrings converts OpenAPI priority slice to string slice
+func mapPrioritiesToStrings(priorities *[]openapi.ListItemsParamsPriority) []string {
+	if priorities == nil {
+		return nil
+	}
+	result := make([]string, len(*priorities))
+	for i, p := range *priorities {
+		result[i] = string(p)
+	}
+	return result
+}
+
+// mapSortByToString converts OpenAPI sort_by to string pointer
+func mapSortByToString(sortBy *openapi.ListItemsParamsSortBy) *string {
+	if sortBy == nil {
+		return nil
+	}
+	s := string(*sortBy)
+	return &s
+}
+
+// mapSortDirToString converts OpenAPI sort_dir to string pointer
+func mapSortDirToString(sortDir *openapi.ListItemsParamsSortDir) *string {
+	if sortDir == nil {
+		return nil
+	}
+	s := string(*sortDir)
+	return &s
 }
 
 // Helper to dereference []string pointer

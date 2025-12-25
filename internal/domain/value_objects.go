@@ -82,3 +82,139 @@ func ValidateGenerationWindowDays(days int) error {
 	}
 	return nil
 }
+
+// Filter limits - business rules to prevent abuse.
+const (
+	MaxStatusFilter   = 6 // All possible statuses
+	MaxPriorityFilter = 4 // All possible priorities
+	MaxTagsFilter     = 5
+)
+
+// Default sorting values - business rules for item listing.
+const (
+	DefaultOrderBy  = "created_at"
+	DefaultOrderDir = "desc"
+)
+
+// Valid order by fields.
+var validOrderByFields = map[string]bool{
+	"due_time":   true,
+	"priority":   true,
+	"created_at": true,
+	"updated_at": true,
+}
+
+// ItemsFilter is a validated filter for listing items.
+// Value object - all fields validated at construction time.
+// All filter fields are slices (OR logic within field, AND logic across fields).
+// Defaults are applied for orderBy/orderDir if not provided.
+type ItemsFilter struct {
+	statuses   []TaskStatus
+	priorities []TaskPriority
+	tags       []string
+	orderBy    string
+	orderDir   string
+}
+
+// ItemsFilterInput holds raw input for creating an ItemsFilter.
+// All fields are raw strings that will be validated during construction.
+type ItemsFilterInput struct {
+	Statuses   []string
+	Priorities []string
+	Tags       []string
+	OrderBy    *string
+	OrderDir   *string
+}
+
+// NewItemsFilter creates a validated filter for listing items.
+// All validation happens at construction time - returns error if any field is invalid.
+// Empty slices mean "no filter" for that field.
+// orderBy defaults to "created_at", orderDir defaults to "desc".
+func NewItemsFilter(input ItemsFilterInput) (ItemsFilter, error) {
+	filter := ItemsFilter{
+		orderBy:  DefaultOrderBy,
+		orderDir: DefaultOrderDir,
+	}
+
+	// Validate statuses
+	if len(input.Statuses) > MaxStatusFilter {
+		return ItemsFilter{}, ErrTooManyStatuses
+	}
+	for _, s := range input.Statuses {
+		status, err := NewTaskStatus(s)
+		if err != nil {
+			return ItemsFilter{}, err
+		}
+		filter.statuses = append(filter.statuses, status)
+	}
+
+	// Validate priorities
+	if len(input.Priorities) > MaxPriorityFilter {
+		return ItemsFilter{}, ErrTooManyPriorities
+	}
+	for _, p := range input.Priorities {
+		priority, err := NewTaskPriority(p)
+		if err != nil {
+			return ItemsFilter{}, err
+		}
+		filter.priorities = append(filter.priorities, priority)
+	}
+
+	// Validate tags - copy to ensure immutability
+	if len(input.Tags) > MaxTagsFilter {
+		return ItemsFilter{}, ErrTooManyTags
+	}
+	if len(input.Tags) > 0 {
+		filter.tags = make([]string, len(input.Tags))
+		copy(filter.tags, input.Tags)
+	}
+
+	// Validate and set orderBy if provided, otherwise keep default
+	if input.OrderBy != nil && *input.OrderBy != "" {
+		if !validOrderByFields[*input.OrderBy] {
+			return ItemsFilter{}, fmt.Errorf("%w: %s (supported: due_time, priority, created_at, updated_at)", ErrInvalidOrderByField, *input.OrderBy)
+		}
+		filter.orderBy = *input.OrderBy
+	}
+
+	// Validate and set orderDir if provided, otherwise keep default
+	if input.OrderDir != nil && *input.OrderDir != "" {
+		dir := strings.ToLower(*input.OrderDir)
+		if dir != "asc" && dir != "desc" {
+			return ItemsFilter{}, ErrInvalidSortDirection
+		}
+		filter.orderDir = dir
+	}
+
+	return filter, nil
+}
+
+// Statuses returns the validated status filters (empty slice if not filtering).
+func (f ItemsFilter) Statuses() []TaskStatus {
+	return f.statuses
+}
+
+// Priorities returns the validated priority filters (empty slice if not filtering).
+func (f ItemsFilter) Priorities() []TaskPriority {
+	return f.priorities
+}
+
+// Tags returns the tags filter (empty slice if not filtering).
+func (f ItemsFilter) Tags() []string {
+	return f.tags
+}
+
+// OrderBy returns the order by field (defaults to "created_at").
+func (f ItemsFilter) OrderBy() string {
+	return f.orderBy
+}
+
+// OrderDir returns the sort direction (defaults to "desc").
+func (f ItemsFilter) OrderDir() string {
+	return f.orderDir
+}
+
+// HasStatusFilter returns true if a status filter is applied.
+func (f ItemsFilter) HasStatusFilter() bool {
+	return len(f.statuses) > 0
+}

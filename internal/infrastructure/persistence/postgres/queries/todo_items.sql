@@ -74,12 +74,17 @@ WHERE list_id = $1;
 -- name: CountTasksWithFilters :one
 -- Counts total matching items for pagination (used when main query returns empty page).
 -- Uses same WHERE clause as ListTasksWithFilters for consistency.
+-- $2: statuses array (empty array skips filter, OR logic within array)
+-- $3: priorities array (empty array skips filter, OR logic within array)
+-- $4: tags array (empty array skips filter, item must have ALL specified tags)
+-- $9: excluded_statuses array (empty array skips filter, excludes matching statuses)
 SELECT COUNT(*) FROM todo_items
 WHERE
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    ($2::text = '' OR status = $2) AND
-    ($3::text = '' OR priority = $3) AND
-    ($4::text = '' OR tags ? $4::text) AND
+    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
+    (array_length($9::text[], 1) IS NULL OR status != ALL($9::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
     ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
     ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
@@ -90,21 +95,23 @@ WHERE
 -- Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
 -- Use case: Task search, filtered views, "My Tasks" views, pagination through large result sets.
 --
--- Parameters (use zero values for NULL to skip filters):
---   $1: list_id     - Filter by specific list (zero UUID to search all lists)
---   $2: status      - Filter by status (empty string to skip)
---   $3: priority    - Filter by priority (empty string to skip)
---   $4: tag         - Filter by tag (JSONB array contains, empty string to skip)
---   $5: due_before  - Filter tasks due before timestamp (zero time to skip)
---   $6: due_after   - Filter tasks due after timestamp (zero time to skip)
---   $7: updated_at  - Filter by last update time (zero time to skip)
---   $8: created_at  - Filter by creation time (zero time to skip)
---   $9: order_by    - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
---                     Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
---                     For bare field names, defaults are: due_time=asc, priority=asc,
---                     created_at=desc, updated_at=desc
---   $10: limit      - Page size (max items to return)
---   $11: offset     - Pagination offset (skip N items)
+-- Parameters (use empty arrays for NULL to skip filters):
+--   $1: list_id           - Filter by specific list (zero UUID to search all lists)
+--   $2: statuses          - Array of statuses to include (empty array to skip, OR logic)
+--   $3: priorities        - Array of priorities to include (empty array to skip, OR logic)
+--   $4: tags              - Array of tags to match (empty array to skip, item must have ALL tags)
+--   $5: due_before        - Filter tasks due before timestamp (zero time to skip)
+--   $6: due_after         - Filter tasks due after timestamp (zero time to skip)
+--   $7: updated_at        - Filter by last update time (zero time to skip)
+--   $8: created_at        - Filter by creation time (zero time to skip)
+--   $9: order_by          - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
+--                           Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
+--                           For bare field names, defaults are: due_time=asc, priority=asc,
+--                           created_at=desc, updated_at=desc
+--   $10: limit            - Page size (max items to return)
+--   $11: offset           - Pagination offset (skip N items)
+--   $12: excluded_statuses - Array of statuses to exclude (empty array to skip filter)
+--                           Used to exclude archived/cancelled by default when $2 is empty
 --
 -- Returns: All todo_items columns plus total_count (total matching rows across all pages)
 -- The COUNT(*) OVER() window function computes total matching rows in a single query pass,
@@ -121,17 +128,18 @@ WHERE
 -- Input validation at the service layer improves UX (clear error messages) but does NOT
 -- provide security - parameterized queries are the security boundary.
 --
--- Access pattern example:
+-- Access pattern examples:
 --   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
---   - "Tasks in List X": filter by list_id, default sort
---   - "High priority items": filter by priority=HIGH, order by due_time_asc
---   - "Tasks tagged 'urgent'": filter by tag=urgent (uses GIN index)
+--   - "Active work": statuses=[todo, in_progress], default sort
+--   - "High priority items": priorities=[high, urgent], order by due_time_asc
+--   - "Tasks tagged 'urgent' and 'work'": tags=[urgent, work] (item must have both)
 SELECT *, COUNT(*) OVER() AS total_count FROM todo_items
 WHERE
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    ($2::text = '' OR status = $2) AND
-    ($3::text = '' OR priority = $3) AND
-    ($4::text = '' OR tags ? $4::text) AND
+    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
+    (array_length($12::text[], 1) IS NULL OR status != ALL($12::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
     ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
     ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND

@@ -28,8 +28,8 @@ func TestUpdateItem_SetsStatusAndPriority(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	status := openapi.TaskStatus("done")
-	priority := openapi.TaskPriority("high")
+	status := openapi.ItemStatus("done")
+	priority := openapi.ItemPriority("high")
 	updateMask := []string{"status", "priority"}
 	reqBody := openapi.UpdateItemRequest{
 		Item: &openapi.TodoItem{
@@ -75,7 +75,7 @@ func TestUpdateItem_ListMismatchReturnsNotFound(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	status := openapi.TaskStatus("blocked")
+	status := openapi.ItemStatus("blocked")
 	updateMask := []string{"status"}
 	reqBody := openapi.UpdateItemRequest{
 		Item: &openapi.TodoItem{

@@ -19,6 +19,14 @@ func UndoneStatuses() []TaskStatus {
 	return []TaskStatus{TaskStatusTodo, TaskStatusInProgress, TaskStatusBlocked}
 }
 
+// DefaultExcludedStatuses returns statuses excluded from item listings by default.
+// Business rule: archived and cancelled items are hidden unless explicitly requested.
+// This allows users to focus on active work while still being able to retrieve
+// historical data when needed via explicit status filter.
+func DefaultExcludedStatuses() []TaskStatus {
+	return []TaskStatus{TaskStatusArchived, TaskStatusCancelled}
+}
+
 // TaskPriority represents the priority level of a task.
 // Value object - immutable string enum.
 type TaskPriority string

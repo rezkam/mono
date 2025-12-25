@@ -125,11 +125,20 @@ func domainTodoListToDB(list *domain.TodoList) (pgtype.UUID, string, pgtype.Time
 	return uuidToPgtype(id), list.Title, timeToPgtype(list.CreateTime), nil
 }
 
-// domainStatusesToStrings converts domain TaskStatus slice to string slice for SQL queries.
-func domainStatusesToStrings(statuses []domain.TaskStatus) []string {
+// taskStatusesToStrings converts domain TaskStatus slice to string slice for SQL queries.
+func taskStatusesToStrings(statuses []domain.TaskStatus) []string {
 	result := make([]string, len(statuses))
 	for i, s := range statuses {
 		result[i] = string(s)
+	}
+	return result
+}
+
+// taskPrioritiesToStrings converts domain TaskPriority slice to string slice for SQL queries.
+func taskPrioritiesToStrings(priorities []domain.TaskPriority) []string {
+	result := make([]string, len(priorities))
+	for i, p := range priorities {
+		result[i] = string(p)
 	}
 	return result
 }

@@ -13,6 +13,10 @@ import (
 type Querier interface {
 	// Counts total matching items for pagination (used when main query returns empty page).
 	// Uses same WHERE clause as ListTasksWithFilters for consistency.
+	// $2: statuses array (empty array skips filter, OR logic within array)
+	// $3: priorities array (empty array skips filter, OR logic within array)
+	// $4: tags array (empty array skips filter, item must have ALL specified tags)
+	// $9: excluded_statuses array (empty array skips filter, excludes matching statuses)
 	CountTasksWithFilters(ctx context.Context, arg CountTasksWithFiltersParams) (int64, error)
 	// Count total matching lists for pagination (same filters as FindTodoListsWithFilters).
 	CountTodoListsWithFilters(ctx context.Context, arg CountTodoListsWithFiltersParams) (int32, error)
@@ -84,21 +88,23 @@ type Querier interface {
 	// Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
 	// Use case: Task search, filtered views, "My Tasks" views, pagination through large result sets.
 	//
-	// Parameters (use zero values for NULL to skip filters):
-	//   $1: list_id     - Filter by specific list (zero UUID to search all lists)
-	//   $2: status      - Filter by status (empty string to skip)
-	//   $3: priority    - Filter by priority (empty string to skip)
-	//   $4: tag         - Filter by tag (JSONB array contains, empty string to skip)
-	//   $5: due_before  - Filter tasks due before timestamp (zero time to skip)
-	//   $6: due_after   - Filter tasks due after timestamp (zero time to skip)
-	//   $7: updated_at  - Filter by last update time (zero time to skip)
-	//   $8: created_at  - Filter by creation time (zero time to skip)
-	//   $9: order_by    - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
-	//                     Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
-	//                     For bare field names, defaults are: due_time=asc, priority=asc,
-	//                     created_at=desc, updated_at=desc
-	//   $10: limit      - Page size (max items to return)
-	//   $11: offset     - Pagination offset (skip N items)
+	// Parameters (use empty arrays for NULL to skip filters):
+	//   $1: list_id           - Filter by specific list (zero UUID to search all lists)
+	//   $2: statuses          - Array of statuses to include (empty array to skip, OR logic)
+	//   $3: priorities        - Array of priorities to include (empty array to skip, OR logic)
+	//   $4: tags              - Array of tags to match (empty array to skip, item must have ALL tags)
+	//   $5: due_before        - Filter tasks due before timestamp (zero time to skip)
+	//   $6: due_after         - Filter tasks due after timestamp (zero time to skip)
+	//   $7: updated_at        - Filter by last update time (zero time to skip)
+	//   $8: created_at        - Filter by creation time (zero time to skip)
+	//   $9: order_by          - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
+	//                           Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
+	//                           For bare field names, defaults are: due_time=asc, priority=asc,
+	//                           created_at=desc, updated_at=desc
+	//   $10: limit            - Page size (max items to return)
+	//   $11: offset           - Pagination offset (skip N items)
+	//   $12: excluded_statuses - Array of statuses to exclude (empty array to skip filter)
+	//                           Used to exclude archived/cancelled by default when $2 is empty
 	//
 	// Returns: All todo_items columns plus total_count (total matching rows across all pages)
 	// The COUNT(*) OVER() window function computes total matching rows in a single query pass,
@@ -115,11 +121,11 @@ type Querier interface {
 	// Input validation at the service layer improves UX (clear error messages) but does NOT
 	// provide security - parameterized queries are the security boundary.
 	//
-	// Access pattern example:
+	// Access pattern examples:
 	//   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
-	//   - "Tasks in List X": filter by list_id, default sort
-	//   - "High priority items": filter by priority=HIGH, order by due_time_asc
-	//   - "Tasks tagged 'urgent'": filter by tag=urgent (uses GIN index)
+	//   - "Active work": statuses=[todo, in_progress], default sort
+	//   - "High priority items": priorities=[high, urgent], order by due_time_asc
+	//   - "Tasks tagged 'urgent' and 'work'": tags=[urgent, work] (item must have both)
 	ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]ListTasksWithFiltersRow, error)
 	// Legacy query: Returns all lists without items (use ListTodoListsWithCounts for list views).
 	ListTodoLists(ctx context.Context) ([]TodoList, error)

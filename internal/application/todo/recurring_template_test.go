@@ -53,7 +53,7 @@ func (m *mockRecurringRepo) UpdateItem(ctx context.Context, params domain.Update
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
+func (m *mockRecurringRepo) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
 	panic("not used in recurring template tests")
 }
 

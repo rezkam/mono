@@ -54,7 +54,7 @@ func TestListTasks_LargePageSize(t *testing.T) {
 				Limit:  int(tc.requestPageSize),
 				Offset: 0,
 			}
-			result, err := env.Service().ListTasks(env.Context(), params)
+			result, err := env.Service().ListItems(env.Context(), params)
 			require.NoError(t, err)
 
 			assert.LessOrEqual(t, len(result.Items), tc.expectedMaxItems,
@@ -71,7 +71,7 @@ func TestListTasks_LargePageSize(t *testing.T) {
 			offset := len(result.Items)
 			for hasMore {
 				params.Offset = offset
-				result, err = env.Service().ListTasks(env.Context(), params)
+				result, err = env.Service().ListItems(env.Context(), params)
 				require.NoError(t, err)
 
 				totalReturned += len(result.Items)

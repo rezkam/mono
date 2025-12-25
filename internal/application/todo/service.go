@@ -292,8 +292,10 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 	return s.repo.UpdateItem(ctx, params)
 }
 
-// ListTasks searches for tasks with filtering, sorting, and pagination.
-func (s *Service) ListTasks(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
+// ListItems searches for items with filtering, sorting, and pagination.
+// Filter is already validated via ItemsFilter value object.
+// Applies business rules (pagination limits, default exclusions) and delegates to repository.
+func (s *Service) ListItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
 	// Reject negative offsets to prevent database errors
 	if params.Offset < 0 {
 		params.Offset = 0
@@ -309,20 +311,13 @@ func (s *Service) ListTasks(ctx context.Context, params domain.ListTasksParams) 
 		params.Limit = s.config.MaxPageSize
 	}
 
-	// Validate order_by field
-	if params.OrderBy != "" {
-		validFields := map[string]bool{
-			"due_time":   true,
-			"priority":   true,
-			"created_at": true,
-			"updated_at": true,
-		}
-		if !validFields[params.OrderBy] {
-			return nil, fmt.Errorf("%w: %s (supported: due_time, priority, created_at, updated_at)", domain.ErrInvalidOrderByField, params.OrderBy)
-		}
+	// Business rule: when no explicit status filter, exclude archived and cancelled
+	excludedStatuses := []domain.TaskStatus{}
+	if !params.Filter.HasStatusFilter() {
+		excludedStatuses = domain.DefaultExcludedStatuses()
 	}
 
-	result, err := s.repo.FindItems(ctx, params)
+	result, err := s.repo.FindItems(ctx, params, excludedStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tasks: %w", err)
 	}

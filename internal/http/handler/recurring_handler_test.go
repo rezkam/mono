@@ -45,7 +45,7 @@ func (s *stubRepository) FindItemByID(ctx context.Context, id string) (*domain.T
 func (s *stubRepository) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) FindItems(ctx context.Context, params domain.ListTasksParams) (*domain.PagedResult, error) {
+func (s *stubRepository) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
@@ -69,14 +69,15 @@ func TestUpdateRecurringTemplate_MissingTemplateReturnsBadRequest(t *testing.T) 
 	service := todo.NewService(repo, todo.Config{})
 	srv := NewServer(service)
 
-	id := types.UUID(uuid.New())
-	req := httptest.NewRequest(http.MethodPatch, "/v1/recurring-templates/"+id.String(), bytes.NewReader([]byte(`{}`)))
+	listID := types.UUID(uuid.New())
+	templateID := types.UUID(uuid.New())
+	req := httptest.NewRequest(http.MethodPatch, "/v1/lists/"+listID.String()+"/recurring-templates/"+templateID.String(), bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
 
 	// Expect handler to validate payload before calling service; otherwise stub panics
-	srv.UpdateRecurringTemplate(w, req, id)
+	srv.UpdateRecurringTemplate(w, req, listID, templateID)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
@@ -130,23 +131,24 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	service := todo.NewService(repo, todo.Config{})
 	srv := NewServer(service)
 
-	id := types.UUID(uuid.MustParse(existingTemplate.ID))
+	listUUID := types.UUID(uuid.MustParse(listID))
+	templateUUID := types.UUID(uuid.MustParse(templateID))
 	newWindowDays := 60
 	updateMask := []string{"generation_window_days"}
 
 	reqBody := openapi.UpdateRecurringTemplateRequest{
-		Template: &openapi.RecurringTaskTemplate{
+		Template: &openapi.RecurringItemTemplate{
 			GenerationWindowDays: &newWindowDays,
 		},
 		UpdateMask: &updateMask,
 	}
 	body, _ := json.Marshal(reqBody)
 
-	req := httptest.NewRequest(http.MethodPatch, "/v1/recurring-templates/"+id.String(), bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, "/v1/lists/"+listUUID.String()+"/recurring-templates/"+templateUUID.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
-	srv.UpdateRecurringTemplate(w, req, id)
+	srv.UpdateRecurringTemplate(w, req, listUUID, templateUUID)
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, repo.capturedParams, "params should have been passed to repository")

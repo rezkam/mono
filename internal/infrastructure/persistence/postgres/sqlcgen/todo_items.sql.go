@@ -15,9 +15,10 @@ const countTasksWithFilters = `-- name: CountTasksWithFilters :one
 SELECT COUNT(*) FROM todo_items
 WHERE
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    ($2::text = '' OR status = $2) AND
-    ($3::text = '' OR priority = $3) AND
-    ($4::text = '' OR tags ? $4::text) AND
+    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
+    (array_length($9::text[], 1) IS NULL OR status != ALL($9::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
     ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
     ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
@@ -26,17 +27,22 @@ WHERE
 
 type CountTasksWithFiltersParams struct {
 	Column1 pgtype.UUID        `json:"column_1"`
-	Column2 string             `json:"column_2"`
-	Column3 string             `json:"column_3"`
-	Column4 string             `json:"column_4"`
+	Column2 []string           `json:"column_2"`
+	Column3 []string           `json:"column_3"`
+	Column4 []string           `json:"column_4"`
 	Column5 pgtype.Timestamptz `json:"column_5"`
 	Column6 pgtype.Timestamptz `json:"column_6"`
 	Column7 pgtype.Timestamptz `json:"column_7"`
 	Column8 pgtype.Timestamptz `json:"column_8"`
+	Column9 []string           `json:"column_9"`
 }
 
 // Counts total matching items for pagination (used when main query returns empty page).
 // Uses same WHERE clause as ListTasksWithFilters for consistency.
+// $2: statuses array (empty array skips filter, OR logic within array)
+// $3: priorities array (empty array skips filter, OR logic within array)
+// $4: tags array (empty array skips filter, item must have ALL specified tags)
+// $9: excluded_statuses array (empty array skips filter, excludes matching statuses)
 func (q *Queries) CountTasksWithFilters(ctx context.Context, arg CountTasksWithFiltersParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countTasksWithFilters,
 		arg.Column1,
@@ -47,6 +53,7 @@ func (q *Queries) CountTasksWithFilters(ctx context.Context, arg CountTasksWithF
 		arg.Column6,
 		arg.Column7,
 		arg.Column8,
+		arg.Column9,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -247,9 +254,10 @@ const listTasksWithFilters = `-- name: ListTasksWithFilters :many
 SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version, COUNT(*) OVER() AS total_count FROM todo_items
 WHERE
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    ($2::text = '' OR status = $2) AND
-    ($3::text = '' OR priority = $3) AND
-    ($4::text = '' OR tags ? $4::text) AND
+    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
+    (array_length($12::text[], 1) IS NULL OR status != ALL($12::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
     ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
     ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
@@ -289,17 +297,18 @@ OFFSET $11
 `
 
 type ListTasksWithFiltersParams struct {
-	Column1 pgtype.UUID        `json:"column_1"`
-	Column2 string             `json:"column_2"`
-	Column3 string             `json:"column_3"`
-	Column4 string             `json:"column_4"`
-	Column5 pgtype.Timestamptz `json:"column_5"`
-	Column6 pgtype.Timestamptz `json:"column_6"`
-	Column7 pgtype.Timestamptz `json:"column_7"`
-	Column8 pgtype.Timestamptz `json:"column_8"`
-	Column9 string             `json:"column_9"`
-	Limit   int32              `json:"limit"`
-	Offset  int32              `json:"offset"`
+	Column1  pgtype.UUID        `json:"column_1"`
+	Column2  []string           `json:"column_2"`
+	Column3  []string           `json:"column_3"`
+	Column4  []string           `json:"column_4"`
+	Column5  pgtype.Timestamptz `json:"column_5"`
+	Column6  pgtype.Timestamptz `json:"column_6"`
+	Column7  pgtype.Timestamptz `json:"column_7"`
+	Column8  pgtype.Timestamptz `json:"column_8"`
+	Column9  string             `json:"column_9"`
+	Limit    int32              `json:"limit"`
+	Offset   int32              `json:"offset"`
+	Column12 []string           `json:"column_12"`
 }
 
 type ListTasksWithFiltersRow struct {
@@ -325,22 +334,24 @@ type ListTasksWithFiltersRow struct {
 // Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
 // Use case: Task search, filtered views, "My Tasks" views, pagination through large result sets.
 //
-// Parameters (use zero values for NULL to skip filters):
+// Parameters (use empty arrays for NULL to skip filters):
 //
-//	$1: list_id     - Filter by specific list (zero UUID to search all lists)
-//	$2: status      - Filter by status (empty string to skip)
-//	$3: priority    - Filter by priority (empty string to skip)
-//	$4: tag         - Filter by tag (JSONB array contains, empty string to skip)
-//	$5: due_before  - Filter tasks due before timestamp (zero time to skip)
-//	$6: due_after   - Filter tasks due after timestamp (zero time to skip)
-//	$7: updated_at  - Filter by last update time (zero time to skip)
-//	$8: created_at  - Filter by creation time (zero time to skip)
-//	$9: order_by    - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
-//	                  Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
-//	                  For bare field names, defaults are: due_time=asc, priority=asc,
-//	                  created_at=desc, updated_at=desc
-//	$10: limit      - Page size (max items to return)
-//	$11: offset     - Pagination offset (skip N items)
+//	$1: list_id           - Filter by specific list (zero UUID to search all lists)
+//	$2: statuses          - Array of statuses to include (empty array to skip, OR logic)
+//	$3: priorities        - Array of priorities to include (empty array to skip, OR logic)
+//	$4: tags              - Array of tags to match (empty array to skip, item must have ALL tags)
+//	$5: due_before        - Filter tasks due before timestamp (zero time to skip)
+//	$6: due_after         - Filter tasks due after timestamp (zero time to skip)
+//	$7: updated_at        - Filter by last update time (zero time to skip)
+//	$8: created_at        - Filter by creation time (zero time to skip)
+//	$9: order_by          - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
+//	                        Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
+//	                        For bare field names, defaults are: due_time=asc, priority=asc,
+//	                        created_at=desc, updated_at=desc
+//	$10: limit            - Page size (max items to return)
+//	$11: offset           - Pagination offset (skip N items)
+//	$12: excluded_statuses - Array of statuses to exclude (empty array to skip filter)
+//	                        Used to exclude archived/cancelled by default when $2 is empty
 //
 // Returns: All todo_items columns plus total_count (total matching rows across all pages)
 // The COUNT(*) OVER() window function computes total matching rows in a single query pass,
@@ -357,11 +368,11 @@ type ListTasksWithFiltersRow struct {
 // Input validation at the service layer improves UX (clear error messages) but does NOT
 // provide security - parameterized queries are the security boundary.
 //
-// Access pattern example:
+// Access pattern examples:
 //   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
-//   - "Tasks in List X": filter by list_id, default sort
-//   - "High priority items": filter by priority=HIGH, order by due_time_asc
-//   - "Tasks tagged 'urgent'": filter by tag=urgent (uses GIN index)
+//   - "Active work": statuses=[todo, in_progress], default sort
+//   - "High priority items": priorities=[high, urgent], order by due_time_asc
+//   - "Tasks tagged 'urgent' and 'work'": tags=[urgent, work] (item must have both)
 func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]ListTasksWithFiltersRow, error) {
 	rows, err := q.db.Query(ctx, listTasksWithFilters,
 		arg.Column1,
@@ -375,6 +386,7 @@ func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFil
 		arg.Column9,
 		arg.Limit,
 		arg.Offset,
+		arg.Column12,
 	)
 	if err != nil {
 		return nil, err
