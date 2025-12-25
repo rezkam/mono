@@ -1,4 +1,4 @@
-version: 2
+version: "2"
 
 run:
   timeout: 5m
@@ -6,6 +6,9 @@ run:
   modules-download-mode: readonly
 
 linters:
+  exclusions:
+    paths:
+      - ".*testdata.*"
   enable:
     - govet
     - errcheck

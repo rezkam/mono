@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -54,16 +54,14 @@ help: ## Display this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 gen-openapi: ## Generate Go code from OpenAPI spec
+	@command -v oapi-codegen >/dev/null 2>&1 || { echo "Error: oapi-codegen is not installed. Install with: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest"; exit 1; }
 	@echo "Generating OpenAPI code..."
-	@$(HOME)/go/bin/oapi-codegen -config tools/oapi-codegen.yaml api/openapi/mono.yaml
+	@oapi-codegen -config api/openapi/oapi-codegen.yaml api/openapi/mono.yaml
 
-wire: ## Generate Wire dependency injection code
-	@echo "Running Wire..."
-	@cd cmd/server && $(HOME)/go/bin/wire
-
-gen: gen-openapi wire gen-sqlc ## Generate all code (OpenAPI, Wire, sqlc)
+gen: gen-openapi gen-sqlc ## Generate all code (OpenAPI, sqlc)
 
 gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
+	@command -v sqlc >/dev/null 2>&1 || { echo "Error: sqlc is not installed. Install with: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest"; exit 1; }
 	@echo "Generating sqlc code..."
 	sqlc generate
 	@echo "Fixing sqlc imports (removing legacy pgtype)..."
@@ -171,6 +169,8 @@ build-timeutc-linter: ## Build custom timezone linter
 	@cd tools/linters/timeutc && go build -o ../../../timeutc ./cmd/timeutc
 
 lint: build-timeutc-linter ## Run linters (golangci-lint + custom timezone linter)
+	@echo "Verifying golangci-lint config..."
+	golangci-lint config verify
 	@echo "Running golangci-lint..."
 	golangci-lint run
 	@echo "Running custom timezone linter..."
@@ -281,10 +281,8 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 	@$(MAKE) test-integration-up
 	@echo ""
 	@echo "=== Running integration tests ==="
-	@# -count=1 disables test caching to ensure tests run fresh against real database
-	@# -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
 	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
-		go test -v -p 1 ./tests/integration/postgres ./tests/integration/http -count=1; \
+		$(MAKE) test-integration-run; \
 	TEST_RESULT=$$?; \
 	echo ""; \
 	echo "=== Cleaning up test database ==="; \
@@ -296,6 +294,14 @@ test-integration: ## [TEST DB] Run integration tests (auto-cleanup before/after)
 		echo "❌ Integration tests FAILED"; \
 		exit $$TEST_RESULT; \
 	fi
+
+test-integration-run: ## Run integration tests (requires MONO_STORAGE_DSN env var)
+ifndef MONO_STORAGE_DSN
+	$(error MONO_STORAGE_DSN is required. Set it to your PostgreSQL connection string.)
+endif
+	@# -count=1 disables test caching to ensure tests run fresh against real database
+	@# -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
+	go test -v -p 1 ./tests/integration/... -count=1
 
 test-e2e: ## [TEST DB] Run end-to-end tests (auto-cleanup before/after)
 	@echo "=== Cleaning any existing test database ==="

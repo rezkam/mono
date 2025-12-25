@@ -21,8 +21,9 @@ jobs:
       - name: Install Code Generators
         run: |
           go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
-      - name: Generate Code (OpenAPI, Wire, sqlc)
+      - name: Generate Code (OpenAPI, sqlc)
         run: make gen
 
       - name: Verify Generated Code In Sync
@@ -32,20 +33,15 @@ jobs:
       - name: Security Scan
         run: make security
 
-      - name: Install sqlc
-        uses: sqlc-dev/setup-sqlc@v4
-        with:
-          sqlc-version: '1.30.0'
-
       - name: Verify sqlc Generated Code
         run: |
           make gen-sqlc
           git diff --exit-code internal/infrastructure/persistence/postgres/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.7.2
+          version: latest
           args: --timeout=5m
 
       - name: Build Custom Timezone Linter
@@ -64,8 +60,9 @@ jobs:
           sleep 10
 
       - name: Run PostgreSQL Integration Tests
-        run: |
-          MONO_STORAGE_DSN="postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable" go test -v ./tests/integration/...
+        run: make test-integration-run
+        env:
+          MONO_STORAGE_DSN: "postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable"
 
       - name: Stop PostgreSQL
         run: docker compose down
