@@ -190,19 +190,19 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 	assert.Contains(t, tags, "shopping")
 	assert.Contains(t, tags, "urgent")
 
-	// 4. List Tasks (basic - filter testing in separate test)
-	resp, err = httpRequest(t, "GET", "/api/v1/tasks", "")
+	// 4. List Items (basic - filter testing in separate test)
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/lists/%s/items", listID), "")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var listTasksResp map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&listTasksResp)
+	var listItemsResp map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&listItemsResp)
 	require.NoError(t, err)
 
-	items := listTasksResp["items"].([]interface{})
-	assert.GreaterOrEqual(t, len(items), 2) // At least our 2 items
+	items := listItemsResp["items"].([]interface{})
+	assert.Equal(t, 2, len(items)) // Exactly our 2 items in this list
 
 	// 5. Update Item (Tags and Status)
 	updateJSON := fmt.Sprintf(`{
@@ -291,7 +291,7 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 	assert.Equal(t, true, template["is_active"])
 
 	// 3. Get the template
-	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/recurring-templates/%s", templateID), "")
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), "")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -315,7 +315,7 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 		}
 	}`, templateID, listID)
 
-	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/recurring-templates/%s", templateID), updateTemplateJSON)
+	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), updateTemplateJSON)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -350,7 +350,7 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 	assert.Equal(t, "Updated Daily Standup", listedTemplate["title"])
 
 	// 6. Delete the template
-	resp, err = httpRequest(t, "DELETE", fmt.Sprintf("/api/v1/recurring-templates/%s", templateID), "")
+	resp, err = httpRequest(t, "DELETE", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), "")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -515,8 +515,7 @@ func TestE2E_ListTasksWithFilter(t *testing.T) {
 	}
 
 	// 2. List tasks filtered by unique tag
-	// Note: Filter parsing is stubbed, but endpoint accepts the parameter
-	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/tasks?filter=tags:%s", uniqueTag), "")
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/lists/%s/items?tags=%s", listID, uniqueTag), "")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -569,7 +568,7 @@ func TestE2E_RecurringTemplateFieldMask(t *testing.T) {
 		"update_mask": ["title"]
 	}`, templateID, listID)
 
-	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/recurring-templates/%s", templateID), updateJSON)
+	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), updateJSON)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
