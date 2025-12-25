@@ -39,9 +39,9 @@ jobs:
           git diff --exit-code internal/infrastructure/persistence/postgres/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.7.2
+          version: latest
           args: --timeout=5m
 
       - name: Build Custom Timezone Linter
