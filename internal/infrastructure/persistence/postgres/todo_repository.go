@@ -67,7 +67,7 @@ func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) error {
 func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	listUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	// Get the list with counts (domain defines which statuses are "undone")
@@ -213,7 +213,7 @@ func (s *Store) FindLists(ctx context.Context, params domain.ListListsParams) (*
 func (s *Store) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
 	id, err := uuid.Parse(params.ListID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	// Check if title is in update mask
@@ -257,10 +257,10 @@ func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.Todo
 
 	if err := s.queries.CreateTodoItem(ctx, params); err != nil {
 		if isForeignKeyViolation(err, "list_id") {
-			return fmt.Errorf("%w: %v", domain.ErrListNotFound, err)
+			return fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
 		}
 		if isForeignKeyViolation(err, "recurring_template_id") {
-			return fmt.Errorf("%w: %v", domain.ErrTemplateNotFound, err)
+			return fmt.Errorf("%w: %w", domain.ErrTemplateNotFound, err)
 		}
 		return fmt.Errorf("failed to create item: %w", err)
 	}
@@ -276,7 +276,7 @@ func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.Todo
 func (s *Store) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
 	itemUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	dbItem, err := s.queries.GetTodoItem(ctx, uuidToPgtype(itemUUID))
@@ -300,12 +300,12 @@ func (s *Store) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, 
 func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
 	itemUUID, err := uuid.Parse(params.ItemID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	listUUID, err := uuid.Parse(params.ListID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	// Build update mask set for quick lookup
@@ -430,7 +430,7 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams, ex
 	if params.ListID != nil {
 		parsed, err := uuid.Parse(*params.ListID)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+			return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 		}
 		listUUID = parsed
 	}
@@ -544,7 +544,7 @@ func (s *Store) CreateRecurringTemplate(ctx context.Context, template *domain.Re
 
 	if err := s.queries.CreateRecurringTemplate(ctx, params); err != nil {
 		if isForeignKeyViolation(err, "list_id") {
-			return fmt.Errorf("%w: %v", domain.ErrListNotFound, err)
+			return fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
 		}
 		return fmt.Errorf("failed to create template: %w", err)
 	}
@@ -556,7 +556,7 @@ func (s *Store) CreateRecurringTemplate(ctx context.Context, template *domain.Re
 func (s *Store) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	templateUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, uuidToPgtype(templateUUID))
@@ -581,7 +581,7 @@ func (s *Store) FindRecurringTemplate(ctx context.Context, id string) (*domain.R
 func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	templateUUID, err := uuid.Parse(params.TemplateID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	// Build update mask set for quick lookup
@@ -655,7 +655,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 func (s *Store) DeleteRecurringTemplate(ctx context.Context, id string) error {
 	templateUUID, err := uuid.Parse(id)
 	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	// Single-query pattern: check rowsAffected to detect non-existent record
@@ -675,7 +675,7 @@ func (s *Store) DeleteRecurringTemplate(ctx context.Context, id string) error {
 func (s *Store) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
 	listUUID, err := uuid.Parse(listID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	var dbTemplates []sqlcgen.RecurringTaskTemplate
