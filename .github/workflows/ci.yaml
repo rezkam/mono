@@ -20,8 +20,7 @@ jobs:
 
       - name: Install Code Generators
         run: |
-          go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@v1.15.4
-          go install github.com/google/wire/cmd/wire@v0.7.0
+          go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 
       - name: Generate Code (OpenAPI, Wire, sqlc)
         run: make gen
