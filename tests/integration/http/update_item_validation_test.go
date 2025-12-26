@@ -35,10 +35,10 @@ func TestUpdateItem_InvalidStatus(t *testing.T) {
 	// Try to update with invalid status
 	invalidStatus := openapi.ItemStatus("INVALID_STATUS")
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Status: &invalidStatus,
 		},
-		UpdateMask: &[]string{"status"},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{"status"},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -82,10 +82,10 @@ func TestUpdateItem_InvalidPriority(t *testing.T) {
 	// Try to update with invalid priority
 	invalidPriority := openapi.ItemPriority("SUPER_URGENT")
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Priority: &invalidPriority,
 		},
-		UpdateMask: &[]string{"priority"},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{"priority"},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -127,7 +127,7 @@ func TestUpdateItem_InvalidStatusWithoutMask(t *testing.T) {
 	// Try to update with invalid status (no update_mask = update all provided fields)
 	invalidStatus := openapi.ItemStatus("BAD_STATUS")
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Status: &invalidStatus,
 		},
 		// No UpdateMask - should still validate
@@ -167,10 +167,10 @@ func TestUpdateItem_EmptyTitleRejected(t *testing.T) {
 	// Attempt to update with empty title via field mask
 	emptyTitle := ""
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Title: &emptyTitle,
 		},
-		UpdateMask: &[]string{"title"},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{"title"},
 	}
 
 	body, err := json.Marshal(reqBody)

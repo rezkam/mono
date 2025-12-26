@@ -154,10 +154,10 @@ func TestValidation_InvalidStatus_UpdateItem(t *testing.T) {
 	// Try to update with invalid status
 	invalidStatus := openapi.ItemStatus("INVALID_STATUS")
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Status: &invalidStatus,
 		},
-		UpdateMask: &[]string{"status"},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{"status"},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -198,10 +198,10 @@ func TestValidation_InvalidPriority_UpdateItem(t *testing.T) {
 	// Try to update with invalid priority
 	invalidPriority := openapi.ItemPriority("SUPER_HIGH")
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Priority: &invalidPriority,
 		},
-		UpdateMask: &[]string{"priority"},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{"priority"},
 	}
 
 	body, err := json.Marshal(reqBody)

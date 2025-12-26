@@ -72,7 +72,7 @@ func TestNotFoundErrors_UpdateNonexistentItem_ReturnsItemNotFound(t *testing.T) 
 	nonexistentItemID := uuid.Must(uuid.NewV7()).String()
 
 	reqBody := openapi.UpdateItemRequest{
-		Item: &openapi.TodoItem{
+		Item: openapi.TodoItem{
 			Title: ptrString("Updated Title"),
 		},
 		UpdateMask: []openapi.UpdateItemRequestUpdateMask{
