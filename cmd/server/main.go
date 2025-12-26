@@ -97,14 +97,6 @@ func run() error {
 // initializeHTTPServer wires application services and HTTP components.
 // Returns the server, a cleanup function, and any initialization error.
 func initializeHTTPServer(ctx context.Context, logger *slog.Logger, store *postgres.Store) (*HTTPServer, func(), error) {
-	var cleanups []func()
-	cleanup := func() {
-		// Execute cleanups in reverse order (LIFO)
-		for i := len(cleanups) - 1; i >= 0; i-- {
-			cleanups[i]()
-		}
-	}
-
 	// Initialize todo service
 	todoConfig := provideTodoConfig()
 	todoService := todo.NewService(store, todoConfig)
@@ -112,9 +104,9 @@ func initializeHTTPServer(ctx context.Context, logger *slog.Logger, store *postg
 	// Initialize authenticator
 	authConfig := provideAuthConfig()
 	authenticator := auth.NewAuthenticator(ctx, store, authConfig)
-	cleanups = append(cleanups, func() {
+	cleanup := func() {
 		authenticator.Wait()
-	})
+	}
 
 	// Initialize HTTP handler and middleware
 	handler := httpHandler.NewServer(todoService)
