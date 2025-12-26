@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseDuration_ISO8601(t *testing.T) {
+func TestNewDuration_Valid(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -28,117 +28,57 @@ func TestParseDuration_ISO8601(t *testing.T) {
 		{"fractional seconds", "PT10.5S", 10*time.Second + 500*time.Millisecond},
 
 		// Edge cases
-		{"zero duration", "PT0S", 0},
+		{"zero seconds", "PT0S", 0},
 		{"large values", "PT24H", 24 * time.Hour},
+
+		// Date portion skipped (only time used)
+		{"date and time", "P1DT2H", 2 * time.Hour},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := ParseDuration(tc.input)
+			d, err := NewDuration(tc.input)
 			require.NoError(t, err)
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, tc.expected, d.Value())
 		})
 	}
 }
 
-func TestParseDuration_GoFormat(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected time.Duration
-	}{
-		{"minutes only", "10m", 10 * time.Minute},
-		{"hours only", "2h", 2 * time.Hour},
-		{"seconds only", "30s", 30 * time.Second},
-		{"hours and minutes", "1h30m", 1*time.Hour + 30*time.Minute},
-		{"complex", "2h30m15s", 2*time.Hour + 30*time.Minute + 15*time.Second},
-		{"milliseconds", "500ms", 500 * time.Millisecond},
-		{"microseconds", "100us", 100 * time.Microsecond},
-		{"nanoseconds", "1000ns", 1000 * time.Nanosecond},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := ParseDuration(tc.input)
-			require.NoError(t, err)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
-func TestParseDuration_Errors(t *testing.T) {
+func TestNewDuration_Errors(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 	}{
+		// Empty/invalid
 		{"empty string", ""},
-		{"invalid format", "invalid"},
+		{"random text", "hello"},
 		{"just P", "P"},
+
+		// Go format NOT supported
+		{"go format minutes", "10m"},
+		{"go format hours", "2h"},
+		{"go format complex", "1h30m"},
+		{"go format milliseconds", "500ms"},
+
+		// Invalid ISO 8601
+		{"no P prefix", "T10M"},
 		{"date only (no T)", "P1D"},
-		{"missing number", "PTM"},
+		{"date only year", "P1Y"},
+		{"empty after PT", "PT"},
+		{"missing number before unit", "PTM"},
 		{"trailing number", "PT10"},
 		{"unknown unit", "PT10X"},
-		{"random text", "hello"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseDuration(tc.input)
+			_, err := NewDuration(tc.input)
 			assert.Error(t, err)
 		})
 	}
 }
 
-func TestParseISO8601Duration(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected time.Duration
-		wantErr  bool
-	}{
-		// Valid formats
-		{"basic minutes", "PT10M", 10 * time.Minute, false},
-		{"basic hours", "PT2H", 2 * time.Hour, false},
-		{"basic seconds", "PT45S", 45 * time.Second, false},
-		{"combined HMS", "PT1H30M45S", 1*time.Hour + 30*time.Minute + 45*time.Second, false},
-		{"combined HM", "PT2H15M", 2*time.Hour + 15*time.Minute, false},
-		{"combined MS", "PT15M30S", 15*time.Minute + 30*time.Second, false},
-
-		// Fractional values
-		{"fractional hours", "PT0.5H", 30 * time.Minute, false},
-		{"fractional minutes", "PT1.5M", 90 * time.Second, false},
-		{"fractional seconds", "PT0.001S", time.Millisecond, false},
-
-		// With date portion (skipped)
-		{"date and time", "P1DT2H", 2 * time.Hour, false},
-
-		// Edge case: PT with nothing after = 0 duration (valid)
-		{"empty after PT", "PT", 0, false},
-
-		// Invalid formats
-		{"not ISO format", "10m", 0, true},
-		{"no P prefix", "T10M", 0, true},
-		{"date only", "P1D", 0, true},
-		{"P1Y date", "P1Y", 0, true},
-		{"missing number before unit", "PTH", 0, true},
-		{"trailing number", "PT10", 0, true},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := parseISO8601Duration(tc.input)
-			if tc.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tc.expected, result)
-			}
-		})
-	}
-}
-
-func TestParseDuration_RealWorldExamples(t *testing.T) {
-	// Common durations users might enter
+func TestNewDuration_RealWorldExamples(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -156,9 +96,43 @@ func TestParseDuration_RealWorldExamples(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := ParseDuration(tc.input)
+			d, err := NewDuration(tc.input)
 			require.NoError(t, err)
-			assert.Equal(t, tc.expected, result)
+			assert.Equal(t, tc.expected, d.Value())
 		})
 	}
+}
+
+func TestDuration_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"zero", "PT0S", "PT0S"},
+		{"hours only", "PT2H", "PT2H"},
+		{"minutes only", "PT30M", "PT30M"},
+		{"seconds only", "PT45S", "PT45S"},
+		{"hours and minutes", "PT1H30M", "PT1H30M"},
+		{"all components", "PT2H30M15S", "PT2H30M15S"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := NewDuration(tc.input)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, d.String())
+		})
+	}
+}
+
+func TestDuration_ValueReturnsUnderlyingDuration(t *testing.T) {
+	d, err := NewDuration("PT1H30M")
+	require.NoError(t, err)
+
+	expected := 1*time.Hour + 30*time.Minute
+	assert.Equal(t, expected, d.Value())
+
+	// Verify it's a proper time.Duration
+	assert.Equal(t, "1h30m0s", d.Value().String())
 }

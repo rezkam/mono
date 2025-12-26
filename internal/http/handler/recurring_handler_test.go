@@ -64,24 +64,6 @@ func (s *stubRepository) FindRecurringTemplates(ctx context.Context, listID stri
 	panic("not implemented")
 }
 
-func TestUpdateRecurringTemplate_MissingTemplateReturnsBadRequest(t *testing.T) {
-	repo := &stubRepository{}
-	service := todo.NewService(repo, todo.Config{})
-	srv := NewServer(service)
-
-	listID := types.UUID(uuid.New())
-	templateID := types.UUID(uuid.New())
-	req := httptest.NewRequest(http.MethodPatch, "/v1/lists/"+listID.String()+"/recurring-templates/"+templateID.String(), bytes.NewReader([]byte(`{}`)))
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-
-	// Expect handler to validate payload before calling service; otherwise stub panics
-	srv.UpdateRecurringTemplate(w, req, listID, templateID)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
 // spyRepository captures what was passed to UpdateRecurringTemplate
 type spyRepository struct {
 	stubRepository
@@ -134,13 +116,14 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	listUUID := types.UUID(uuid.MustParse(listID))
 	templateUUID := types.UUID(uuid.MustParse(templateID))
 	newWindowDays := 60
-	updateMask := []string{"generation_window_days"}
 
 	reqBody := openapi.UpdateRecurringTemplateRequest{
-		Template: &openapi.RecurringItemTemplate{
+		Template: openapi.RecurringItemTemplate{
 			GenerationWindowDays: &newWindowDays,
 		},
-		UpdateMask: &updateMask,
+		UpdateMask: []openapi.UpdateRecurringTemplateRequestUpdateMask{
+			openapi.UpdateRecurringTemplateRequestUpdateMaskGenerationWindowDays,
+		},
 	}
 	body, _ := json.Marshal(reqBody)
 

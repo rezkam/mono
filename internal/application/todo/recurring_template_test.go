@@ -140,12 +140,20 @@ func TestCreateRecurringTemplate_AcceptsValidRecurrencePatterns(t *testing.T) {
 // TestUpdateRecurringTemplate_RejectsInvalidRecurrencePattern tests that
 // UpdateRecurringTemplate validates recurrence_pattern when it's being updated.
 func TestUpdateRecurringTemplate_RejectsInvalidRecurrencePattern(t *testing.T) {
-	repo := &mockRecurringRepo{}
+	repo := &mockRecurringRepo{
+		findTemplateFn: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+			return &domain.RecurringTemplate{
+				ID:     id,
+				ListID: "list-123",
+			}, nil
+		},
+	}
 	service := NewService(repo, Config{})
 
 	invalidPattern := domain.RecurrencePattern("invalid-pattern")
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID:        "template-123",
+		ListID:            "list-123", // Must match template's list for ownership check
 		UpdateMask:        []string{"recurrence_pattern"},
 		RecurrencePattern: &invalidPattern,
 	}
@@ -262,6 +270,9 @@ func TestUpdateList_SkipsValidationWhenTitleNotInMask(t *testing.T) {
 // validates empty titles instead of silently skipping validation.
 func TestUpdateRecurringTemplate_RejectsEmptyTitle(t *testing.T) {
 	repo := &mockRecurringRepo{
+		findTemplateFn: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+			return &domain.RecurringTemplate{ID: id, ListID: "list-123"}, nil
+		},
 		updateTemplateFn: func(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 			t.Error("repository should not be called when validation fails")
 			return nil, nil
@@ -271,6 +282,7 @@ func TestUpdateRecurringTemplate_RejectsEmptyTitle(t *testing.T) {
 
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: "template-123",
+		ListID:     "list-123",
 		UpdateMask: []string{"title"},
 		Title:      ptr.To(""), // Empty string should be rejected
 	}
@@ -285,6 +297,9 @@ func TestUpdateRecurringTemplate_RejectsEmptyTitle(t *testing.T) {
 // with whitespace-only titles are rejected.
 func TestUpdateRecurringTemplate_RejectsWhitespaceOnlyTitle(t *testing.T) {
 	repo := &mockRecurringRepo{
+		findTemplateFn: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+			return &domain.RecurringTemplate{ID: id, ListID: "list-123"}, nil
+		},
 		updateTemplateFn: func(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 			t.Error("repository should not be called when validation fails")
 			return nil, nil
@@ -294,6 +309,7 @@ func TestUpdateRecurringTemplate_RejectsWhitespaceOnlyTitle(t *testing.T) {
 
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: "template-123",
+		ListID:     "list-123",
 		UpdateMask: []string{"title"},
 		Title:      ptr.To("   "), // Whitespace only should be rejected
 	}
@@ -308,6 +324,9 @@ func TestUpdateRecurringTemplate_RejectsWhitespaceOnlyTitle(t *testing.T) {
 func TestUpdateRecurringTemplate_AcceptsValidTitle(t *testing.T) {
 	var capturedTitle string
 	repo := &mockRecurringRepo{
+		findTemplateFn: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+			return &domain.RecurringTemplate{ID: id, ListID: "list-123"}, nil
+		},
 		updateTemplateFn: func(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 			capturedTitle = *params.Title
 			return &domain.RecurringTemplate{
@@ -320,6 +339,7 @@ func TestUpdateRecurringTemplate_AcceptsValidTitle(t *testing.T) {
 
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: "template-123",
+		ListID:     "list-123",
 		UpdateMask: []string{"title"},
 		Title:      ptr.To("Valid Template Title"),
 	}
@@ -343,6 +363,7 @@ func TestUpdateRecurringTemplate_ValidatesMultipleFields(t *testing.T) {
 			name: "empty title with valid pattern",
 			params: domain.UpdateRecurringTemplateParams{
 				TemplateID:        "template-123",
+				ListID:            "list-123",
 				UpdateMask:        []string{"title", "recurrence_pattern"},
 				Title:             ptr.To(""),
 				RecurrencePattern: ptr.To(domain.RecurrenceDaily),
@@ -353,6 +374,7 @@ func TestUpdateRecurringTemplate_ValidatesMultipleFields(t *testing.T) {
 			name: "valid title with invalid pattern",
 			params: domain.UpdateRecurringTemplateParams{
 				TemplateID:        "template-123",
+				ListID:            "list-123",
 				UpdateMask:        []string{"title", "recurrence_pattern"},
 				Title:             ptr.To("Valid Title"),
 				RecurrencePattern: ptr.To(domain.RecurrencePattern("invalid")),
@@ -364,6 +386,9 @@ func TestUpdateRecurringTemplate_ValidatesMultipleFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockRecurringRepo{
+				findTemplateFn: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+					return &domain.RecurringTemplate{ID: id, ListID: "list-123"}, nil
+				},
 				updateTemplateFn: func(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 					t.Error("repository should not be called when validation fails")
 					return nil, nil

@@ -256,6 +256,12 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 		}
 	}
 
+	// Build mask set for validation
+	maskSet := make(map[string]bool)
+	for _, field := range params.UpdateMask {
+		maskSet[field] = true
+	}
+
 	// Validate title if being updated
 	if params.Title != nil {
 		title, err := domain.NewTitle(*params.Title)
@@ -266,7 +272,11 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 		params.Title = &titleStr
 	}
 
-	// Validate status if being updated
+	// Validate status - required field cannot be set to NULL
+	// If status is in update_mask, a value must be provided
+	if maskSet["status"] && params.Status == nil {
+		return nil, domain.ErrStatusRequired
+	}
 	if params.Status != nil {
 		if _, err := domain.NewTaskStatus(string(*params.Status)); err != nil {
 			return nil, err
@@ -377,14 +387,20 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 }
 
 // GetRecurringTemplate retrieves a recurring template by ID.
-func (s *Service) GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-	if id == "" {
+// Validates that the template belongs to the specified list.
+func (s *Service) GetRecurringTemplate(ctx context.Context, listID, templateID string) (*domain.RecurringTemplate, error) {
+	if templateID == "" {
 		return nil, domain.ErrTemplateNotFound
 	}
 
-	template, err := s.repo.FindRecurringTemplate(ctx, id)
+	template, err := s.repo.FindRecurringTemplate(ctx, templateID)
 	if err != nil {
 		return nil, err // Repository returns domain errors
+	}
+
+	// Verify ownership - return NotFound to avoid leaking template existence
+	if template.ListID != listID {
+		return nil, domain.ErrTemplateNotFound
 	}
 
 	return template, nil
@@ -392,12 +408,32 @@ func (s *Service) GetRecurringTemplate(ctx context.Context, id string) (*domain.
 
 // UpdateRecurringTemplate updates a recurring template using field mask.
 // Only updates fields specified in UpdateMask.
+// Validates that the template belongs to the specified list.
 func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	if params.TemplateID == "" {
 		return nil, domain.ErrTemplateNotFound
 	}
 
-	// Validate title if being updated
+	// Verify ownership before update
+	existing, err := s.repo.FindRecurringTemplate(ctx, params.TemplateID)
+	if err != nil {
+		return nil, err
+	}
+	if existing.ListID != params.ListID {
+		return nil, domain.ErrTemplateNotFound
+	}
+
+	// Build mask set for validation
+	maskSet := make(map[string]bool)
+	for _, field := range params.UpdateMask {
+		maskSet[field] = true
+	}
+
+	// Validate title - required field cannot be set to NULL
+	// If title is in update_mask, a value must be provided
+	if maskSet["title"] && params.Title == nil {
+		return nil, domain.ErrTitleRequired
+	}
 	if params.Title != nil {
 		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
@@ -406,7 +442,11 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 		params.Title = ptr.To(title.String())
 	}
 
-	// Validate recurrence pattern if being updated
+	// Validate recurrence pattern - required field cannot be set to NULL
+	// If recurrence_pattern is in update_mask, a value must be provided
+	if maskSet["recurrence_pattern"] && params.RecurrencePattern == nil {
+		return nil, domain.ErrRecurrencePatternRequired
+	}
 	if params.RecurrencePattern != nil {
 		pattern, err := domain.NewRecurrencePattern(string(*params.RecurrencePattern))
 		if err != nil {
@@ -426,12 +466,22 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 }
 
 // DeleteRecurringTemplate deletes a recurring template.
-func (s *Service) DeleteRecurringTemplate(ctx context.Context, id string) error {
-	if id == "" {
+// Validates that the template belongs to the specified list.
+func (s *Service) DeleteRecurringTemplate(ctx context.Context, listID, templateID string) error {
+	if templateID == "" {
 		return domain.ErrTemplateNotFound
 	}
 
-	if err := s.repo.DeleteRecurringTemplate(ctx, id); err != nil {
+	// Verify ownership before delete
+	existing, err := s.repo.FindRecurringTemplate(ctx, templateID)
+	if err != nil {
+		return err
+	}
+	if existing.ListID != listID {
+		return domain.ErrTemplateNotFound
+	}
+
+	if err := s.repo.DeleteRecurringTemplate(ctx, templateID); err != nil {
 		return err // Repository returns domain errors
 	}
 

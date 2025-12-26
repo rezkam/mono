@@ -17,6 +17,8 @@ var (
 	// Validation errors
 	ErrTitleRequired                 = errors.New("title is required")
 	ErrTitleTooLong                  = errors.New("title must be 255 characters or less")
+	ErrStatusRequired                = errors.New("status value is required when status is in update_mask")
+	ErrRecurrencePatternRequired     = errors.New("recurrence_pattern value is required when recurrence_pattern is in update_mask")
 	ErrInvalidTaskStatus             = errors.New("invalid task status")
 	ErrInvalidTaskPriority           = errors.New("invalid task priority")
 	ErrInvalidRecurrencePattern      = errors.New("invalid recurrence pattern")

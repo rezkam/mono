@@ -75,6 +75,9 @@ func TestNotFoundErrors_UpdateNonexistentItem_ReturnsItemNotFound(t *testing.T) 
 		Item: openapi.TodoItem{
 			Title: ptrString("Updated Title"),
 		},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{
+			openapi.UpdateItemRequestUpdateMaskTitle,
+		},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -132,8 +135,11 @@ func TestNotFoundErrors_UpdateNonexistentRecurringTemplate_ReturnsTemplateNotFou
 	nonexistentTemplateID := uuid.Must(uuid.NewV7()).String()
 
 	reqBody := openapi.UpdateRecurringTemplateRequest{
-		Template: &openapi.RecurringItemTemplate{
+		Template: openapi.RecurringItemTemplate{
 			Title: ptrString("Updated Title"),
+		},
+		UpdateMask: []openapi.UpdateRecurringTemplateRequestUpdateMask{
+			openapi.UpdateRecurringTemplateRequestUpdateMaskTitle,
 		},
 	}
 
