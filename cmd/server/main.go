@@ -44,8 +44,21 @@ func run() error {
 	// Set as default so slog.Info(), slog.Error() etc. work globally without passing logger
 	slog.SetDefault(logger)
 
-	// Initialize HTTP server (now errors can be properly logged)
-	server, cleanup, err := initializeHTTPServer(ctx, logger)
+	// Initialize database
+	dbConfig := provideDBConfig()
+	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
+	if err != nil {
+		slog.Error("failed to initialize database", "error", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			slog.Error("failed to close database", "error", err)
+		}
+	}()
+
+	// Initialize HTTP server
+	server, cleanup, err := initializeHTTPServer(ctx, logger, store)
 	if err != nil {
 		slog.Error("failed to initialize server", "error", err)
 		return fmt.Errorf("failed to initialize server: %w", err)
@@ -81,9 +94,9 @@ func run() error {
 	}
 }
 
-// initializeHTTPServer wires all dependencies together for the HTTP server.
+// initializeHTTPServer wires application services and HTTP components.
 // Returns the server, a cleanup function, and any initialization error.
-func initializeHTTPServer(ctx context.Context, logger *slog.Logger) (*HTTPServer, func(), error) {
+func initializeHTTPServer(ctx context.Context, logger *slog.Logger, store *postgres.Store) (*HTTPServer, func(), error) {
 	var cleanups []func()
 	cleanup := func() {
 		// Execute cleanups in reverse order (LIFO)
@@ -91,19 +104,6 @@ func initializeHTTPServer(ctx context.Context, logger *slog.Logger) (*HTTPServer
 			cleanups[i]()
 		}
 	}
-
-	// Initialize database store
-	dbConfig := provideDBConfig()
-	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("failed to initialize database: %w", err)
-	}
-	cleanups = append(cleanups, func() {
-		if err := store.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close database: %v\n", err)
-		}
-	})
 
 	// Initialize todo service
 	todoConfig := provideTodoConfig()
