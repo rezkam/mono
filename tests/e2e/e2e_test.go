@@ -314,14 +314,18 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 			"title": "Updated Daily Standup",
 			"recurrence_pattern": "weekdays",
 			"tags": ["meeting", "team"]
-		}
+		},
+		"update_mask": ["title", "recurrence_pattern", "tags"]
 	}`, templateID, listID)
 
 	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), updateTemplateJSON)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected 200, got %d. Response: %s", resp.StatusCode, string(body))
+	}
 
 	var updateTemplateResp map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&updateTemplateResp)

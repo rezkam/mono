@@ -166,7 +166,7 @@ func TestAuthenticator_Shutdown_WithPendingUpdates(t *testing.T) {
 	for i := 0; i < numUpdates; i++ {
 		auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "key-" + string(rune('0'+i)),
-			timestamp: time.Now().UTC(),
+			timestamp: time.Now().UTC().UTC(),
 		}
 	}
 
@@ -206,7 +206,7 @@ func TestAuthenticator_Shutdown_DrainsQueueBeforeReturning(t *testing.T) {
 	for i := 0; i < numUpdates; i++ {
 		auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "key-drain-" + string(rune('a'+i%26)),
-			timestamp: time.Now().UTC(),
+			timestamp: time.Now().UTC().UTC(),
 		}
 	}
 
@@ -245,7 +245,7 @@ func TestAuthenticator_Shutdown_Timeout_CancelsOperations(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "slow-key-" + string(rune('0'+i%10)),
-			timestamp: time.Now().UTC(),
+			timestamp: time.Now().UTC().UTC(),
 		}
 	}
 
@@ -253,7 +253,7 @@ func TestAuthenticator_Shutdown_Timeout_CancelsOperations(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), shortShutdownTimeout)
 	defer cancel()
 
-	start := time.Now()
+	start := time.Now().UTC()
 	err := auth.Shutdown(ctx)
 	elapsed := time.Since(start)
 
@@ -288,7 +288,7 @@ func TestAuthenticator_Shutdown_CancelsInFlightOperations(t *testing.T) {
 	// Queue one update
 	auth.lastUsedUpdates <- lastUsedUpdate{
 		keyID:     "in-flight-key",
-		timestamp: time.Now().UTC(),
+		timestamp: time.Now().UTC().UTC(),
 	}
 
 	// Wait for operation to start
@@ -338,7 +338,7 @@ func TestAuthenticator_Shutdown_OperationTimeout_Respected(t *testing.T) {
 	// Queue update
 	auth.lastUsedUpdates <- lastUsedUpdate{
 		keyID:     "timeout-key",
-		timestamp: time.Now().UTC(),
+		timestamp: time.Now().UTC().UTC(),
 	}
 
 	// Give time for operation to timeout
@@ -381,7 +381,7 @@ func TestAuthenticator_Shutdown_Idempotent(t *testing.T) {
 	}
 
 	// Second shutdown should return immediately (sync.Once)
-	start := time.Now()
+	start := time.Now().UTC()
 	err2 := auth.Shutdown(ctx)
 	elapsed := time.Since(start)
 
@@ -522,7 +522,7 @@ func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 				select {
 				case auth.lastUsedUpdates <- lastUsedUpdate{
 					keyID:     "concurrent-key",
-					timestamp: time.Now().UTC(),
+					timestamp: time.Now().UTC().UTC(),
 				}:
 				default:
 					// Queue full, skip (this is expected behavior)
@@ -577,7 +577,7 @@ func TestAuthenticator_ShutdownDuringQueueing(t *testing.T) {
 				select {
 				case auth.lastUsedUpdates <- lastUsedUpdate{
 					keyID:     "queue-during-shutdown",
-					timestamp: time.Now().UTC(),
+					timestamp: time.Now().UTC().UTC(),
 				}:
 				default:
 					// Queue full
@@ -633,7 +633,7 @@ func TestAuthenticator_ConcurrentQueueingDuringShutdown(t *testing.T) {
 				select {
 				case auth.lastUsedUpdates <- lastUsedUpdate{
 					keyID:     "concurrent-queue",
-					timestamp: time.Now().UTC(),
+					timestamp: time.Now().UTC().UTC(),
 				}:
 				default:
 					// Queue full - expected during heavy load
@@ -713,7 +713,7 @@ func TestAuthenticator_ShutdownTimeout_StillCleansUpResources(t *testing.T) {
 	// Queue update that will be very slow
 	auth.lastUsedUpdates <- lastUsedUpdate{
 		keyID:     "very-slow",
-		timestamp: time.Now().UTC(),
+		timestamp: time.Now().UTC().UTC(),
 	}
 
 	// Wait for operation to start
@@ -811,7 +811,7 @@ func TestAuthenticator_QueueFull_DropsUpdate(t *testing.T) {
 		select {
 		case auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "fill-queue",
-			timestamp: time.Now().UTC(),
+			timestamp: time.Now().UTC().UTC(),
 		}:
 			// Queued
 		default:
@@ -844,7 +844,7 @@ func TestAuthenticator_ShutdownWithCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	start := time.Now()
+	start := time.Now().UTC()
 	err := auth.Shutdown(ctx)
 	elapsed := time.Since(start)
 
@@ -882,7 +882,7 @@ func TestAuthenticator_StressTest_ManyShutdownsAndRecreations(t *testing.T) {
 		for j := 0; j < 5; j++ {
 			auth.lastUsedUpdates <- lastUsedUpdate{
 				keyID:     "stress-key",
-				timestamp: time.Now().UTC(),
+				timestamp: time.Now().UTC().UTC(),
 			}
 		}
 
@@ -913,7 +913,7 @@ func TestAuthenticator_StressTest_RapidFireUpdates(t *testing.T) {
 	})
 
 	const numUpdates = 50000
-	start := time.Now()
+	start := time.Now().UTC()
 
 	// Rapid fire updates
 	queued := 0
@@ -921,7 +921,7 @@ func TestAuthenticator_StressTest_RapidFireUpdates(t *testing.T) {
 		select {
 		case auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "rapid-fire",
-			timestamp: time.Now().UTC(),
+			timestamp: time.Now().UTC().UTC(),
 		}:
 			queued++
 		default:
@@ -978,7 +978,7 @@ func BenchmarkAuthenticator_Shutdown_WithUpdates(b *testing.B) {
 		for i := 0; i < 5; i++ {
 			auth.lastUsedUpdates <- lastUsedUpdate{
 				keyID:     "bench-key",
-				timestamp: time.Now().UTC(),
+				timestamp: time.Now().UTC().UTC(),
 			}
 		}
 
@@ -1001,7 +1001,7 @@ func BenchmarkAuthenticator_QueueUpdate(b *testing.B) {
 
 	update := lastUsedUpdate{
 		keyID:     "bench-key",
-		timestamp: time.Now().UTC(),
+		timestamp: time.Now().UTC().UTC(),
 	}
 
 	b.ResetTimer()

@@ -197,7 +197,12 @@ func (a *Authenticator) Shutdown(ctx context.Context) error {
 
 // ValidateAPIKey validates an API key and returns the key information if valid.
 // Returns domain.ErrUnauthorized if the key is invalid, expired, or not found.
-// This is the public method for HTTP middleware and other transport layers.
+//
+// Security: This implementation is resistant to timing attacks that could reveal
+// which short tokens exist in the database. It uses WithDataIndependentTiming
+// to enable hardware-level timing guarantees and always computes the hash
+// (even for non-existent keys) to maintain constant timing regardless of whether
+// the short token exists.
 func (a *Authenticator) ValidateAPIKey(ctx context.Context, apiKey string) (*domain.APIKey, error) {
 	// Parse API key into components
 	keyParts, err := keygen.ParseAPIKey(apiKey)
@@ -214,22 +219,52 @@ func (a *Authenticator) ValidateAPIKey(ctx context.Context, apiKey string) (*dom
 		defer cancel()
 	}
 
-	key, err := a.repo.FindByShortToken(opCtx, keyParts.ShortToken)
-	if err != nil {
-		if !errors.Is(err, domain.ErrNotFound) {
-			slog.ErrorContext(ctx, "Failed to look up API key", "error", err)
+	// Lookup short token in database
+	key, lookupErr := a.repo.FindByShortToken(opCtx, keyParts.ShortToken)
+
+	// Perform all cryptographic validation in constant-time region
+	// This prevents timing attacks by ensuring operations take the same time
+	// regardless of whether the key exists or the comparison succeeds.
+	var isValid, isExpired int
+	subtle.WithDataIndependentTiming(func() {
+		// CRITICAL: Always compute hash, even if key doesn't exist
+		// This prevents timing attacks that distinguish between:
+		//   - Non-existent keys (fast - no hash computation)
+		//   - Existing keys (slow - hash computation)
+		// BLAKE2b timing depends on input length, not content.
+		// All API key secrets are 43 chars, so timing is constant.
+		providedHash := keygen.HashSecret(keyParts.LongSecret)
+
+		// Select hash to compare against
+		var storedHash string
+		if key != nil && lookupErr == nil {
+			storedHash = key.LongSecretHash
+		} else {
+			// Dummy hash for non-existent keys (64 hex chars for BLAKE2b-256)
+			// This ensures constant-time comparison path is taken even when key doesn't exist
+			storedHash = "0000000000000000000000000000000000000000000000000000000000000000"
 		}
-		return nil, domain.ErrUnauthorized
+
+		// Constant-time comparison (required even inside WithDataIndependentTiming)
+		// WithDataIndependentTiming provides hardware-level protection,
+		// but you still need algorithm-level constant-time operations.
+		isValid = subtle.ConstantTimeCompare([]byte(storedHash), []byte(providedHash))
+
+		// Check expiration in constant-time region
+		if key != nil && key.ExpiresAt != nil {
+			if key.ExpiresAt.Before(time.Now().UTC()) {
+				isExpired = 1
+			}
+		}
+	})
+
+	// Log lookup errors (outside timing-critical region)
+	if lookupErr != nil && !errors.Is(lookupErr, domain.ErrNotFound) {
+		slog.ErrorContext(ctx, "Failed to look up API key", "error", lookupErr)
 	}
 
-	// Verify the long secret using BLAKE2b-256 with constant-time comparison
-	providedHash := keygen.HashSecret(keyParts.LongSecret)
-	if subtle.ConstantTimeCompare([]byte(key.LongSecretHash), []byte(providedHash)) != 1 {
-		return nil, domain.ErrUnauthorized
-	}
-
-	// Check expiration
-	if key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now().UTC()) {
+	// Check all failure conditions
+	if lookupErr != nil || isValid != 1 || isExpired == 1 {
 		return nil, domain.ErrUnauthorized
 	}
 
