@@ -32,7 +32,7 @@ func (s *Store) FindByShortToken(ctx context.Context, shortToken string) (*domai
 func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time.Time) error {
 	id, err := uuid.Parse(keyID)
 	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.UpdateAPIKeyLastUsedParams{
@@ -53,7 +53,7 @@ func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time
 func (s *Store) Create(ctx context.Context, key *domain.APIKey) error {
 	id, err := uuid.Parse(key.ID)
 	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.CreateAPIKeyParams{

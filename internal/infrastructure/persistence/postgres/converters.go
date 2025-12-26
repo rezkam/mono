@@ -119,7 +119,7 @@ func dbAPIKeyToDomain(dbKey sqlcgen.ApiKey) *domain.APIKey {
 func domainTodoListToDB(list *domain.TodoList) (pgtype.UUID, string, pgtype.Timestamptz, error) {
 	id, err := uuid.Parse(list.ID)
 	if err != nil {
-		return pgtype.UUID{}, "", pgtype.Timestamptz{}, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return pgtype.UUID{}, "", pgtype.Timestamptz{}, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	return uuidToPgtype(id), list.Title, timeToPgtype(list.CreateTime), nil
@@ -262,12 +262,12 @@ func dbListTasksRowToDomain(dbItem sqlcgen.ListTasksWithFiltersRow) (domain.Todo
 func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTodoItemParams, error) {
 	itemID, err := uuid.Parse(item.ID)
 	if err != nil {
-		return sqlcgen.CreateTodoItemParams{}, fmt.Errorf("%w: item %v", domain.ErrInvalidID, err)
+		return sqlcgen.CreateTodoItemParams{}, fmt.Errorf("%w: item %w", domain.ErrInvalidID, err)
 	}
 
 	listUUID, err := uuid.Parse(listID)
 	if err != nil {
-		return sqlcgen.CreateTodoItemParams{}, fmt.Errorf("%w: list %v", domain.ErrInvalidID, err)
+		return sqlcgen.CreateTodoItemParams{}, fmt.Errorf("%w: list %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.CreateTodoItemParams{
@@ -310,7 +310,7 @@ func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTod
 	if item.RecurringTemplateID != nil {
 		templateUUID, err := uuid.Parse(*item.RecurringTemplateID)
 		if err != nil {
-			return params, fmt.Errorf("%w: recurring template %v", domain.ErrInvalidID, err)
+			return params, fmt.Errorf("%w: recurring template %w", domain.ErrInvalidID, err)
 		}
 		params.RecurringTemplateID = uuidToPgtype(templateUUID)
 	}
@@ -380,12 +380,12 @@ func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*dom
 func domainRecurringTemplateToDB(template *domain.RecurringTemplate) (sqlcgen.CreateRecurringTemplateParams, error) {
 	templateID, err := uuid.Parse(template.ID)
 	if err != nil {
-		return sqlcgen.CreateRecurringTemplateParams{}, fmt.Errorf("%w: template %v", domain.ErrInvalidID, err)
+		return sqlcgen.CreateRecurringTemplateParams{}, fmt.Errorf("%w: template %w", domain.ErrInvalidID, err)
 	}
 
 	listID, err := uuid.Parse(template.ListID)
 	if err != nil {
-		return sqlcgen.CreateRecurringTemplateParams{}, fmt.Errorf("%w: list %v", domain.ErrInvalidID, err)
+		return sqlcgen.CreateRecurringTemplateParams{}, fmt.Errorf("%w: list %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.CreateRecurringTemplateParams{

@@ -40,7 +40,7 @@ func (s *Store) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*dom
 func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	templateUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, uuidToPgtype(templateUUID))
@@ -63,7 +63,7 @@ func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.Re
 func (s *Store) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id string, until time.Time) error {
 	templateUUID, err := uuid.Parse(id)
 	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.UpdateRecurringTemplateGenerationWindowParams{
@@ -87,7 +87,7 @@ func (s *Store) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id 
 func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
 	templateUUID, err := uuid.Parse(templateID)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return "", fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	jobID, err := uuid.NewV7()
@@ -143,7 +143,7 @@ func (s *Store) ClaimNextGenerationJob(ctx context.Context) (string, error) {
 func (s *Store) GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error) {
 	jobUUID, err := uuid.Parse(id)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	dbJob, err := s.queries.GetGenerationJob(ctx, uuidToPgtype(jobUUID))
@@ -161,7 +161,7 @@ func (s *Store) GetGenerationJob(ctx context.Context, id string) (*domain.Genera
 func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string, errorMessage *string) error {
 	jobUUID, err := uuid.Parse(id)
 	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.UpdateGenerationJobStatusParams{
@@ -185,7 +185,7 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
 	templateUUID, err := uuid.Parse(templateID)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", domain.ErrInvalidID, err)
+		return false, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	hasJob, err := s.queries.HasPendingOrRunningJob(ctx, uuidToPgtype(templateUUID))
