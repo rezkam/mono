@@ -29,24 +29,41 @@ func (s *Store) FindByShortToken(ctx context.Context, shortToken string) (*domai
 }
 
 // UpdateLastUsed updates the last used timestamp for an API key.
+// Only updates if the new timestamp is later than the current value (or current value is NULL).
+// Returns success (nil) if timestamp is not later (idempotent behavior).
+// Returns ErrNotFound if the API key doesn't exist.
 func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time.Time) error {
 	id, err := uuid.Parse(keyID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
+	pgID := uuidToPgtype(id)
 	params := sqlcgen.UpdateAPIKeyLastUsedParams{
-		ID:         uuidToPgtype(id),
+		ID:         pgID,
 		LastUsedAt: timeToPgtype(timestamp),
 	}
 
-	// Single-query pattern: check rowsAffected to detect revoked/deleted API key
 	rowsAffected, err := s.queries.UpdateAPIKeyLastUsed(ctx, params)
 	if err != nil {
 		return fmt.Errorf("failed to update last used: %w", err)
 	}
 
-	return checkRowsAffected(rowsAffected, "API key", keyID)
+	if rowsAffected == 0 {
+		// Either key doesn't exist OR timestamp wasn't later
+		// Check existence to distinguish these cases
+		exists, err := s.queries.CheckAPIKeyExists(ctx, pgID)
+		if err != nil {
+			return fmt.Errorf("failed to check key existence: %w", err)
+		}
+		if !exists {
+			return fmt.Errorf("%w: API key", domain.ErrNotFound)
+		}
+		// Key exists, timestamp just wasn't later - idempotent success
+		return nil
+	}
+
+	return nil
 }
 
 // Create creates a new API key in storage.

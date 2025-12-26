@@ -76,7 +76,7 @@ func run() error {
 	// Wait for shutdown signal or server error
 	select {
 	case <-ctx.Done():
-		fmt.Println("\nReceived shutdown signal")
+		slog.Info("Shutdown signal received")
 
 		// Graceful shutdown with configured timeout
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), server.ShutdownTimeout())
@@ -86,7 +86,7 @@ func run() error {
 			return fmt.Errorf("shutdown error: %w", err)
 		}
 
-		fmt.Println("Server stopped gracefully")
+		slog.Info("Server stopped gracefully")
 		return nil
 
 	case err := <-serverErr:

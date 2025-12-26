@@ -7,12 +7,18 @@ SELECT * FROM api_keys
 WHERE short_token = $1 AND is_active = true;
 
 -- name: UpdateAPIKeyLastUsed :execrows
--- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
--- :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
--- Updates last access timestamp with existence detection in single query
+-- Updates last_used_at only if the new timestamp is later than the current value.
+-- Returns 0 rows affected if: (1) key doesn't exist, OR (2) timestamp not later.
+-- Repository uses CheckAPIKeyExists to distinguish these cases.
 UPDATE api_keys
-SET last_used_at = $1
-WHERE id = $2;
+SET last_used_at = $2
+WHERE id = $1
+  AND (last_used_at IS NULL OR last_used_at < $2);
+
+-- name: CheckAPIKeyExists :one
+-- Checks if an API key exists by ID.
+-- Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
+SELECT EXISTS(SELECT 1 FROM api_keys WHERE id = $1);
 
 -- name: DeactivateAPIKey :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected

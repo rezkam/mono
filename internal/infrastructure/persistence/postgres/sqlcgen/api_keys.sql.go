@@ -11,6 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkAPIKeyExists = `-- name: CheckAPIKeyExists :one
+SELECT EXISTS(SELECT 1 FROM api_keys WHERE id = $1)
+`
+
+// Checks if an API key exists by ID.
+// Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
+func (q *Queries) CheckAPIKeyExists(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, checkAPIKeyExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createAPIKey = `-- name: CreateAPIKey :exec
 INSERT INTO api_keys (id, key_type, service, version, short_token, long_secret_hash, name, is_active, created_at, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -126,20 +139,21 @@ func (q *Queries) ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error) {
 
 const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :execrows
 UPDATE api_keys
-SET last_used_at = $1
-WHERE id = $2
+SET last_used_at = $2
+WHERE id = $1
+  AND (last_used_at IS NULL OR last_used_at < $2)
 `
 
 type UpdateAPIKeyLastUsedParams struct {
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 	ID         pgtype.UUID        `json:"id"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
-// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-// Updates last access timestamp with existence detection in single query
+// Updates last_used_at only if the new timestamp is later than the current value.
+// Returns 0 rows affected if: (1) key doesn't exist, OR (2) timestamp not later.
+// Repository uses CheckAPIKeyExists to distinguish these cases.
 func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateAPIKeyLastUsed, arg.LastUsedAt, arg.ID)
+	result, err := q.db.Exec(ctx, updateAPIKeyLastUsed, arg.ID, arg.LastUsedAt)
 	if err != nil {
 		return 0, err
 	}

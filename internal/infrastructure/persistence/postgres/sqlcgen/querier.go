@@ -11,6 +11,9 @@ import (
 )
 
 type Querier interface {
+	// Checks if an API key exists by ID.
+	// Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
+	CheckAPIKeyExists(ctx context.Context, id pgtype.UUID) (bool, error)
 	// Counts total matching items for pagination (used when main query returns empty page).
 	// Uses same WHERE clause as ListTasksWithFilters for consistency.
 	// $2: statuses array (empty array skips filter, OR logic within array)
@@ -140,9 +143,9 @@ type Querier interface {
 	// This query uses LEFT JOIN to ensure lists with zero items still appear with count=0.
 	// The FILTER clause efficiently counts only matching items in a single pass.
 	ListTodoListsWithCounts(ctx context.Context, undoneStatuses []string) ([]ListTodoListsWithCountsRow, error)
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-	// Updates last access timestamp with existence detection in single query
+	// Updates last_used_at only if the new timestamp is later than the current value.
+	// Returns 0 rows affected if: (1) key doesn't exist, OR (2) timestamp not later.
+	// Repository uses CheckAPIKeyExists to distinguish these cases.
 	UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
