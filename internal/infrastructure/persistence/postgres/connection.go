@@ -106,7 +106,7 @@ func runMigrationsWithDSN(ctx context.Context, dsn string) error {
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			slog.Error("Failed to close migration database connection", "error", err)
+			slog.ErrorContext(ctx, "Failed to close migration database connection", "error", err)
 		}
 	}()
 
