@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 
 	// Create services
 	todoService := todo.NewService(store, todo.Config{})
-	authenticator := auth.NewAuthenticator(ctx, store, auth.Config{OperationTimeout: 5 * time.Second})
+	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Generate API key using the standard apikey tool (tests the tool itself)
 	testAPIKey, err = generateAPIKeyWithTool(cfg.StorageDSN)
@@ -90,7 +90,9 @@ func TestMain(m *testing.M) {
 	// Shutdown: cancel context first to signal shutdown, then wait for completion
 	cancel()
 	httpServer.Shutdown(context.Background())
-	authenticator.Wait()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	authenticator.Shutdown(shutdownCtx)
 	os.Exit(code)
 }
 

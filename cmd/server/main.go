@@ -58,7 +58,7 @@ func run() error {
 	}()
 
 	// Initialize HTTP server
-	server, cleanup, err := initializeHTTPServer(ctx, logger, store)
+	server, cleanup, err := initializeHTTPServer(logger, store)
 	if err != nil {
 		slog.Error("failed to initialize server", "error", err)
 		return fmt.Errorf("failed to initialize server: %w", err)
@@ -96,16 +96,21 @@ func run() error {
 
 // initializeHTTPServer wires application services and HTTP components.
 // Returns the server, a cleanup function, and any initialization error.
-func initializeHTTPServer(ctx context.Context, logger *slog.Logger, store *postgres.Store) (*HTTPServer, func(), error) {
+func initializeHTTPServer(logger *slog.Logger, store *postgres.Store) (*HTTPServer, func(), error) {
 	// Initialize todo service
 	todoConfig := provideTodoConfig()
 	todoService := todo.NewService(store, todoConfig)
 
 	// Initialize authenticator
 	authConfig := provideAuthConfig()
-	authenticator := auth.NewAuthenticator(ctx, store, authConfig)
+	authenticator := auth.NewAuthenticator(store, authConfig)
 	cleanup := func() {
-		authenticator.Wait()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := authenticator.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("Authenticator shutdown error", "error", err)
+		}
 	}
 
 	// Initialize HTTP handler and middleware

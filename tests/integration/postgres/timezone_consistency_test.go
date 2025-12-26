@@ -41,12 +41,14 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	})
 
 	// Create HTTP router for presentation layer tests
-	authenticator := auth.NewAuthenticator(ctx, store, auth.Config{OperationTimeout: 5 * time.Second})
+	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Cleanup function - cancel context first to signal shutdown, then wait, then close resources
 	defer func() {
 		cancel()
-		authenticator.Wait()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		authenticator.Shutdown(shutdownCtx)
 		store.Close()
 
 		// Truncate tables for next test

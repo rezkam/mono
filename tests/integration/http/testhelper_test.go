@@ -47,7 +47,7 @@ func SetupTestServer(t *testing.T) *TestServer {
 
 	// Create services
 	todoService := todo.NewService(store, todo.Config{})
-	authenticator := auth.NewAuthenticator(ctx, store, auth.Config{OperationTimeout: 5 * time.Second})
+	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Create handlers and middleware
 	server := handler.NewServer(todoService)
@@ -67,7 +67,9 @@ func SetupTestServer(t *testing.T) *TestServer {
 	// Cleanup function - cancel context first to signal shutdown, then wait for completion
 	cleanup := func() {
 		cancel()
-		authenticator.Wait()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		authenticator.Shutdown(shutdownCtx)
 		// Truncate tables to ensure test isolation
 		_, _ = store.Pool().Exec(context.Background(), "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
 		_ = store.Close()

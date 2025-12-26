@@ -106,6 +106,10 @@ test: ## Run unit tests only (no database required)
 	@echo "Running unit tests..."
 	@go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -v
 
+test-race: ## Run unit tests with race detector
+	@echo "Running unit tests with race detector..."
+	@go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -race -v
+
 bench: ## Run benchmarks (requires MONO_STORAGE_DSN env var)
 	@echo "Running benchmarks..."
 	@if [ -z "$(MONO_STORAGE_DSN)" ]; then \

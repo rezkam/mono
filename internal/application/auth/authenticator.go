@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -34,19 +35,29 @@ type lastUsedUpdate struct {
 // Authenticator handles API key authentication.
 type Authenticator struct {
 	repo             Repository
-	ctx              context.Context // Cancelled on shutdown
 	lastUsedUpdates  chan lastUsedUpdate
 	wg               sync.WaitGroup
 	operationTimeout time.Duration // Timeout for storage operations
+
+	// Shutdown coordination
+	shutdownChan chan struct{} // Closed to signal shutdown (instant notification)
+	shutdownOnce sync.Once     // Ensures Shutdown logic runs exactly once
+
+	// Lifecycle context for cancelling all operations on shutdown.
+	// This is NOT a request-scoped context passed from callers.
+	// It's created internally to manage the authenticator's operation lifecycle.
+	// See: https://go.dev/blog/context-and-structs (acceptable for lifecycle management)
+	opsCtx    context.Context
+	opsCancel context.CancelFunc
 }
 
 // NewAuthenticator creates a new authenticator and starts the background worker
 // for processing last_used_at updates.
-// The ctx parameter should be an application-level context that gets cancelled on shutdown.
+// Call Shutdown(ctx) to stop the authenticator during application shutdown.
 // Applies application defaults for negative config values.
 // Zero OperationTimeout means no timeout (operations wait indefinitely).
 // Zero UpdateQueueSize gets the default (must be > 0 to avoid blocking).
-func NewAuthenticator(ctx context.Context, repo Repository, config Config) *Authenticator {
+func NewAuthenticator(repo Repository, config Config) *Authenticator {
 	// Apply defaults only for negative values
 	// Zero timeout means "no timeout" (wait indefinitely)
 	// Zero queue size is invalid (would block), so use default
@@ -57,11 +68,16 @@ func NewAuthenticator(ctx context.Context, repo Repository, config Config) *Auth
 		config.UpdateQueueSize = DefaultUpdateQueueSize
 	}
 
+	// Create lifecycle context for all operations
+	opsCtx, opsCancel := context.WithCancel(context.Background())
+
 	a := &Authenticator{
 		repo:             repo,
-		ctx:              ctx,
 		lastUsedUpdates:  make(chan lastUsedUpdate, config.UpdateQueueSize),
 		operationTimeout: config.OperationTimeout,
+		opsCtx:           opsCtx,
+		opsCancel:        opsCancel,
+		shutdownChan:     make(chan struct{}),
 	}
 
 	// Start background worker for processing last_used_at updates
@@ -81,44 +97,102 @@ func (a *Authenticator) processLastUsedUpdates() {
 		case update := <-a.lastUsedUpdates:
 			a.processUpdate(update)
 
-		case <-a.ctx.Done():
-			slog.Info("Shutdown requested, draining remaining last_used updates...")
-			for {
-				select {
-				case update := <-a.lastUsedUpdates:
-					a.processUpdate(update)
-				default:
-					slog.Info("Authenticator worker stopped gracefully")
-					return
-				}
+		case <-a.shutdownChan:
+			// Graceful shutdown requested - drain remaining updates
+			a.drainQueue()
+			slog.Info("Authenticator worker stopped")
+			return
+
+		case <-a.opsCtx.Done():
+			// All operations cancelled - exit immediately
+			slog.Info("Authenticator operations cancelled, exiting")
+			return
+		}
+	}
+}
+
+// drainQueue processes remaining updates until queue is empty or shutdown timeout.
+func (a *Authenticator) drainQueue() {
+	slog.Info("Draining remaining last_used updates...")
+
+	for {
+		select {
+		case update := <-a.lastUsedUpdates:
+			a.processUpdate(update)
+
+		case <-a.opsCtx.Done():
+			// Shutdown timeout - stop draining
+			remaining := len(a.lastUsedUpdates)
+			if remaining > 0 {
+				slog.Warn("Shutdown cancelled operations, dropping remaining updates",
+					slog.Int("dropped_count", remaining))
 			}
+			return
+
+		default:
+			// Queue empty
+			return
 		}
 	}
 }
 
 // processUpdate handles a single last_used_at update.
 func (a *Authenticator) processUpdate(update lastUsedUpdate) {
-	ctx := context.Background()
+	// All operations derive from opsCtx (cancellable on shutdown)
+	ctx := a.opsCtx
 	var cancel context.CancelFunc
 	if a.operationTimeout > 0 {
-		ctx, cancel = context.WithTimeout(context.Background(), a.operationTimeout)
+		ctx, cancel = context.WithTimeout(a.opsCtx, a.operationTimeout)
+		defer cancel()
 	}
 
 	if err := a.repo.UpdateLastUsed(ctx, update.keyID, update.timestamp); err != nil {
+		// Don't log if cancelled (shutdown in progress)
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		slog.WarnContext(ctx, "Failed to update API key last_used_at",
 			slog.String("key_id", update.keyID),
 			slog.String("error", err.Error()))
 	}
-
-	if cancel != nil {
-		cancel() // releases timer resources
-	}
 }
 
-// Wait blocks until the background worker finishes processing remaining updates.
-// Call this after cancelling the context passed to NewAuthenticator.
-func (a *Authenticator) Wait() {
-	a.wg.Wait()
+// Shutdown gracefully stops the authenticator.
+// Drains remaining updates while ctx is valid.
+// When ctx expires, cancels all in-flight operations and returns immediately.
+// Safe to call multiple times - only the first call has effect.
+func (a *Authenticator) Shutdown(ctx context.Context) error {
+	var shutdownErr error
+
+	a.shutdownOnce.Do(func() {
+		slog.InfoContext(ctx, "Authenticator shutdown initiated")
+
+		// Signal worker to stop accepting new work (instant notification)
+		close(a.shutdownChan)
+
+		// Wait for worker to finish OR timeout
+		workerDone := make(chan struct{})
+		go func() {
+			a.wg.Wait()
+			close(workerDone)
+		}()
+
+		select {
+		case <-workerDone:
+			slog.InfoContext(ctx, "Authenticator shutdown completed")
+			shutdownErr = nil
+
+		case <-ctx.Done():
+			// Timeout expired - cancel ALL operations and return immediately
+			slog.WarnContext(ctx, "Authenticator shutdown timeout, cancelled all operations")
+			shutdownErr = ctx.Err()
+		}
+
+		// Always release lifecycle context resources (on both success and timeout)
+		a.opsCancel()
+	})
+
+	return shutdownErr
 }
 
 // ValidateAPIKey validates an API key and returns the key information if valid.
@@ -142,6 +216,9 @@ func (a *Authenticator) ValidateAPIKey(ctx context.Context, apiKey string) (*dom
 
 	key, err := a.repo.FindByShortToken(opCtx, keyParts.ShortToken)
 	if err != nil {
+		if !errors.Is(err, domain.ErrNotFound) {
+			slog.ErrorContext(ctx, "Failed to look up API key", "error", err)
+		}
 		return nil, domain.ErrUnauthorized
 	}
 

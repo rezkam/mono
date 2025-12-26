@@ -288,11 +288,14 @@ type TodoList struct {
 
 // UpdateItemRequest defines model for UpdateItemRequest.
 type UpdateItemRequest struct {
-	Item *TodoItem `json:"item,omitempty"`
+	Item TodoItem `json:"item"`
 
-	// UpdateMask Fields to update (field mask)
-	UpdateMask *[]string `json:"update_mask,omitempty"`
+	// UpdateMask Fields to update. Unknown fields are rejected with 400.
+	UpdateMask []UpdateItemRequestUpdateMask `json:"update_mask"`
 }
+
+// UpdateItemRequestUpdateMask defines model for UpdateItemRequest.UpdateMask.
+type UpdateItemRequestUpdateMask string
 
 // UpdateItemResponse defines model for UpdateItemResponse.
 type UpdateItemResponse struct {
