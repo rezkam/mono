@@ -33,9 +33,21 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Initialize HTTP server
-	server, cleanup, err := initializeHTTPServer(ctx)
+	// Initialize observability FIRST - before anything that might fail and need logging
+	otelEnabled := provideObservabilityEnabled()
+	logger, otelCleanup, err := provideObservability(ctx, otelEnabled)
 	if err != nil {
+		return fmt.Errorf("failed to initialize observability: %w", err)
+	}
+	defer otelCleanup() // Cleanup LAST (after server cleanup)
+
+	// Set as default so slog.Info(), slog.Error() etc. work globally without passing logger
+	slog.SetDefault(logger)
+
+	// Initialize HTTP server (now errors can be properly logged)
+	server, cleanup, err := initializeHTTPServer(ctx, logger)
+	if err != nil {
+		slog.Error("failed to initialize server", "error", err)
 		return fmt.Errorf("failed to initialize server: %w", err)
 	}
 	defer cleanup()
@@ -71,7 +83,7 @@ func run() error {
 
 // initializeHTTPServer wires all dependencies together for the HTTP server.
 // Returns the server, a cleanup function, and any initialization error.
-func initializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
+func initializeHTTPServer(ctx context.Context, logger *slog.Logger) (*HTTPServer, func(), error) {
 	var cleanups []func()
 	cleanup := func() {
 		// Execute cleanups in reverse order (LIFO)
@@ -80,24 +92,8 @@ func initializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
 		}
 	}
 
-	// 1. Initialize observability (logger, tracer, meter)
-	otelEnabled := provideObservabilityEnabled()
-	logger, otelCleanup, err := provideObservability(ctx, otelEnabled)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to initialize observability: %w", err)
-	}
-	cleanups = append(cleanups, otelCleanup)
-
-	// 2. Load configuration
-	serverConfig, err := config.LoadServerConfig()
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// 3. Initialize database store
+	// Initialize database store
 	dbConfig := provideDBConfig()
-	dbConfig.DSN = serverConfig.StorageDSN
 	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
 	if err != nil {
 		cleanup()
@@ -109,39 +105,41 @@ func initializeHTTPServer(ctx context.Context) (*HTTPServer, func(), error) {
 		}
 	})
 
-	// 4. Initialize todo service
+	// Initialize todo service
 	todoConfig := provideTodoConfig()
 	todoService := todo.NewService(store, todoConfig)
 
-	// 5. Initialize authenticator
+	// Initialize authenticator
 	authConfig := provideAuthConfig()
 	authenticator := auth.NewAuthenticator(ctx, store, authConfig)
 	cleanups = append(cleanups, func() {
 		authenticator.Wait()
 	})
 
-	// 6. Initialize HTTP handler and middleware
+	// Initialize HTTP handler and middleware
 	handler := httpHandler.NewServer(todoService)
 	authMiddleware := httpMiddleware.NewAuth(authenticator)
 
-	// 7. Create router
+	// Create router
 	router := httpRouter.NewRouter(handler, authMiddleware)
 
-	// 8. Create HTTP server
+	// Create HTTP server
 	httpServerConfig := provideHTTPServerConfig()
 	httpServer := NewHTTPServer(router, logger, httpServerConfig)
 
 	return httpServer, cleanup, nil
 }
 
-// provideDBConfig reads database pool config from environment.
+// provideDBConfig reads database config from environment.
 func provideDBConfig() postgres.DBConfig {
+	dsn, _ := config.GetEnv[string]("MONO_STORAGE_DSN")
 	maxOpenConns, _ := config.GetEnv[int]("MONO_DB_MAX_OPEN_CONNS")
 	maxIdleConns, _ := config.GetEnv[int]("MONO_DB_MAX_IDLE_CONNS")
 	connMaxLifetimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_LIFETIME_SEC")
 	connMaxIdleTimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_IDLE_TIME_SEC")
 
 	return postgres.DBConfig{
+		DSN:             dsn,
 		MaxOpenConns:    maxOpenConns,
 		MaxIdleConns:    maxIdleConns,
 		ConnMaxLifetime: time.Duration(connMaxLifetimeSec) * time.Second,
@@ -199,7 +197,6 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 		_ = tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
 	}
-	slog.SetDefault(logger)
 
 	cleanup := func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
