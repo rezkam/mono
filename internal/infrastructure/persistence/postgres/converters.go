@@ -176,6 +176,7 @@ func convertTodoItemFields(fields todoItemFields) (domain.TodoItem, error) {
 		DueTime:    pgtypeToTimePtr(fields.DueTime),
 		Timezone:   fields.Timezone,
 		Version:    int(fields.Version),
+		Tags:       []string{},
 	}
 
 	// Priority (now *string in pgx)
@@ -336,6 +337,7 @@ func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*dom
 		UpdatedAt:            pgtypeToTime(dbTemplate.UpdatedAt),
 		LastGeneratedUntil:   pgtypeToDate(dbTemplate.LastGeneratedUntil),
 		GenerationWindowDays: int(dbTemplate.GenerationWindowDays),
+		Tags:                 []string{},
 	}
 
 	// Tags (now []byte in pgx)

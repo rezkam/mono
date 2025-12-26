@@ -496,6 +496,7 @@ components:
       properties:
         lists:
           type: array
+          nullable: false
           items:
             $ref: '#/components/schemas/TodoList'
         next_page_token:
@@ -576,6 +577,7 @@ components:
       properties:
         items:
           type: array
+          nullable: false
           items:
             $ref: '#/components/schemas/TodoItem'
         next_page_token:
@@ -662,6 +664,7 @@ components:
       properties:
         templates:
           type: array
+          nullable: false
           items:
             $ref: '#/components/schemas/RecurringItemTemplate'
 
@@ -707,6 +710,7 @@ components:
           format: date-time
         tags:
           type: array
+          nullable: false
           items:
             type: string
         estimated_duration:
@@ -741,6 +745,7 @@ components:
           type: string
         tags:
           type: array
+          nullable: false
           items:
             type: string
         priority:
@@ -813,6 +818,7 @@ components:
               type: string
             details:
               type: array
+              nullable: false
               items:
                 type: object
                 properties:
