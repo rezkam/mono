@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"strconv"
 
-	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/ptr"
 )
 
@@ -45,16 +44,8 @@ func parsePageToken(token *string) int {
 	return offset
 }
 
-// getPageSize returns the page size, using service layer defaults.
-// Delegates to todo.DefaultPageSize and todo.MaxPageSize to maintain
-// single source of truth for pagination configuration.
+// getPageSize returns the requested page size, or 0 if not specified.
+// The service layer applies configured defaults and limits.
 func getPageSize(pageSize *int) int {
-	size := ptr.Deref(pageSize, todo.DefaultPageSize)
-	if size <= 0 {
-		return todo.DefaultPageSize
-	}
-	if size > todo.MaxPageSize {
-		return todo.MaxPageSize
-	}
-	return size
+	return ptr.Deref(pageSize, 0)
 }

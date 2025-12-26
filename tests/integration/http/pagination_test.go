@@ -67,45 +67,34 @@ func TestListTasks_DefaultPageSizeFromService(t *testing.T) {
 		numItems, todo.DefaultPageSize)
 }
 
-// TestListTasks_MaxPageSizeFromService verifies that when a page_size exceeding the
-// maximum is requested, the service layer's maximum (100) is enforced.
-func TestListTasks_MaxPageSizeFromService(t *testing.T) {
+// TestListTasks_PageSizeExceedingMaxRejected verifies that when a page_size exceeding the
+// maximum (100) is requested, OpenAPI validation rejects it with 400 Bad Request.
+// This is defense-in-depth: invalid requests are rejected at the API boundary.
+func TestListTasks_PageSizeExceedingMaxRejected(t *testing.T) {
 	ts := SetupTestServer(t)
 	defer ts.Cleanup()
 
 	ctx := context.Background()
 
-	// Create a list with items
+	// Create a list
 	list, err := ts.TodoService.CreateList(ctx, "Max Page Size Test List")
 	require.NoError(t, err)
 
-	// Create enough items to test max page size
-	numItems := 110
-	for i := 0; i < numItems; i++ {
-		_, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
-			Title: fmt.Sprintf("Item %03d", i+1),
-		})
-		require.NoError(t, err, "failed to create item %d", i+1)
-	}
-
-	// Request more than max page size
+	// Request more than max page size (OpenAPI spec has maximum: 100)
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/lists/%s/items?page_size=200", list.ID), nil)
 	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
 
 	w := httptest.NewRecorder()
 	ts.Router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusOK, w.Code)
+	// OpenAPI validation rejects page_size > 100
+	require.Equal(t, http.StatusBadRequest, w.Code,
+		"page_size exceeding maximum should be rejected by OpenAPI validation")
 
-	var resp openapi.ListItemsResponse
+	var resp openapi.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	require.NotNil(t, resp.Items)
-
-	// Should be capped at MaxPageSize (100), not the requested 200
-	assert.Equal(t, todo.MaxPageSize, len(*resp.Items),
-		"expected max page size (%d), but got %d - "+
-			"service layer should enforce maximum",
-		todo.MaxPageSize, len(*resp.Items))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, "VALIDATION_ERROR", *resp.Error.Code)
 }
 
 // TestListTasks_ExplicitPageSizeRespected verifies that explicit page_size in request

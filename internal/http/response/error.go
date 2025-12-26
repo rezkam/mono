@@ -98,6 +98,10 @@ func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		ValidationError(w, "title", "required field missing")
 	case errors.Is(err, domain.ErrTitleTooLong):
 		ValidationError(w, "title", "must be 255 characters or less")
+	case errors.Is(err, domain.ErrStatusRequired):
+		ValidationError(w, "status", "value is required when status is in update_mask")
+	case errors.Is(err, domain.ErrRecurrencePatternRequired):
+		ValidationError(w, "recurrence_pattern", "value is required when recurrence_pattern is in update_mask")
 	case errors.Is(err, domain.ErrInvalidID):
 		ValidationError(w, "id", "invalid ID format")
 	case errors.Is(err, domain.ErrInvalidTaskStatus):

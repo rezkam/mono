@@ -31,9 +31,27 @@ func NewRouter(server *handler.Server, authMiddleware *mw.Auth) *chi.Mux {
 		}
 	})
 
+	// Get embedded OpenAPI spec for request validation
+	spec, err := openapi.GetSwagger()
+	if err != nil {
+		// This should never happen with embedded spec, but log and continue without validation
+		slog.Error("Failed to load OpenAPI spec for validation", "error", err)
+	}
+
+	// Create OpenAPI validation middleware
+	var validatorMw func(http.Handler) http.Handler
+	if spec != nil {
+		validatorMw = mw.NewValidator(spec, mw.ValidationConfig{MultiError: true})
+	}
+
 	// API routes (OpenAPI spec already includes /v1 prefix in paths)
 	r.Route("/api", func(r chi.Router) {
-		// Auth middleware for all API routes
+		// 1. OpenAPI request validation (rejects invalid requests early)
+		if validatorMw != nil {
+			r.Use(validatorMw)
+		}
+
+		// 2. Auth middleware for all API routes
 		r.Use(authMiddleware.Validate)
 
 		// Mount OpenAPI-generated routes

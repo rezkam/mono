@@ -49,7 +49,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
-            default: 20
+            default: 25
         - name: page_token
           in: query
           description: Page token from previous response
@@ -197,7 +197,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
-            default: 20
+            default: 25
         - name: page_token
           in: query
           schema:
@@ -542,14 +542,27 @@ components:
 
     UpdateItemRequest:
       type: object
+      required:
+        - update_mask
+        - item
       properties:
         item:
           $ref: '#/components/schemas/TodoItem'
         update_mask:
           type: array
+          minItems: 1
           items:
             type: string
-          description: Fields to update (field mask)
+            enum:
+              - title
+              - status
+              - priority
+              - due_time
+              - tags
+              - estimated_duration
+              - actual_duration
+              - timezone
+          description: Fields to update. Unknown fields are rejected with 400.
           example: ["title", "status", "priority"]
 
     UpdateItemResponse:
@@ -615,14 +628,28 @@ components:
 
     UpdateRecurringTemplateRequest:
       type: object
+      required:
+        - update_mask
+        - template
       properties:
         template:
           $ref: '#/components/schemas/RecurringItemTemplate'
         update_mask:
           type: array
+          minItems: 1
           items:
             type: string
-          description: Fields to update (field mask)
+            enum:
+              - title
+              - tags
+              - priority
+              - estimated_duration
+              - recurrence_pattern
+              - recurrence_config
+              - due_offset
+              - is_active
+              - generation_window_days
+          description: Fields to update. Unknown fields are rejected with 400.
 
     UpdateRecurringTemplateResponse:
       type: object

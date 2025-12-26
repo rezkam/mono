@@ -158,3 +158,60 @@ func TestFindLists_ClampsNegativeOffset(t *testing.T) {
 	// Verify that the offset passed to the repository was clamped to 0
 	assert.Equal(t, 0, repo.capturedParams.Offset, "negative offset should be clamped to 0")
 }
+
+// TestFindLists_UsesConfiguredDefaultPageSize verifies that when no limit is specified,
+// the service uses the configured DefaultPageSize, not the compile-time constant.
+// This ensures MONO_DEFAULT_PAGE_SIZE env var takes effect.
+func TestFindLists_UsesConfiguredDefaultPageSize(t *testing.T) {
+	repo := &mockFindListsRepo{}
+
+	// Use non-default values to prove config is used
+	customDefault := 50
+	service := NewService(repo, Config{DefaultPageSize: customDefault, MaxPageSize: 200})
+
+	params := domain.ListListsParams{
+		Limit: 0, // Zero means "use default"
+	}
+
+	_, err := service.FindLists(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.Equal(t, customDefault, repo.capturedParams.Limit,
+		"should use configured DefaultPageSize (%d), not compile-time constant", customDefault)
+}
+
+// TestFindLists_UsesConfiguredMaxPageSize verifies that when limit exceeds max,
+// the service clamps to the configured MaxPageSize, not the compile-time constant.
+// This ensures MONO_MAX_PAGE_SIZE env var takes effect.
+func TestFindLists_UsesConfiguredMaxPageSize(t *testing.T) {
+	repo := &mockFindListsRepo{}
+
+	// Use non-default values to prove config is used
+	customMax := 50
+	service := NewService(repo, Config{DefaultPageSize: 10, MaxPageSize: customMax})
+
+	params := domain.ListListsParams{
+		Limit: 1000, // Exceeds max
+	}
+
+	_, err := service.FindLists(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.Equal(t, customMax, repo.capturedParams.Limit,
+		"should clamp to configured MaxPageSize (%d), not compile-time constant", customMax)
+}
+
+// TestFindLists_RespectsValidLimit verifies that valid limits within range are passed through.
+func TestFindLists_RespectsValidLimit(t *testing.T) {
+	repo := &mockFindListsRepo{}
+	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
+
+	params := domain.ListListsParams{
+		Limit: 42, // Within valid range
+	}
+
+	_, err := service.FindLists(context.Background(), params)
+	require.NoError(t, err)
+
+	assert.Equal(t, 42, repo.capturedParams.Limit, "valid limit should be passed through unchanged")
+}

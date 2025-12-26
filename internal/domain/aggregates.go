@@ -126,6 +126,7 @@ type UpdateListParams struct {
 // UpdateRecurringTemplateParams contains parameters for updating a recurring template with field mask support.
 type UpdateRecurringTemplateParams struct {
 	TemplateID string
+	ListID     string // Required for ownership validation
 
 	// UpdateMask specifies which fields to update.
 	// Only fields in this list will be modified.

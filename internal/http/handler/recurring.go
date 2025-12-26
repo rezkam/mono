@@ -49,20 +49,22 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	if req.EstimatedDuration != nil {
-		duration, err := domain.ParseDuration(*req.EstimatedDuration)
+		d, err := domain.NewDuration(*req.EstimatedDuration)
 		if err != nil {
 			response.FromDomainError(w, r, err)
 			return
 		}
+		duration := d.Value()
 		template.EstimatedDuration = &duration
 	}
 
 	if req.DueOffset != nil {
-		duration, err := domain.ParseDuration(*req.DueOffset)
+		d, err := domain.NewDuration(*req.DueOffset)
 		if err != nil {
 			response.FromDomainError(w, r, err)
 			return
 		}
+		duration := d.Value()
 		template.DueOffset = &duration
 	}
 
@@ -103,9 +105,8 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 // GetRecurringTemplate implements ServerInterface.GetRecurringTemplate.
 // GET /v1/lists/{list_id}/recurring-templates/{template_id}
 func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
-	// Call service layer
-	// Note: listID is available for validation if needed in the future
-	template, err := s.todoService.GetRecurringTemplate(r.Context(), templateID.String())
+	// Call service layer with list ownership validation
+	template, err := s.todoService.GetRecurringTemplate(r.Context(), listID.String(), templateID.String())
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -130,53 +131,21 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	if req.Template == nil {
-		response.BadRequest(w, "template is required")
-		return
-	}
-
 	// Build UpdateRecurringTemplateParams
-	// Note: listID is available for validation if needed in the future
+	// Note: template and update_mask are required by OpenAPI spec
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: templateID.String(),
+		ListID:     listID.String(),
 	}
 
-	// Determine update mask
-	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
-		// No mask specified - update all provided fields
-		params.UpdateMask = []string{}
-		if req.Template.Title != nil {
-			params.UpdateMask = append(params.UpdateMask, "title")
-		}
-		if req.Template.Tags != nil {
-			params.UpdateMask = append(params.UpdateMask, "tags")
-		}
-		if req.Template.Priority != nil {
-			params.UpdateMask = append(params.UpdateMask, "priority")
-		}
-		if req.Template.EstimatedDuration != nil {
-			params.UpdateMask = append(params.UpdateMask, "estimated_duration")
-		}
-		if req.Template.DueOffset != nil {
-			params.UpdateMask = append(params.UpdateMask, "due_offset")
-		}
-		if req.Template.RecurrencePattern != nil {
-			params.UpdateMask = append(params.UpdateMask, "recurrence_pattern")
-		}
-		if req.Template.RecurrenceConfig != nil {
-			params.UpdateMask = append(params.UpdateMask, "recurrence_config")
-		}
-		if req.Template.IsActive != nil {
-			params.UpdateMask = append(params.UpdateMask, "is_active")
-		}
-		if req.Template.GenerationWindowDays != nil {
-			params.UpdateMask = append(params.UpdateMask, "generation_window_days")
-		}
-	} else {
-		params.UpdateMask = *req.UpdateMask
+	// Convert update_mask enum values to strings
+	// OpenAPI validates that only allowed field names are present
+	params.UpdateMask = make([]string, len(req.UpdateMask))
+	for i, m := range req.UpdateMask {
+		params.UpdateMask[i] = string(m)
 	}
 
-	// Map field values from request to params
+	// Map field values from request to params based on update_mask
 	for _, field := range params.UpdateMask {
 		switch field {
 		case "title":
@@ -194,20 +163,22 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 			}
 		case "estimated_duration":
 			if req.Template.EstimatedDuration != nil {
-				duration, err := domain.ParseDuration(*req.Template.EstimatedDuration)
+				d, err := domain.NewDuration(*req.Template.EstimatedDuration)
 				if err != nil {
 					response.FromDomainError(w, r, err)
 					return
 				}
+				duration := d.Value()
 				params.EstimatedDuration = &duration
 			}
 		case "due_offset":
 			if req.Template.DueOffset != nil {
-				duration, err := domain.ParseDuration(*req.Template.DueOffset)
+				d, err := domain.NewDuration(*req.Template.DueOffset)
 				if err != nil {
 					response.FromDomainError(w, r, err)
 					return
 				}
+				duration := d.Value()
 				params.DueOffset = &duration
 			}
 		case "recurrence_pattern":
@@ -254,9 +225,8 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 // DeleteRecurringTemplate implements ServerInterface.DeleteRecurringTemplate.
 // DELETE /v1/lists/{list_id}/recurring-templates/{template_id}
 func (s *Server) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
-	// Call service layer
-	// Note: listID is available for validation if needed in the future
-	if err := s.todoService.DeleteRecurringTemplate(r.Context(), templateID.String()); err != nil {
+	// Call service layer with list ownership validation
+	if err := s.todoService.DeleteRecurringTemplate(r.Context(), listID.String(), templateID.String()); err != nil {
 		response.FromDomainError(w, r, err)
 		return
 	}

@@ -32,11 +32,12 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 
 	// Parse estimated_duration if provided
 	if req.EstimatedDuration != nil {
-		duration, err := domain.ParseDuration(*req.EstimatedDuration)
+		d, err := domain.NewDuration(*req.EstimatedDuration)
 		if err != nil {
 			response.FromDomainError(w, r, err)
 			return
 		}
+		duration := d.Value()
 		item.EstimatedDuration = &duration
 	}
 
@@ -88,47 +89,21 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	}
 
 	// Build UpdateItemParams from request
+	// Note: item and update_mask are required by OpenAPI spec
 	params := domain.UpdateItemParams{
 		ItemID: itemID.String(),
 		ListID: listID.String(),
 		Etag:   req.Item.Etag,
 	}
 
-	// Determine update mask
-	if req.UpdateMask == nil || len(*req.UpdateMask) == 0 {
-		// No mask specified - update all provided fields
-		params.UpdateMask = []string{}
-		if req.Item.Title != nil {
-			params.UpdateMask = append(params.UpdateMask, "title")
-		}
-		if req.Item.Status != nil {
-			params.UpdateMask = append(params.UpdateMask, "status")
-		}
-		if req.Item.Priority != nil {
-			params.UpdateMask = append(params.UpdateMask, "priority")
-		}
-		if req.Item.DueTime != nil {
-			params.UpdateMask = append(params.UpdateMask, "due_time")
-		}
-		if req.Item.Tags != nil {
-			params.UpdateMask = append(params.UpdateMask, "tags")
-		}
-		if req.Item.Timezone != nil {
-			params.UpdateMask = append(params.UpdateMask, "timezone")
-		}
-		if req.Item.EstimatedDuration != nil {
-			params.UpdateMask = append(params.UpdateMask, "estimated_duration")
-		}
-		if req.Item.ActualDuration != nil {
-			params.UpdateMask = append(params.UpdateMask, "actual_duration")
-		}
-	} else {
-		// Copy the update mask strings
-		params.UpdateMask = make([]string, len(*req.UpdateMask))
-		copy(params.UpdateMask, *req.UpdateMask)
+	// Convert update_mask enum values to strings
+	// OpenAPI validates that only allowed field names are present
+	params.UpdateMask = make([]string, len(req.UpdateMask))
+	for i, m := range req.UpdateMask {
+		params.UpdateMask[i] = string(m)
 	}
 
-	// Map field values from request to params
+	// Map field values from request to params based on update_mask
 	for _, field := range params.UpdateMask {
 		switch field {
 		case "title":
@@ -161,20 +136,22 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 			params.Timezone = req.Item.Timezone
 		case "estimated_duration":
 			if req.Item.EstimatedDuration != nil {
-				duration, err := domain.ParseDuration(*req.Item.EstimatedDuration)
+				d, err := domain.NewDuration(*req.Item.EstimatedDuration)
 				if err != nil {
 					response.FromDomainError(w, r, err)
 					return
 				}
+				duration := d.Value()
 				params.EstimatedDuration = &duration
 			}
 		case "actual_duration":
 			if req.Item.ActualDuration != nil {
-				duration, err := domain.ParseDuration(*req.Item.ActualDuration)
+				d, err := domain.NewDuration(*req.Item.ActualDuration)
 				if err != nil {
 					response.FromDomainError(w, r, err)
 					return
 				}
+				duration := d.Value()
 				params.ActualDuration = &duration
 			}
 		}
