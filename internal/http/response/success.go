@@ -2,26 +2,35 @@ package response
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 )
 
 // OK sends a 200 OK response with JSON data.
+// If JSON marshaling fails, sends 500 Internal Server Error with standard error format.
 func OK(w http.ResponseWriter, data interface{}) {
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		writeMarshalingError(w, err)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		slog.Error("Failed to encode success response", "error", err)
-	}
+	_, _ = w.Write(jsonBytes)
 }
 
 // Created sends a 201 Created response with JSON data.
+// If JSON marshaling fails, sends 500 Internal Server Error with standard error format.
 func Created(w http.ResponseWriter, data interface{}) {
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		writeMarshalingError(w, err)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		slog.Error("Failed to encode created response", "error", err)
-	}
+	_, _ = w.Write(jsonBytes)
 }
 
 // NoContent sends a 204 No Content response.

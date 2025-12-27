@@ -17,7 +17,6 @@ import (
 	"github.com/rezkam/mono/internal/domain"
 	httpRouter "github.com/rezkam/mono/internal/http"
 	"github.com/rezkam/mono/internal/http/handler"
-	"github.com/rezkam/mono/internal/http/middleware"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,8 +59,10 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	}()
 
 	server := handler.NewServer(service)
-	authMiddleware := middleware.NewAuth(authenticator)
-	router := httpRouter.NewRouter(server, authMiddleware)
+	routerConfig := httpRouter.Config{
+		MaxBodyBytes: 1 << 20, // 1MB
+	}
+	router := httpRouter.NewRouter(server, authenticator, routerConfig)
 
 	// Generate test API key for authenticated requests
 	apiKey, err := auth.CreateAPIKey(ctx, store, "sk", "test", "v1", "test-key", nil)

@@ -9,6 +9,20 @@ import (
 	"github.com/rezkam/mono/internal/domain"
 )
 
+// marshalingFailureJSON is a pre-marshaled error response for when JSON marshaling fails.
+// Using a constant avoids recursive marshaling failures.
+// Includes empty details array to comply with OpenAPI spec (details must be array, never null).
+const marshalingFailureJSON = `{"error":{"code":"INTERNAL_ERROR","message":"failed to encode response","details":[]}}`
+
+// writeMarshalingError writes a standard JSON error response when marshaling fails.
+// This function is guaranteed not to fail since it writes a pre-marshaled constant.
+func writeMarshalingError(w http.ResponseWriter, err error) {
+	slog.Error("Failed to marshal response", "error", err)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusInternalServerError)
+	_, _ = w.Write([]byte(marshalingFailureJSON))
+}
+
 // ErrorResponse is the standard error response format.
 type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
@@ -18,7 +32,7 @@ type ErrorResponse struct {
 type ErrorDetail struct {
 	Code    string       `json:"code"`
 	Message string       `json:"message"`
-	Details []ErrorField `json:"details,omitempty"`
+	Details []ErrorField `json:"details"` // Always include as array (never null per OpenAPI spec)
 }
 
 // ErrorField describes a field-specific error.
@@ -33,10 +47,9 @@ func BadRequest(w http.ResponseWriter, message string) {
 }
 
 // ValidationError sends a 400 validation error with field details.
+// If JSON marshaling fails, sends 500 with pre-marshaled error.
 func ValidationError(w http.ResponseWriter, field, issue string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	if err := json.NewEncoder(w).Encode(ErrorResponse{
+	jsonBytes, err := json.Marshal(ErrorResponse{
 		Error: ErrorDetail{
 			Code:    "VALIDATION_ERROR",
 			Message: "validation failed",
@@ -44,9 +57,15 @@ func ValidationError(w http.ResponseWriter, field, issue string) {
 				{Field: field, Issue: issue},
 			},
 		},
-	}); err != nil {
-		slog.Error("Failed to encode validation error response", "error", err)
+	})
+	if err != nil {
+		writeMarshalingError(w, err)
+		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write(jsonBytes)
 }
 
 // NotFound sends a 404 Not Found error.
@@ -77,17 +96,23 @@ func InternalError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // Error sends a generic error response.
+// If JSON marshaling fails, sends 500 with pre-marshaled error.
 func Error(w http.ResponseWriter, code, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(ErrorResponse{
+	jsonBytes, err := json.Marshal(ErrorResponse{
 		Error: ErrorDetail{
 			Code:    code,
 			Message: message,
+			Details: []ErrorField{}, // Initialize as empty array (not nil) per OpenAPI spec
 		},
-	}); err != nil {
-		slog.Error("Failed to encode error response", "error", err)
+	})
+	if err != nil {
+		writeMarshalingError(w, err)
+		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_, _ = w.Write(jsonBytes)
 }
 
 // FromDomainError maps domain errors to HTTP responses.
