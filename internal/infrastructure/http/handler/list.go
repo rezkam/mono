@@ -7,13 +7,13 @@ import (
 	"github.com/oapi-codegen/runtime/types"
 
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/http/openapi"
-	"github.com/rezkam/mono/internal/http/response"
+	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
+	"github.com/rezkam/mono/internal/infrastructure/http/response"
 )
 
 // CreateList implements ServerInterface.CreateList.
 // POST /v1/lists
-func (s *Server) CreateList(w http.ResponseWriter, r *http.Request) {
+func (h *TodoHandler) CreateList(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	var req openapi.CreateListRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -22,7 +22,7 @@ func (s *Server) CreateList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call service layer (validation happens here via value objects in future)
-	list, err := s.todoService.CreateList(r.Context(), req.Title)
+	list, err := h.todoService.CreateList(r.Context(), req.Title)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -39,9 +39,9 @@ func (s *Server) CreateList(w http.ResponseWriter, r *http.Request) {
 
 // GetList implements ServerInterface.GetList.
 // GET /v1/lists/{id}
-func (s *Server) GetList(w http.ResponseWriter, r *http.Request, id types.UUID) {
+func (h *TodoHandler) GetList(w http.ResponseWriter, r *http.Request, id types.UUID) {
 	// Call service layer
-	list, err := s.todoService.GetList(r.Context(), id.String())
+	list, err := h.todoService.GetList(r.Context(), id.String())
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -58,7 +58,7 @@ func (s *Server) GetList(w http.ResponseWriter, r *http.Request, id types.UUID) 
 
 // ListLists implements ServerInterface.ListLists.
 // GET /v1/lists
-func (s *Server) ListLists(w http.ResponseWriter, r *http.Request, params openapi.ListListsParams) {
+func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params openapi.ListListsParams) {
 	// Build domain params from query params
 	offset := parsePageToken(params.PageToken)
 
@@ -87,7 +87,7 @@ func (s *Server) ListLists(w http.ResponseWriter, r *http.Request, params openap
 	}
 
 	// Call service layer with filters and sorting
-	result, err := s.todoService.FindLists(r.Context(), filterParams)
+	result, err := h.todoService.FindLists(r.Context(), filterParams)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

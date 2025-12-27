@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/rezkam/mono/internal/application/auth"
-	"github.com/rezkam/mono/internal/http/response"
+	"github.com/rezkam/mono/internal/infrastructure/http/response"
 )
 
 // Auth is HTTP middleware for API key authentication.

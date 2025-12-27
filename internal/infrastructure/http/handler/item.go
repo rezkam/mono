@@ -7,13 +7,13 @@ import (
 	"github.com/oapi-codegen/runtime/types"
 
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/http/openapi"
-	"github.com/rezkam/mono/internal/http/response"
+	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
+	"github.com/rezkam/mono/internal/infrastructure/http/response"
 )
 
 // CreateItem implements ServerInterface.CreateItem.
 // POST /v1/lists/{list_id}/items
-func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types.UUID) {
+func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID types.UUID) {
 	// Parse request body
 	var req openapi.CreateItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,7 +63,7 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 	}
 
 	// Call service layer (validation and ID generation happens here)
-	createdItem, err := s.todoService.CreateItem(r.Context(), listID.String(), item)
+	createdItem, err := h.todoService.CreateItem(r.Context(), listID.String(), item)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -80,7 +80,7 @@ func (s *Server) CreateItem(w http.ResponseWriter, r *http.Request, listID types
 
 // UpdateItem implements ServerInterface.UpdateItem.
 // PATCH /v1/lists/{list_id}/items/{item_id}
-func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types.UUID, itemID types.UUID) {
+func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID types.UUID, itemID types.UUID) {
 	// Parse request body
 	var req openapi.UpdateItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -158,7 +158,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 	}
 
 	// Call service layer - returns updated item
-	updated, err := s.todoService.UpdateItem(r.Context(), params)
+	updated, err := h.todoService.UpdateItem(r.Context(), params)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -175,7 +175,7 @@ func (s *Server) UpdateItem(w http.ResponseWriter, r *http.Request, listID types
 
 // ListItems implements ServerInterface.ListItems.
 // GET /v1/lists/{list_id}/items
-func (s *Server) ListItems(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListItemsParams) {
+func (h *TodoHandler) ListItems(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListItemsParams) {
 	offset := parsePageToken(params.PageToken)
 	listIDStr := listID.String()
 
@@ -204,7 +204,7 @@ func (s *Server) ListItems(w http.ResponseWriter, r *http.Request, listID types.
 	}
 
 	// Call service layer
-	result, err := s.todoService.ListItems(r.Context(), domainParams)
+	result, err := h.todoService.ListItems(r.Context(), domainParams)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

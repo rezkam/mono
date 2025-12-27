@@ -13,7 +13,7 @@ import (
 	"github.com/oapi-codegen/runtime/types"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
-	openapi "github.com/rezkam/mono/internal/http/openapi"
+	openapi "github.com/rezkam/mono/internal/infrastructure/http/openapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,7 +111,7 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 		existingTemplate: existingTemplate,
 	}
 	service := todo.NewService(repo, todo.Config{})
-	srv := NewServer(service)
+	srv := NewTodoHandler(service)
 
 	listUUID := types.UUID(uuid.MustParse(listID))
 	templateUUID := types.UUID(uuid.MustParse(templateID))
@@ -145,7 +145,7 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 func TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest(t *testing.T) {
 	repo := &stubRepository{}
 	service := todo.NewService(repo, todo.Config{})
-	srv := NewServer(service)
+	srv := NewTodoHandler(service)
 
 	listID := types.UUID(uuid.New())
 

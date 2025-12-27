@@ -8,7 +8,7 @@ import (
 	"github.com/oapi-codegen/runtime/types"
 
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/http/openapi"
+	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
 )
 
 // Helper functions for pointer conversion

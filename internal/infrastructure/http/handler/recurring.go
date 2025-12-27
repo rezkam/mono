@@ -7,13 +7,13 @@ import (
 	"github.com/oapi-codegen/runtime/types"
 
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/http/openapi"
-	"github.com/rezkam/mono/internal/http/response"
+	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
+	"github.com/rezkam/mono/internal/infrastructure/http/response"
 )
 
 // CreateRecurringTemplate implements ServerInterface.CreateRecurringTemplate.
 // POST /v1/lists/{list_id}/recurring-templates
-func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID) {
+func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID) {
 	// Parse request body
 	var req openapi.CreateRecurringTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -87,7 +87,7 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Call service layer (validation happens here)
-	created, err := s.todoService.CreateRecurringTemplate(r.Context(), template)
+	created, err := h.todoService.CreateRecurringTemplate(r.Context(), template)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -104,9 +104,9 @@ func (s *Server) CreateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 
 // GetRecurringTemplate implements ServerInterface.GetRecurringTemplate.
 // GET /v1/lists/{list_id}/recurring-templates/{template_id}
-func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
+func (h *TodoHandler) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Call service layer with list ownership validation
-	template, err := s.todoService.GetRecurringTemplate(r.Context(), listID.String(), templateID.String())
+	template, err := h.todoService.GetRecurringTemplate(r.Context(), listID.String(), templateID.String())
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -123,7 +123,7 @@ func (s *Server) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, li
 
 // UpdateRecurringTemplate implements ServerInterface.UpdateRecurringTemplate.
 // PATCH /v1/lists/{list_id}/recurring-templates/{template_id}
-func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
+func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Parse request body
 	var req openapi.UpdateRecurringTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -207,7 +207,7 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Call service layer (validation happens there)
-	updated, err := s.todoService.UpdateRecurringTemplate(r.Context(), params)
+	updated, err := h.todoService.UpdateRecurringTemplate(r.Context(), params)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -224,9 +224,9 @@ func (s *Server) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request,
 
 // DeleteRecurringTemplate implements ServerInterface.DeleteRecurringTemplate.
 // DELETE /v1/lists/{list_id}/recurring-templates/{template_id}
-func (s *Server) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
+func (h *TodoHandler) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Call service layer with list ownership validation
-	if err := s.todoService.DeleteRecurringTemplate(r.Context(), listID.String(), templateID.String()); err != nil {
+	if err := h.todoService.DeleteRecurringTemplate(r.Context(), listID.String(), templateID.String()); err != nil {
 		response.FromDomainError(w, r, err)
 		return
 	}
@@ -237,7 +237,7 @@ func (s *Server) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request,
 
 // ListRecurringTemplates implements ServerInterface.ListRecurringTemplates.
 // GET /v1/lists/{list_id}/recurring-templates
-func (s *Server) ListRecurringTemplates(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListRecurringTemplatesParams) {
+func (h *TodoHandler) ListRecurringTemplates(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListRecurringTemplatesParams) {
 	// Determine if we should filter by active status
 	activeOnly := false
 	if params.ActiveOnly != nil {
@@ -245,7 +245,7 @@ func (s *Server) ListRecurringTemplates(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Call service layer
-	templates, err := s.todoService.ListRecurringTemplates(r.Context(), listID.String(), activeOnly)
+	templates, err := h.todoService.ListRecurringTemplates(r.Context(), listID.String(), activeOnly)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/rezkam/mono/internal/http/response"
+	"github.com/rezkam/mono/internal/infrastructure/http/response"
 )
 
 // unencodableType simulates a type that fails during JSON encoding.
