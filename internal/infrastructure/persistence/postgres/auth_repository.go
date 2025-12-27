@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -41,7 +42,7 @@ func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time
 	pgID := uuidToPgtype(id)
 	params := sqlcgen.UpdateAPIKeyLastUsedParams{
 		ID:         pgID,
-		LastUsedAt: timeToPgtype(timestamp),
+		LastUsedAt: sql.Null[time.Time]{V: timestamp, Valid: true},
 	}
 
 	rowsAffected, err := s.queries.UpdateAPIKeyLastUsed(ctx, params)
@@ -83,7 +84,7 @@ func (s *Store) Create(ctx context.Context, key *domain.APIKey) error {
 		Name:           key.Name,
 		IsActive:       key.IsActive,
 		CreatedAt:      timeToPgtype(key.CreatedAt),
-		ExpiresAt:      timePtrToPgtype(key.ExpiresAt),
+		ExpiresAt:      ptrToNullTime(key.ExpiresAt), // Domain *time.Time → DB sql.Null[time.Time]
 	}
 
 	if err := s.queries.CreateAPIKey(ctx, params); err != nil {

@@ -67,6 +67,7 @@ func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate,
 		dueTime = &due
 	}
 
+	templateID := template.ID
 	task := domain.TodoItem{
 		ID:                  taskID,
 		ListID:              template.ListID,
@@ -78,7 +79,7 @@ func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate,
 		UpdatedAt:           time.Now().UTC(),
 		DueTime:             dueTime,
 		Tags:                template.Tags,
-		RecurringTemplateID: &template.ID,
+		RecurringTemplateID: &templateID,
 		InstanceDate:        &instanceDate,
 	}
 

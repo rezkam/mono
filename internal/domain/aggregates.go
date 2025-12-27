@@ -70,8 +70,8 @@ type TodoItem struct {
 	InstanceDate        *time.Time // Optional date this instance represents
 
 	// Timezone for due_time interpretation
-	// nil/empty = floating time (9am stays 9am in user's current timezone)
-	// non-empty = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
+	// nil = floating time (9am stays 9am in user's current timezone)
+	// non-nil = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
 	Timezone *string
 
 	// Optimistic locking version for concurrent update protection

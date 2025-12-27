@@ -6,7 +6,10 @@
 package sqlcgen
 
 import (
+	"time"
+
 	"context"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -52,7 +55,7 @@ DELETE FROM recurring_generation_jobs
 WHERE status = 'completed' AND completed_at < $1
 `
 
-func (q *Queries) DeleteCompletedGenerationJobs(ctx context.Context, completedAt pgtype.Timestamptz) error {
+func (q *Queries) DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.Null[time.Time]) error {
 	_, err := q.db.Exec(ctx, deleteCompletedGenerationJobs, completedAt)
 	return err
 }
@@ -154,10 +157,10 @@ WHERE id = $4
 `
 
 type UpdateGenerationJobStatusParams struct {
-	Status       string             `json:"status"`
-	StartedAt    pgtype.Timestamptz `json:"started_at"`
-	ErrorMessage *string            `json:"error_message"`
-	ID           pgtype.UUID        `json:"id"`
+	Status       string              `json:"status"`
+	StartedAt    sql.Null[time.Time] `json:"started_at"`
+	ErrorMessage sql.Null[string]    `json:"error_message"`
+	ID           pgtype.UUID         `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected

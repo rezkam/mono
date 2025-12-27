@@ -5,36 +5,41 @@
 package sqlcgen
 
 import (
+	"time"
+
+	"database/sql"
+
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ApiKey struct {
-	ID             pgtype.UUID        `json:"id"`
-	KeyType        string             `json:"key_type"`
-	Service        string             `json:"service"`
-	Version        string             `json:"version"`
-	ShortToken     string             `json:"short_token"`
-	LongSecretHash string             `json:"long_secret_hash"`
-	Name           string             `json:"name"`
-	IsActive       bool               `json:"is_active"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	LastUsedAt     pgtype.Timestamptz `json:"last_used_at"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	ID             pgtype.UUID         `json:"id"`
+	KeyType        string              `json:"key_type"`
+	Service        string              `json:"service"`
+	Version        string              `json:"version"`
+	ShortToken     string              `json:"short_token"`
+	LongSecretHash string              `json:"long_secret_hash"`
+	Name           string              `json:"name"`
+	IsActive       bool                `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz  `json:"created_at"`
+	LastUsedAt     sql.Null[time.Time] `json:"last_used_at"`
+	ExpiresAt      sql.Null[time.Time] `json:"expires_at"`
 }
 
 type RecurringGenerationJob struct {
-	ID            pgtype.UUID        `json:"id"`
-	TemplateID    pgtype.UUID        `json:"template_id"`
-	ScheduledFor  pgtype.Timestamptz `json:"scheduled_for"`
-	StartedAt     pgtype.Timestamptz `json:"started_at"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	FailedAt      pgtype.Timestamptz `json:"failed_at"`
-	Status        string             `json:"status"`
-	ErrorMessage  *string            `json:"error_message"`
-	RetryCount    int32              `json:"retry_count"`
-	GenerateFrom  pgtype.Date        `json:"generate_from"`
-	GenerateUntil pgtype.Date        `json:"generate_until"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID            pgtype.UUID         `json:"id"`
+	TemplateID    pgtype.UUID         `json:"template_id"`
+	ScheduledFor  pgtype.Timestamptz  `json:"scheduled_for"`
+	StartedAt     sql.Null[time.Time] `json:"started_at"`
+	CompletedAt   sql.Null[time.Time] `json:"completed_at"`
+	FailedAt      sql.Null[time.Time] `json:"failed_at"`
+	Status        string              `json:"status"`
+	ErrorMessage  sql.Null[string]    `json:"error_message"`
+	RetryCount    int32               `json:"retry_count"`
+	GenerateFrom  pgtype.Date         `json:"generate_from"`
+	GenerateUntil pgtype.Date         `json:"generate_until"`
+	CreatedAt     pgtype.Timestamptz  `json:"created_at"`
 }
 
 type RecurringTaskTemplate struct {
@@ -42,7 +47,7 @@ type RecurringTaskTemplate struct {
 	ListID               pgtype.UUID        `json:"list_id"`
 	Title                string             `json:"title"`
 	Tags                 []byte             `json:"tags"`
-	Priority             *string            `json:"priority"`
+	Priority             sql.Null[string]   `json:"priority"`
 	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
 	RecurrencePattern    string             `json:"recurrence_pattern"`
 	RecurrenceConfig     []byte             `json:"recurrence_config"`
@@ -57,27 +62,27 @@ type RecurringTaskTemplate struct {
 type TaskStatusHistory struct {
 	ID         pgtype.UUID        `json:"id"`
 	TaskID     pgtype.UUID        `json:"task_id"`
-	FromStatus *string            `json:"from_status"`
+	FromStatus sql.Null[string]   `json:"from_status"`
 	ToStatus   string             `json:"to_status"`
 	ChangedAt  pgtype.Timestamptz `json:"changed_at"`
-	Notes      *string            `json:"notes"`
+	Notes      sql.Null[string]   `json:"notes"`
 }
 
 type TodoItem struct {
-	ID                  pgtype.UUID        `json:"id"`
-	ListID              pgtype.UUID        `json:"list_id"`
-	Title               string             `json:"title"`
-	Status              string             `json:"status"`
-	Priority            *string            `json:"priority"`
-	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval    `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	DueTime             pgtype.Timestamptz `json:"due_time"`
-	Tags                []byte             `json:"tags"`
-	RecurringTemplateID pgtype.UUID        `json:"recurring_template_id"`
-	InstanceDate        pgtype.Date        `json:"instance_date"`
-	Timezone            *string            `json:"timezone"`
+	ID                  pgtype.UUID         `json:"id"`
+	ListID              pgtype.UUID         `json:"list_id"`
+	Title               string              `json:"title"`
+	Status              string              `json:"status"`
+	Priority            sql.Null[string]    `json:"priority"`
+	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval     `json:"actual_duration"`
+	CreateTime          pgtype.Timestamptz  `json:"create_time"`
+	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	DueTime             sql.Null[time.Time] `json:"due_time"`
+	Tags                []byte              `json:"tags"`
+	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
+	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
+	Timezone            sql.Null[string]    `json:"timezone"`
 	// Optimistic locking version - incremented on each update to detect concurrent modifications
 	Version int32 `json:"version"`
 }

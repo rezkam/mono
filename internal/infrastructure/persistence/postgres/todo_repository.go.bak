@@ -588,7 +588,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 
 	// Map field mask to sqlc params (nil = preserve existing value via COALESCE)
 	if maskSet["title"] {
-		sqlcParams.Title = stringPtrToText(params.Title)
+		sqlcParams.Title = params.Title
 	}
 	if maskSet["tags"] {
 		if params.Tags != nil {
@@ -600,9 +600,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	if maskSet["priority"] {
 		if params.Priority != nil {
 			priorityStr := string(*params.Priority)
-			sqlcParams.Priority = sql.Null[string]{V: priorityStr, Valid: true}
-		} else {
-			sqlcParams.Priority = sql.Null[string]{Valid: false}
+			sqlcParams.Priority = &priorityStr
 		}
 	}
 	if maskSet["estimated_duration"] {
@@ -611,9 +609,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	if maskSet["recurrence_pattern"] {
 		if params.RecurrencePattern != nil {
 			patternStr := string(*params.RecurrencePattern)
-			sqlcParams.RecurrencePattern = pgtype.Text{String: patternStr, Valid: true}
-		} else {
-			sqlcParams.RecurrencePattern = pgtype.Text{Valid: false}
+			sqlcParams.RecurrencePattern = &patternStr
 		}
 	}
 	if maskSet["recurrence_config"] {
@@ -625,12 +621,12 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		sqlcParams.DueOffset = durationPtrToPgtypeInterval(params.DueOffset)
 	}
 	if maskSet["is_active"] {
-		sqlcParams.IsActive = boolPtrToBool(params.IsActive)
+		sqlcParams.IsActive = params.IsActive
 	}
 	if maskSet["generation_window_days"] {
 		if params.GenerationWindowDays != nil {
 			days := int32(*params.GenerationWindowDays)
-			sqlcParams.GenerationWindowDays = int32PtrToInt4(&days)
+			sqlcParams.GenerationWindowDays = &days
 		}
 	}
 

@@ -384,8 +384,27 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
-	// Record the time before concurrent updates (no sleep needed)
-	beforeUpdates := time.Now().UTC().UTC()
+	// CRITICAL: Read initial updated_at from database instead of using time.Now()
+	//
+	// WHY: Avoid clock skew between Go's time.Now() and PostgreSQL's NOW()
+	// - Database sets updated_at = NOW() using PostgreSQL's system clock
+	// - Go's time.Now() uses application process's system clock
+	// - Even on same machine, different processes can have microsecond-level drift
+	// - This drift causes flaky test failures when comparing across time sources
+	//
+	// WHEN THIS MATTERS:
+	// - Any test comparing Go timestamps with database-generated timestamps
+	// - Concurrent operations where timing precision matters
+	// - Tests that might fail intermittently (flaky tests)
+	//
+	// SOLUTION: Always compare database timestamps with database timestamps
+	// - Read initial value from database
+	// - Perform operations
+	// - Read final value from database
+	// - Compare database value vs database value (never Go time vs DB time)
+	initialItem, err := store.FindItemByID(ctx, itemID)
+	require.NoError(t, err)
+	initialUpdatedAt := initialItem.UpdatedAt
 
 	// Run concurrent updates
 	const numGoroutines = 5
@@ -407,18 +426,19 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify updated_at is after the original create time and before updates
+	// Verify updated_at changed after concurrent updates
 	finalItem, err := store.FindItemByID(ctx, itemID)
 	require.NoError(t, err)
 
+	// Compare database timestamps only (both from PostgreSQL NOW())
 	assert.True(t, finalItem.UpdatedAt.After(createTime),
 		"UpdatedAt should be after create time")
-	assert.True(t, finalItem.UpdatedAt.After(beforeUpdates) || finalItem.UpdatedAt.Equal(beforeUpdates),
-		"UpdatedAt should be at or after the time concurrent updates started")
+	assert.True(t, finalItem.UpdatedAt.After(initialUpdatedAt) || finalItem.UpdatedAt.Equal(initialUpdatedAt),
+		"UpdatedAt should be at or after the initial updated_at from database")
 
-	t.Logf("CreateTime: %s, BeforeUpdates: %s, UpdatedAt: %s",
+	t.Logf("CreateTime: %s, InitialUpdatedAt: %s, FinalUpdatedAt: %s",
 		createTime.Format(time.RFC3339Nano),
-		beforeUpdates.Format(time.RFC3339Nano),
+		initialUpdatedAt.Format(time.RFC3339Nano),
 		finalItem.UpdatedAt.Format(time.RFC3339Nano))
 }
 

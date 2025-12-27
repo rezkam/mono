@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -32,7 +33,7 @@ type CreateRecurringTemplateParams struct {
 	ListID               pgtype.UUID        `json:"list_id"`
 	Title                string             `json:"title"`
 	Tags                 []byte             `json:"tags"`
-	Priority             *string            `json:"priority"`
+	Priority             sql.Null[string]   `json:"priority"`
 	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
 	RecurrencePattern    string             `json:"recurrence_pattern"`
 	RecurrenceConfig     []byte             `json:"recurrence_config"`
@@ -270,16 +271,16 @@ RETURNING id, list_id, title, tags, priority, estimated_duration, recurrence_pat
 `
 
 type UpdateRecurringTemplateParams struct {
-	Title                *string         `json:"title"`
-	Tags                 []byte          `json:"tags"`
-	Priority             *string         `json:"priority"`
-	EstimatedDuration    pgtype.Interval `json:"estimated_duration"`
-	RecurrencePattern    *string         `json:"recurrence_pattern"`
-	RecurrenceConfig     []byte          `json:"recurrence_config"`
-	DueOffset            pgtype.Interval `json:"due_offset"`
-	IsActive             *bool           `json:"is_active"`
-	GenerationWindowDays *int32          `json:"generation_window_days"`
-	ID                   pgtype.UUID     `json:"id"`
+	Title                pgtype.Text      `json:"title"`
+	Tags                 []byte           `json:"tags"`
+	Priority             sql.Null[string] `json:"priority"`
+	EstimatedDuration    pgtype.Interval  `json:"estimated_duration"`
+	RecurrencePattern    pgtype.Text      `json:"recurrence_pattern"`
+	RecurrenceConfig     []byte           `json:"recurrence_config"`
+	DueOffset            pgtype.Interval  `json:"due_offset"`
+	IsActive             pgtype.Bool      `json:"is_active"`
+	GenerationWindowDays pgtype.Int4      `json:"generation_window_days"`
+	ID                   pgtype.UUID      `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Partial update with COALESCE pattern

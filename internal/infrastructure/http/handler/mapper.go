@@ -69,18 +69,23 @@ func MapListToDTO(list *domain.TodoList) openapi.TodoList {
 func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 	etag := item.Etag()
 	dto := openapi.TodoItem{
-		Id:                  ptrUUID(item.ID),
-		Title:               ptrString(item.Title),
-		CreateTime:          ptrTime(item.CreateTime),
-		UpdatedAt:           ptrTime(item.UpdatedAt),
-		DueTime:             item.DueTime,
-		Tags:                &item.Tags,
-		EstimatedDuration:   ptrDuration(item.EstimatedDuration),
-		ActualDuration:      ptrDuration(item.ActualDuration),
-		RecurringTemplateId: ptrUUID(stringValue(item.RecurringTemplateID)),
-		InstanceDate:        item.InstanceDate,
-		Timezone:            item.Timezone,
-		Etag:                &etag,
+		Id:                ptrUUID(item.ID),
+		Title:             ptrString(item.Title),
+		CreateTime:        ptrTime(item.CreateTime),
+		UpdatedAt:         ptrTime(item.UpdatedAt),
+		DueTime:           item.DueTime,
+		Tags:              &item.Tags,
+		EstimatedDuration: ptrDuration(item.EstimatedDuration),
+		ActualDuration:    ptrDuration(item.ActualDuration),
+		RecurringTemplateId: func() *types.UUID {
+			if item.RecurringTemplateID != nil {
+				return ptrUUID(*item.RecurringTemplateID)
+			}
+			return nil
+		}(),
+		InstanceDate: item.InstanceDate,
+		Timezone:     item.Timezone,
+		Etag:         &etag,
 	}
 
 	// Map status
@@ -134,12 +139,4 @@ func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringItemT
 	}
 
 	return dto
-}
-
-// Helper to dereference *string safely
-func stringValue(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

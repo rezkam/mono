@@ -69,6 +69,15 @@ gen-sqlc: ## Generate type-safe Go code from SQL queries using sqlc
 		sed -i.bak -e '/"github.com\/jackc\/pgtype"/d' "$$file"; \
 		rm "$$file.bak"; \
 	done
+	@echo "Adding time import for sql.Null[time.Time] support..."
+	for file in internal/infrastructure/persistence/postgres/sqlcgen/*.go; do \
+		if grep -q 'sql.Null\[time.Time\]' "$$file"; then \
+			if ! grep -q '"time"' "$$file"; then \
+				sed -i.bak -e '/^import (/a\	"time"\n' "$$file"; \
+				rm "$$file.bak"; \
+			fi \
+		fi \
+	done
 
 security: ## Run govulncheck to find vulnerabilities
 	@echo "Checking for vulnerabilities..."

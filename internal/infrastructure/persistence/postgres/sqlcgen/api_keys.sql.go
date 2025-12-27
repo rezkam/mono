@@ -6,7 +6,10 @@
 package sqlcgen
 
 import (
+	"time"
+
 	"context"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -30,16 +33,16 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateAPIKeyParams struct {
-	ID             pgtype.UUID        `json:"id"`
-	KeyType        string             `json:"key_type"`
-	Service        string             `json:"service"`
-	Version        string             `json:"version"`
-	ShortToken     string             `json:"short_token"`
-	LongSecretHash string             `json:"long_secret_hash"`
-	Name           string             `json:"name"`
-	IsActive       bool               `json:"is_active"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	ID             pgtype.UUID         `json:"id"`
+	KeyType        string              `json:"key_type"`
+	Service        string              `json:"service"`
+	Version        string              `json:"version"`
+	ShortToken     string              `json:"short_token"`
+	LongSecretHash string              `json:"long_secret_hash"`
+	Name           string              `json:"name"`
+	IsActive       bool                `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz  `json:"created_at"`
+	ExpiresAt      sql.Null[time.Time] `json:"expires_at"`
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error {
@@ -145,8 +148,8 @@ WHERE id = $1
 `
 
 type UpdateAPIKeyLastUsedParams struct {
-	ID         pgtype.UUID        `json:"id"`
-	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ID         pgtype.UUID         `json:"id"`
+	LastUsedAt sql.Null[time.Time] `json:"last_used_at"`
 }
 
 // Updates last_used_at only if the new timestamp is later than the current value.

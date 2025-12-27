@@ -11,8 +11,9 @@ sql:
         emit_json_tags: true
         emit_interface: true
         emit_empty_slices: true
-        emit_pointers_for_null_types: true
+        emit_pointers_for_null_types: false
         overrides:
+          # Keep existing interval overrides
           - db_type: "pg_catalog.interval"
             go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
           - db_type: "interval"
@@ -25,3 +26,67 @@ sql:
             go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
           - column: "recurring_task_templates.due_offset"
             go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
+
+          # Text/String nullable columns → sql.Null[string]
+          - column: "todo_items.priority"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "todo_items.timezone"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "recurring_task_templates.priority"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "task_status_history.from_status"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "task_status_history.notes"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "recurring_generation_jobs.error_message"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+
+          # Timestamptz nullable columns → sql.Null[time.Time]
+          - column: "api_keys.last_used_at"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+          - column: "api_keys.expires_at"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+          - column: "todo_items.due_time"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+          - column: "recurring_generation_jobs.started_at"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+          - column: "recurring_generation_jobs.completed_at"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+          - column: "recurring_generation_jobs.failed_at"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+
+          # Date nullable columns → sql.Null[time.Time]
+          - column: "todo_items.instance_date"
+            go_type:
+              import: "database/sql"
+              type: "Null[time.Time]"
+
+          # UUID nullable columns → uuid.NullUUID
+          - column: "todo_items.recurring_template_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "NullUUID"

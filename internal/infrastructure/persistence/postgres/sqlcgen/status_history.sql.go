@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -19,10 +20,10 @@ VALUES ($1, $2, $3, $4, $5, $6)
 type CreateStatusHistoryEntryParams struct {
 	ID         pgtype.UUID        `json:"id"`
 	TaskID     pgtype.UUID        `json:"task_id"`
-	FromStatus *string            `json:"from_status"`
+	FromStatus sql.Null[string]   `json:"from_status"`
 	ToStatus   string             `json:"to_status"`
 	ChangedAt  pgtype.Timestamptz `json:"changed_at"`
-	Notes      *string            `json:"notes"`
+	Notes      sql.Null[string]   `json:"notes"`
 }
 
 func (q *Queries) CreateStatusHistoryEntry(ctx context.Context, arg CreateStatusHistoryEntryParams) error {

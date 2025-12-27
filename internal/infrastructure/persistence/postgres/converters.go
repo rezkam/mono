@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
+	"github.com/rezkam/mono/internal/ptr"
 )
 
 // === pgtype Conversion Helpers ===
@@ -98,11 +99,12 @@ func pgtypeToDate(d pgtype.Date) time.Time {
 // Used ONLY in infrastructure layer - domain layer must never import database/sql.
 
 // nullTimeToPtr converts sql.Null[time.Time] from database to *time.Time for domain.
+// Always returns time in UTC location for consistent timezone handling.
 func nullTimeToPtr(n sql.Null[time.Time]) *time.Time {
 	if !n.Valid {
 		return nil
 	}
-	return &n.V
+	return ptr.To(n.V.UTC())
 }
 
 // ptrToNullTime converts *time.Time from domain to sql.Null[time.Time] for database.
@@ -118,7 +120,7 @@ func nullStringToPtr(n sql.Null[string]) *string {
 	if !n.Valid {
 		return nil
 	}
-	return &n.V
+	return ptr.To(n.V)
 }
 
 // ptrToNullString converts *string from domain to sql.Null[string] for database.
@@ -134,8 +136,7 @@ func nullUUIDToStringPtr(n uuid.NullUUID) *string {
 	if !n.Valid {
 		return nil
 	}
-	str := n.UUID.String()
-	return &str
+	return ptr.To(n.UUID.String())
 }
 
 // stringPtrToNullUUID converts *string from domain to uuid.NullUUID for database.
