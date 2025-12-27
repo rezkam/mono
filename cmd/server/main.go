@@ -107,9 +107,10 @@ func initializeHTTPServer(logger *slog.Logger, store *postgres.Store) (*HTTPServ
 
 	// Initialize authenticator
 	authConfig := provideAuthConfig()
+	shutdownTimeout := provideShutdownTimeout()
 	authenticator := auth.NewAuthenticator(store, authConfig)
 	cleanup := func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
 		if err := authenticator.Shutdown(shutdownCtx); err != nil {
@@ -179,6 +180,16 @@ func provideAuthConfig() auth.Config {
 	}
 }
 
+// provideShutdownTimeout reads shutdown timeout from environment.
+// Defaults to 5 seconds if not configured.
+func provideShutdownTimeout() time.Duration {
+	timeoutSec, exists := config.GetEnv[int]("MONO_SHUTDOWN_TIMEOUT_SEC")
+	if !exists || timeoutSec <= 0 {
+		return 5 * time.Second
+	}
+	return time.Duration(timeoutSec) * time.Second
+}
+
 // provideObservabilityEnabled reads MONO_OTEL_ENABLED from environment.
 func provideObservabilityEnabled() bool {
 	enabled, exists := config.GetEnv[bool]("MONO_OTEL_ENABLED")
@@ -208,8 +219,9 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
 	}
 
+	shutdownTimeout := provideShutdownTimeout()
 	cleanup := func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
 		if err := loggerProvider.Shutdown(shutdownCtx); err != nil {
