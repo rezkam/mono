@@ -12,7 +12,6 @@ import (
 	"github.com/rezkam/mono/internal/config"
 	httpRouter "github.com/rezkam/mono/internal/http"
 	"github.com/rezkam/mono/internal/http/handler"
-	"github.com/rezkam/mono/internal/http/middleware"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
 
@@ -31,15 +30,15 @@ type TestServer struct {
 func SetupTestServer(t *testing.T) *TestServer {
 	t.Helper()
 
-	// Load test configuration
-	cfg, err := config.LoadTestConfig()
-	if err != nil {
-		t.Skipf("Skipping HTTP integration test: %v (set MONO_STORAGE_DSN to run)", err)
+	// Get storage DSN from environment (same as main.go does)
+	dsn, ok := config.GetEnv[string]("MONO_STORAGE_DSN")
+	if !ok {
+		t.Skipf("Skipping HTTP integration test: storage DSN is required (set MONO_STORAGE_DSN to run)")
 	}
 
 	// Create database connection with cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, dsn)
 	if err != nil {
 		cancel()
 		t.Fatalf("failed to create store: %v", err)
@@ -49,12 +48,14 @@ func SetupTestServer(t *testing.T) *TestServer {
 	todoService := todo.NewService(store, todo.Config{})
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
-	// Create handlers and middleware
+	// Create handler
 	server := handler.NewServer(todoService)
-	authMiddleware := middleware.NewAuth(authenticator)
 
-	// Create router
-	router := httpRouter.NewRouter(server, authMiddleware)
+	// Create router with default 1MB body limit for tests
+	routerConfig := httpRouter.Config{
+		MaxBodyBytes: 1 << 20, // 1MB
+	}
+	router := httpRouter.NewRouter(server, authenticator, routerConfig)
 
 	// Generate test API key
 	apiKey, err := auth.CreateAPIKey(ctx, store, "sk", "test", "v1", "test-key", nil)

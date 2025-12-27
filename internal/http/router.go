@@ -7,20 +7,39 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/http/handler"
 	mw "github.com/rezkam/mono/internal/http/middleware"
 	"github.com/rezkam/mono/internal/http/openapi"
 )
 
+const (
+	// DefaultMaxBodyBytes is the default maximum request body size (1MB).
+	// Prevents clients from accidentally or maliciously sending large requests.
+	DefaultMaxBodyBytes = 1 << 20 // 1MB
+)
+
+// Config holds configuration for the HTTP router.
+type Config struct {
+	MaxBodyBytes int64
+}
+
 // NewRouter creates and configures the Chi router with all middleware and routes.
-func NewRouter(server *handler.Server, authMiddleware *mw.Auth) *chi.Mux {
+// Applies defaults for zero or invalid config values.
+func NewRouter(server *handler.Server, authenticator *auth.Authenticator, config Config) *chi.Mux {
+	// Apply defaults
+	if config.MaxBodyBytes <= 0 {
+		config.MaxBodyBytes = DefaultMaxBodyBytes
+	}
+
 	r := chi.NewRouter()
 
-	// Global middleware
+	// Global middlewares (applied to all routes)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(mw.MaxBodyBytes(config.MaxBodyBytes))
 
 	// Health check endpoint (no auth required)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +71,7 @@ func NewRouter(server *handler.Server, authMiddleware *mw.Auth) *chi.Mux {
 		}
 
 		// 2. Auth middleware for all API routes
+		authMiddleware := mw.NewAuth(authenticator)
 		r.Use(authMiddleware.Validate)
 
 		// Mount OpenAPI-generated routes

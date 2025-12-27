@@ -21,7 +21,6 @@ import (
 	"github.com/rezkam/mono/internal/domain"
 	httpRouter "github.com/rezkam/mono/internal/http"
 	"github.com/rezkam/mono/internal/http/handler"
-	"github.com/rezkam/mono/internal/http/middleware"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,12 +58,14 @@ func TestMain(m *testing.M) {
 		panic(fmt.Errorf("failed to generate API key with tool: %w", err))
 	}
 
-	// Create HTTP handlers and middleware
+	// Create HTTP handler
 	server := handler.NewServer(todoService)
-	authMiddleware := middleware.NewAuth(authenticator)
 
-	// Create router
-	router := httpRouter.NewRouter(server, authMiddleware)
+	// Create router with default 1MB body limit
+	routerConfig := httpRouter.Config{
+		MaxBodyBytes: 1 << 20, // 1MB
+	}
+	router := httpRouter.NewRouter(server, authenticator, routerConfig)
 
 	// Start HTTP server
 	httpLis, err := net.Listen("tcp", "localhost:0") // Random port

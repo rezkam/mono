@@ -16,7 +16,6 @@ import (
 	"github.com/rezkam/mono/internal/config"
 	httpRouter "github.com/rezkam/mono/internal/http"
 	httpHandler "github.com/rezkam/mono/internal/http/handler"
-	httpMiddleware "github.com/rezkam/mono/internal/http/middleware"
 	"github.com/rezkam/mono/internal/infrastructure/observability"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
@@ -113,15 +112,19 @@ func initializeHTTPServer(logger *slog.Logger, store *postgres.Store) (*HTTPServ
 		}
 	}
 
-	// Initialize HTTP handler and middleware
-	handler := httpHandler.NewServer(todoService)
-	authMiddleware := httpMiddleware.NewAuth(authenticator)
+	// Get HTTP server configuration
+	httpServerConfig := provideHTTPServerConfig()
 
-	// Create router
-	router := httpRouter.NewRouter(handler, authMiddleware)
+	// Initialize HTTP handler
+	handler := httpHandler.NewServer(todoService)
+
+	// Create router with configuration
+	routerConfig := httpRouter.Config{
+		MaxBodyBytes: httpServerConfig.MaxBodyBytes,
+	}
+	router := httpRouter.NewRouter(handler, authenticator, routerConfig)
 
 	// Create HTTP server
-	httpServerConfig := provideHTTPServerConfig()
 	httpServer := NewHTTPServer(router, logger, httpServerConfig)
 
 	return httpServer, cleanup, nil
