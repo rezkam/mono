@@ -1,9 +1,14 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 )
+
+// ErrMissingEnvVar is returned when a required environment variable is not set or invalid.
+var ErrMissingEnvVar = errors.New("required environment variable is not set or invalid")
 
 // GetEnv retrieves and parses an environment variable.
 // Returns (value, true) if env var is set and successfully parsed.
@@ -37,4 +42,16 @@ func GetEnv[T string | int | bool](key string) (T, bool) {
 	}
 
 	return result.(T), true
+}
+
+// MustGetEnv retrieves and parses a required environment variable.
+// Returns ErrMissingEnvVar if the variable is not set or cannot be parsed.
+// Use this for critical configuration that must be present for the application to function.
+func MustGetEnv[T string | int | bool](key string) (T, error) {
+	value, ok := GetEnv[T](key)
+	if !ok {
+		var zero T
+		return zero, fmt.Errorf("%w: %s", ErrMissingEnvVar, key)
+	}
+	return value, nil
 }

@@ -44,7 +44,12 @@ func run() error {
 	slog.SetDefault(logger)
 
 	// Initialize database
-	dbConfig := provideDBConfig()
+	dbConfig, err := provideDBConfig()
+	if err != nil {
+		slog.Error("failed to load database configuration", "error", err)
+		return fmt.Errorf("failed to load database configuration: %w", err)
+	}
+
 	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
 	if err != nil {
 		slog.Error("failed to initialize database", "error", err)
@@ -131,8 +136,13 @@ func initializeHTTPServer(logger *slog.Logger, store *postgres.Store) (*HTTPServ
 }
 
 // provideDBConfig reads database config from environment.
-func provideDBConfig() postgres.DBConfig {
-	dsn, _ := config.GetEnv[string]("MONO_STORAGE_DSN")
+// Returns error if required configuration (DSN) is missing.
+func provideDBConfig() (postgres.DBConfig, error) {
+	dsn, err := config.MustGetEnv[string]("MONO_STORAGE_DSN")
+	if err != nil {
+		return postgres.DBConfig{}, fmt.Errorf("database configuration error: %w", err)
+	}
+
 	maxOpenConns, _ := config.GetEnv[int]("MONO_DB_MAX_OPEN_CONNS")
 	maxIdleConns, _ := config.GetEnv[int]("MONO_DB_MAX_IDLE_CONNS")
 	connMaxLifetimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_LIFETIME_SEC")
@@ -144,7 +154,7 @@ func provideDBConfig() postgres.DBConfig {
 		MaxIdleConns:    maxIdleConns,
 		ConnMaxLifetime: time.Duration(connMaxLifetimeSec) * time.Second,
 		ConnMaxIdleTime: time.Duration(connMaxIdleTimeSec) * time.Second,
-	}
+	}, nil
 }
 
 // provideTodoConfig reads pagination config from environment.
