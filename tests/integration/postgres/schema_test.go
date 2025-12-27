@@ -210,7 +210,7 @@ func TestTrigger_AutoUpdateTimestamp(t *testing.T) {
 	`, itemID, listID, "Test", "todo", now, now)
 	require.NoError(t, err)
 
-	time.Sleep(10 * time.Millisecond)
+	// Database trigger executes synchronously, no wait needed
 
 	// Update - trigger should auto-update updated_at
 	_, err = db.ExecContext(ctx, `

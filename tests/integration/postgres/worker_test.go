@@ -247,12 +247,9 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	workerJobCounts := make([]atomic.Int32, numWorkers)
 
 	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
 		workerIdx := i
 
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			w := worker.New(store)
 
 			// Process jobs until queue is empty
@@ -271,7 +268,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 				processedCount.Add(1)
 				workerJobCounts[workerIdx].Add(1)
 			}
-		}()
+		})
 	}
 
 	// Wait for all workers with timeout
@@ -387,11 +384,9 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	startTime := time.Now().UTC()
 
 	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
+		workerID := i
 
-		go func(workerID int) {
-			defer wg.Done()
-
+		wg.Go(func() {
 			w := worker.New(store)
 			localCount := 0
 
@@ -410,7 +405,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 				processedCount.Add(1)
 				localCount++
 			}
-		}(i)
+		})
 	}
 
 	// Wait with timeout

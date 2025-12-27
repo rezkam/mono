@@ -129,9 +129,7 @@ func (s *Service) ListLists(ctx context.Context, params domain.ListListsParams) 
 		params.Limit = s.config.DefaultPageSize
 	}
 	// Enforce maximum page size
-	if params.Limit > s.config.MaxPageSize {
-		params.Limit = s.config.MaxPageSize
-	}
+	params.Limit = min(params.Limit, s.config.MaxPageSize)
 
 	result, err := s.repo.ListLists(ctx, params)
 	if err != nil {
@@ -306,9 +304,7 @@ func (s *Service) ListItems(ctx context.Context, params domain.ListTasksParams) 
 	}
 
 	// Enforce maximum page size
-	if params.Limit > s.config.MaxPageSize {
-		params.Limit = s.config.MaxPageSize
-	}
+	params.Limit = min(params.Limit, s.config.MaxPageSize)
 
 	// Business rule: when no explicit status filter, exclude archived and cancelled
 	excludedStatuses := []domain.TaskStatus{}

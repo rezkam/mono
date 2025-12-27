@@ -86,25 +86,21 @@ func (w *Worker) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-scheduleTicker.C:
-			w.wg.Add(1)
-			go func() {
-				defer w.wg.Done()
+			w.wg.Go(func() {
 				opCtx, cancel := context.WithTimeout(context.Background(), w.operationTimeout)
 				defer cancel()
 				if err := w.RunScheduleOnce(opCtx); err != nil {
 					slog.ErrorContext(opCtx, "Error scheduling jobs", "error", err)
 				}
-			}()
+			})
 		case <-processTicker.C:
-			w.wg.Add(1)
-			go func() {
-				defer w.wg.Done()
+			w.wg.Go(func() {
 				opCtx, cancel := context.WithTimeout(context.Background(), w.operationTimeout)
 				defer cancel()
 				if _, err := w.RunProcessOnce(opCtx); err != nil {
 					slog.ErrorContext(opCtx, "Error processing job", "error", err)
 				}
-			}()
+			})
 		case <-ctx.Done():
 			slog.InfoContext(ctx, "Shutdown requested, waiting for in-flight operations...")
 			w.wg.Wait()

@@ -83,8 +83,8 @@ func TestMain(m *testing.M) {
 
 	httpClient = &http.Client{Timeout: 10 * time.Second}
 
-	// Give server a moment to start
-	time.Sleep(100 * time.Millisecond)
+	// Server is ready immediately after Serve() starts
+	// No wait needed
 
 	code := m.Run()
 

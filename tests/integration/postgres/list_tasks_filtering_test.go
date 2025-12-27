@@ -552,7 +552,8 @@ func TestListTasks_DefaultSorting(t *testing.T) {
 		}
 		_, err := env.Service().CreateItem(env.Context(), listID, item)
 		require.NoError(t, err)
-		time.Sleep(10 * time.Millisecond) // Ensure different create times
+		// Database assigns create_time automatically with microsecond precision
+		// No artificial delay needed
 	}
 
 	// No filter specified - should use default order (created_at desc)

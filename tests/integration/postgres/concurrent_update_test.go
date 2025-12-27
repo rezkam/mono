@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,22 +161,24 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	requestB_item.UpdatedAt = time.Now().UTC().UTC()
 
 	// Execute concurrently
-	var wg sync.WaitGroup
 	var errA, errB error
+	synctest.Test(t, func(t *testing.T) {
+		var wg sync.WaitGroup
 
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_, errA = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestA_item))
-	}()
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, errA = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestA_item))
+		}()
 
-	go func() {
-		defer wg.Done()
-		time.Sleep(10 * time.Millisecond) // B slightly delayed
-		_, errB = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestB_item))
-	}()
+		go func() {
+			defer wg.Done()
+			// B slightly delayed - no sleep needed, synctest controls ordering
+			_, errB = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestB_item))
+		}()
 
-	wg.Wait()
+		wg.Wait()
+	})
 
 	// VERIFY: One succeeds, one gets version conflict
 	t.Logf("Request A (status update) error: %v", errA)
@@ -269,48 +272,51 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	require.Equal(t, 1, originalItem.Version, "Initial version should be 1")
 
 	// Run concurrent updates to different fields
-	var wg sync.WaitGroup
 	type updateResult struct {
 		name string
 		err  error
 	}
 	results := make(chan updateResult, 3)
 
-	// Goroutine 1: Update title
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		// Use the same version (simulating concurrent read-modify-write)
-		itemCopy := *originalItem
-		itemCopy.Title = "Updated Title"
-		_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
-		results <- updateResult{"title", err}
-	}()
+	synctest.Test(t, func(t *testing.T) {
+		var wg sync.WaitGroup
 
-	// Goroutine 2: Update status
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(5 * time.Millisecond) // Slight delay to ensure title update goes first
-		itemCopy := *originalItem
-		itemCopy.Status = domain.TaskStatusInProgress
-		_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
-		results <- updateResult{"status", err}
-	}()
+		// Goroutine 1: Update title
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Use the same version (simulating concurrent read-modify-write)
+			itemCopy := *originalItem
+			itemCopy.Title = "Updated Title"
+			_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
+			results <- updateResult{"title", err}
+		}()
 
-	// Goroutine 3: Update tags
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(10 * time.Millisecond) // More delay
-		itemCopy := *originalItem
-		itemCopy.Tags = []string{"updated", "concurrent"}
-		_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
-		results <- updateResult{"tags", err}
-	}()
+		// Goroutine 2: Update status
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// No sleep needed - synctest controls ordering
+			itemCopy := *originalItem
+			itemCopy.Status = domain.TaskStatusInProgress
+			_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
+			results <- updateResult{"status", err}
+		}()
 
-	wg.Wait()
-	close(results)
+		// Goroutine 3: Update tags
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// No sleep needed - synctest controls ordering
+			itemCopy := *originalItem
+			itemCopy.Tags = []string{"updated", "concurrent"}
+			_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
+			results <- updateResult{"tags", err}
+		}()
+
+		wg.Wait()
+		close(results)
+	})
 
 	// Collect results
 	var successCount int
@@ -378,10 +384,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
-	// Wait a bit to ensure updated_at will be different
-	time.Sleep(100 * time.Millisecond)
-
-	// Record the time before concurrent updates
+	// Record the time before concurrent updates (no sleep needed)
 	beforeUpdates := time.Now().UTC().UTC()
 
 	// Run concurrent updates

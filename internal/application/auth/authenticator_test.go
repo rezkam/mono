@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/rezkam/mono/internal/domain"
@@ -134,7 +135,7 @@ func TestAuthenticator_Shutdown_EmptyQueue(t *testing.T) {
 	})
 
 	// Immediate shutdown with empty queue
-	ctx, cancel := context.WithTimeout(context.Background(), normalShutdownTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), normalShutdownTimeout)
 	defer cancel()
 
 	err := auth.Shutdown(ctx)
@@ -152,41 +153,43 @@ func TestAuthenticator_Shutdown_EmptyQueue(t *testing.T) {
 func TestAuthenticator_Shutdown_WithPendingUpdates(t *testing.T) {
 	t.Parallel()
 
-	repo := newMockRepository()
-	// Simulate realistic DB latency
-	repo.updateLastUsedDelay = realisticDBLatency
+	synctest.Test(t, func(t *testing.T) {
+		repo := newMockRepository()
+		// Simulate realistic DB latency
+		repo.updateLastUsedDelay = realisticDBLatency
 
-	auth := NewAuthenticator(repo, Config{
-		UpdateQueueSize:  100,
-		OperationTimeout: realisticOperationTimeout,
-	})
+		auth := NewAuthenticator(repo, Config{
+			UpdateQueueSize:  100,
+			OperationTimeout: realisticOperationTimeout,
+		})
 
-	// Queue some updates
-	numUpdates := 5
-	for i := 0; i < numUpdates; i++ {
-		auth.lastUsedUpdates <- lastUsedUpdate{
-			keyID:     "key-" + string(rune('0'+i)),
-			timestamp: time.Now().UTC().UTC(),
+		// Queue some updates
+		numUpdates := 5
+		for i := 0; i < numUpdates; i++ {
+			auth.lastUsedUpdates <- lastUsedUpdate{
+				keyID:     "key-" + string(rune('0'+i)),
+				timestamp: time.Now().UTC().UTC(),
+			}
 		}
-	}
 
-	// Give worker time to start processing
-	time.Sleep(150 * time.Millisecond)
+		// Wait for worker to start processing
+		synctest.Wait()
 
-	// Shutdown with generous timeout (should drain all)
-	ctx, cancel := context.WithTimeout(context.Background(), normalShutdownTimeout)
-	defer cancel()
+		// Shutdown with generous timeout (should drain all)
+		ctx, cancel := context.WithTimeout(t.Context(), normalShutdownTimeout)
+		defer cancel()
 
-	err := auth.Shutdown(ctx)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
+		err := auth.Shutdown(ctx)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
 
-	// All updates should have been processed
-	calls := repo.getUpdateLastUsedCalls()
-	if len(calls) != numUpdates {
-		t.Errorf("expected %d calls, got %d", numUpdates, len(calls))
-	}
+		// All updates should have been processed
+		calls := repo.getUpdateLastUsedCalls()
+		if len(calls) != numUpdates {
+			t.Errorf("expected %d calls, got %d", numUpdates, len(calls))
+		}
+	})
 }
 
 func TestAuthenticator_Shutdown_DrainsQueueBeforeReturning(t *testing.T) {
@@ -211,7 +214,7 @@ func TestAuthenticator_Shutdown_DrainsQueueBeforeReturning(t *testing.T) {
 	}
 
 	// Shutdown should drain all queued updates
-	ctx, cancel := context.WithTimeout(context.Background(), normalShutdownTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), normalShutdownTimeout)
 	defer cancel()
 
 	err := auth.Shutdown(ctx)
@@ -250,7 +253,7 @@ func TestAuthenticator_Shutdown_Timeout_CancelsOperations(t *testing.T) {
 	}
 
 	// Shutdown with short timeout
-	ctx, cancel := context.WithTimeout(context.Background(), shortShutdownTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), shortShutdownTimeout)
 	defer cancel()
 
 	start := time.Now().UTC()
@@ -276,87 +279,91 @@ func TestAuthenticator_Shutdown_Timeout_CancelsOperations(t *testing.T) {
 func TestAuthenticator_Shutdown_CancelsInFlightOperations(t *testing.T) {
 	t.Parallel()
 
-	repo := newMockRepository()
-	// Very slow operation to ensure we catch it mid-flight
-	repo.updateLastUsedDelay = verySlowDBLatency
+	synctest.Test(t, func(t *testing.T) {
+		repo := newMockRepository()
+		// Very slow operation to ensure we catch it mid-flight
+		repo.updateLastUsedDelay = verySlowDBLatency
 
-	auth := NewAuthenticator(repo, Config{
-		UpdateQueueSize:  10,
-		OperationTimeout: 0, // No per-op timeout, rely on shutdown cancellation
+		auth := NewAuthenticator(repo, Config{
+			UpdateQueueSize:  10,
+			OperationTimeout: 0, // No per-op timeout, rely on shutdown cancellation
+		})
+
+		// Queue one update
+		auth.lastUsedUpdates <- lastUsedUpdate{
+			keyID:     "in-flight-key",
+			timestamp: time.Now().UTC().UTC(),
+		}
+
+		// Wait for operation to start
+		synctest.Wait()
+
+		// Verify operation started
+		if repo.updateLastUsedCount.Load() != 1 {
+			t.Fatal("expected operation to have started")
+		}
+
+		// Shutdown with short timeout
+		ctx, cancel := context.WithTimeout(t.Context(), shortShutdownTimeout)
+		defer cancel()
+
+		err := auth.Shutdown(ctx)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("expected DeadlineExceeded, got: %v", err)
+		}
+
+		// Wait for cancellation to propagate
+		synctest.Wait()
+
+		// Operation should have been cancelled
+		if repo.cancelledCount.Load() != 1 {
+			t.Errorf("expected 1 cancelled operation, got %d", repo.cancelledCount.Load())
+		}
+
+		// No successful completions (operation was cancelled)
+		calls := repo.getUpdateLastUsedCalls()
+		if len(calls) != 0 {
+			t.Errorf("expected 0 successful calls, got %d", len(calls))
+		}
 	})
-
-	// Queue one update
-	auth.lastUsedUpdates <- lastUsedUpdate{
-		keyID:     "in-flight-key",
-		timestamp: time.Now().UTC().UTC(),
-	}
-
-	// Wait for operation to start
-	time.Sleep(200 * time.Millisecond)
-
-	// Verify operation started
-	if repo.updateLastUsedCount.Load() != 1 {
-		t.Fatal("expected operation to have started")
-	}
-
-	// Shutdown with short timeout
-	ctx, cancel := context.WithTimeout(context.Background(), shortShutdownTimeout)
-	defer cancel()
-
-	err := auth.Shutdown(ctx)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("expected DeadlineExceeded, got: %v", err)
-	}
-
-	// Wait a bit for cancellation to propagate
-	time.Sleep(100 * time.Millisecond)
-
-	// Operation should have been cancelled
-	if repo.cancelledCount.Load() != 1 {
-		t.Errorf("expected 1 cancelled operation, got %d", repo.cancelledCount.Load())
-	}
-
-	// No successful completions (operation was cancelled)
-	calls := repo.getUpdateLastUsedCalls()
-	if len(calls) != 0 {
-		t.Errorf("expected 0 successful calls, got %d", len(calls))
-	}
 }
 
 func TestAuthenticator_Shutdown_OperationTimeout_Respected(t *testing.T) {
 	t.Parallel()
 
-	repo := newMockRepository()
-	// Operation takes longer than per-operation timeout
-	repo.updateLastUsedDelay = slowDBLatency
+	synctest.Test(t, func(t *testing.T) {
+		repo := newMockRepository()
+		// Operation takes longer than per-operation timeout
+		repo.updateLastUsedDelay = slowDBLatency
 
-	auth := NewAuthenticator(repo, Config{
-		UpdateQueueSize:  10,
-		OperationTimeout: shortOperationTimeout, // Per-operation timeout
+		auth := NewAuthenticator(repo, Config{
+			UpdateQueueSize:  10,
+			OperationTimeout: shortOperationTimeout, // Per-operation timeout
+		})
+
+		// Queue update
+		auth.lastUsedUpdates <- lastUsedUpdate{
+			keyID:     "timeout-key",
+			timestamp: time.Now().UTC().UTC(),
+		}
+
+		// Wait for operation to timeout
+		synctest.Wait()
+
+		// Shutdown should complete quickly
+		ctx, cancel := context.WithTimeout(t.Context(), normalShutdownTimeout)
+		defer cancel()
+
+		err := auth.Shutdown(ctx)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+
+		// Operation should have been cancelled due to per-operation timeout
+		if repo.cancelledCount.Load() != 1 {
+			t.Errorf("expected 1 cancelled operation, got %d", repo.cancelledCount.Load())
+		}
 	})
-
-	// Queue update
-	auth.lastUsedUpdates <- lastUsedUpdate{
-		keyID:     "timeout-key",
-		timestamp: time.Now().UTC().UTC(),
-	}
-
-	// Give time for operation to timeout
-	time.Sleep(shortOperationTimeout + 200*time.Millisecond)
-
-	// Shutdown should complete quickly
-	ctx, cancel := context.WithTimeout(context.Background(), normalShutdownTimeout)
-	defer cancel()
-
-	err := auth.Shutdown(ctx)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Operation should have been cancelled due to per-operation timeout
-	if repo.cancelledCount.Load() != 1 {
-		t.Errorf("expected 1 cancelled operation, got %d", repo.cancelledCount.Load())
-	}
 }
 
 // =============================================================================
@@ -419,7 +426,7 @@ func TestAuthenticator_Shutdown_ConcurrentCalls(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), normalShutdownTimeout)
+			ctx, cancel := context.WithTimeout(t.Context(), normalShutdownTimeout)
 			defer cancel()
 			if err := auth.Shutdown(ctx); err != nil {
 				errors <- err
@@ -440,6 +447,9 @@ func TestAuthenticator_Shutdown_ConcurrentCalls(t *testing.T) {
 // CONCURRENCY AND RACE CONDITION TESTS
 // =============================================================================
 
+// Note: This test uses real time, not synctest.
+// It tests race conditions between concurrent validation and shutdown.
+// Testing actual concurrent behavior requires real time and goroutine scheduling.
 func TestAuthenticator_ConcurrentValidationAndShutdown(t *testing.T) {
 	t.Parallel()
 
@@ -496,6 +506,10 @@ func TestAuthenticator_ConcurrentValidationAndShutdown(t *testing.T) {
 	wg.Wait()
 }
 
+// Note: This test uses real time, not synctest.
+// It tests actual race conditions and concurrent behavior under load,
+// not time-based logic. The tight loops with default cases create
+// always-runnable goroutines that cause synctest deadlocks.
 func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 	t.Parallel()
 
@@ -533,8 +547,8 @@ func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 
 	wg.Wait()
 
-	// Let worker process some updates
-	time.Sleep(200 * time.Millisecond)
+	// Wait for worker to process updates
+	time.Sleep(100 * time.Millisecond)
 
 	// Shutdown with generous timeout for draining
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -550,6 +564,10 @@ func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 	t.Logf("Processed %d updates", len(calls))
 }
 
+// Note: This test uses real time, not synctest.
+// It tests race conditions with tight queueing loops during shutdown.
+// The goroutine's default case creates always-runnable behavior
+// that causes synctest deadlocks.
 func TestAuthenticator_ShutdownDuringQueueing(t *testing.T) {
 	t.Parallel()
 
@@ -582,20 +600,20 @@ func TestAuthenticator_ShutdownDuringQueueing(t *testing.T) {
 				default:
 					// Queue full
 				}
-				time.Sleep(10 * time.Millisecond) // Realistic queueing rate
 			}
 		}
 	}()
 
-	// Let it queue for a bit
-	time.Sleep(200 * time.Millisecond)
+	// Wait for queueing to proceed
+	time.Sleep(50 * time.Millisecond)
 
 	// Stop queueing before shutdown to allow drain
 	close(stopQueueing)
 	wg.Wait()
 
 	// Now initiate shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), normalShutdownTimeout)
+	// Use longer timeout since with real time, queued items take actual time to process
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	err := auth.Shutdown(ctx)
@@ -606,6 +624,10 @@ func TestAuthenticator_ShutdownDuringQueueing(t *testing.T) {
 	}
 }
 
+// Note: This test uses real time, not synctest.
+// It tests race conditions where queueing continues during shutdown.
+// The goroutine's default case creates always-runnable behavior
+// that causes synctest deadlocks.
 func TestAuthenticator_ConcurrentQueueingDuringShutdown(t *testing.T) {
 	t.Parallel()
 
@@ -638,13 +660,12 @@ func TestAuthenticator_ConcurrentQueueingDuringShutdown(t *testing.T) {
 				default:
 					// Queue full - expected during heavy load
 				}
-				time.Sleep(5 * time.Millisecond)
 			}
 		}
 	}()
 
-	// Let it queue for a bit
-	time.Sleep(100 * time.Millisecond)
+	// Wait for queueing to proceed
+	time.Sleep(50 * time.Millisecond)
 
 	// Initiate shutdown while queueing continues
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -702,39 +723,41 @@ func TestAuthenticator_ResourcesReleasedAfterShutdown(t *testing.T) {
 func TestAuthenticator_ShutdownTimeout_StillCleansUpResources(t *testing.T) {
 	t.Parallel()
 
-	repo := newMockRepository()
-	repo.updateLastUsedDelay = verySlowDBLatency // Very slow
+	synctest.Test(t, func(t *testing.T) {
+		repo := newMockRepository()
+		repo.updateLastUsedDelay = verySlowDBLatency // Very slow
 
-	auth := NewAuthenticator(repo, Config{
-		UpdateQueueSize:  10,
-		OperationTimeout: 0, // No per-op timeout
+		auth := NewAuthenticator(repo, Config{
+			UpdateQueueSize:  10,
+			OperationTimeout: 0, // No per-op timeout
+		})
+
+		// Queue update that will be very slow
+		auth.lastUsedUpdates <- lastUsedUpdate{
+			keyID:     "very-slow",
+			timestamp: time.Now().UTC().UTC(),
+		}
+
+		// Wait for operation to start
+		synctest.Wait()
+
+		// Shutdown with short timeout
+		ctx, cancel := context.WithTimeout(t.Context(), shortShutdownTimeout)
+		defer cancel()
+
+		err := auth.Shutdown(ctx)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("expected DeadlineExceeded, got: %v", err)
+		}
+
+		// Resources should still be cleaned up despite timeout
+		select {
+		case <-auth.opsCtx.Done():
+			// Expected - context should be cancelled even on timeout
+		default:
+			t.Error("opsCtx should be cancelled even after timeout")
+		}
 	})
-
-	// Queue update that will be very slow
-	auth.lastUsedUpdates <- lastUsedUpdate{
-		keyID:     "very-slow",
-		timestamp: time.Now().UTC().UTC(),
-	}
-
-	// Wait for operation to start
-	time.Sleep(200 * time.Millisecond)
-
-	// Shutdown with short timeout
-	ctx, cancel := context.WithTimeout(context.Background(), shortShutdownTimeout)
-	defer cancel()
-
-	err := auth.Shutdown(ctx)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("expected DeadlineExceeded, got: %v", err)
-	}
-
-	// Resources should still be cleaned up despite timeout
-	select {
-	case <-auth.opsCtx.Done():
-		// Expected - context should be cancelled even on timeout
-	default:
-		t.Error("opsCtx should be cancelled even after timeout")
-	}
 }
 
 // =============================================================================
@@ -823,7 +846,7 @@ func TestAuthenticator_QueueFull_DropsUpdate(t *testing.T) {
 	t.Logf("Dropped %d updates (queue full) - expected behavior", droppedCount)
 
 	// Shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), shortShutdownTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), shortShutdownTimeout)
 	defer cancel()
 
 	err := auth.Shutdown(ctx)
@@ -887,7 +910,7 @@ func TestAuthenticator_StressTest_ManyShutdownsAndRecreations(t *testing.T) {
 		}
 
 		// Shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		err := auth.Shutdown(ctx)
 		cancel()
 

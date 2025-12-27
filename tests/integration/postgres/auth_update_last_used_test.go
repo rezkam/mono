@@ -218,11 +218,9 @@ func TestUpdateLastUsed_ConcurrentUpdates(t *testing.T) {
 	// Launch concurrent updates
 	var wg sync.WaitGroup
 	for _, ts := range timestamps {
-		wg.Add(1)
-		go func(timestamp time.Time) {
-			defer wg.Done()
-			_ = store.UpdateLastUsed(ctx, apiKey.ID, timestamp)
-		}(ts)
+		wg.Go(func() {
+			_ = store.UpdateLastUsed(ctx, apiKey.ID, ts)
+		})
 	}
 
 	// Wait for all updates to complete

@@ -372,6 +372,9 @@ func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
 // 1. Worker stops accepting new work (tickers stop)
 // 2. In-flight operations complete (not aborted)
 // 3. Worker exits cleanly
+//
+// Note: This test uses real time.Sleep because it's testing actual shutdown behavior
+// of a long-running worker with tickers. synctest is not appropriate here.
 func TestWorker_GracefulShutdown(t *testing.T) {
 	var operationStarted atomic.Bool
 	var operationCompleted atomic.Bool

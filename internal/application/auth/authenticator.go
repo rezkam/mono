@@ -81,8 +81,7 @@ func NewAuthenticator(repo Repository, config Config) *Authenticator {
 	}
 
 	// Start background worker for processing last_used_at updates
-	a.wg.Add(1)
-	go a.processLastUsedUpdates()
+	a.wg.Go(a.processLastUsedUpdates)
 
 	return a
 }
@@ -90,8 +89,6 @@ func NewAuthenticator(repo Repository, config Config) *Authenticator {
 // processLastUsedUpdates is a background worker that processes last_used_at updates
 // from a buffered channel. This prevents goroutine explosion under high load.
 func (a *Authenticator) processLastUsedUpdates() {
-	defer a.wg.Done()
-
 	for {
 		select {
 		case update := <-a.lastUsedUpdates:

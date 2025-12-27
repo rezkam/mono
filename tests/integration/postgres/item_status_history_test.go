@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
@@ -41,8 +40,7 @@ func TestStatusHistoryPreservation(t *testing.T) {
 	require.NoError(t, err)
 	itemID := createdItem.ID
 
-	// Give database triggers time to execute
-	time.Sleep(100 * time.Millisecond)
+	// Database triggers execute synchronously, no wait needed
 
 	// Verify initial status history entry exists
 	var initialHistoryCount int
@@ -58,7 +56,7 @@ func TestStatusHistoryPreservation(t *testing.T) {
 	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, createdItem))
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	// Database triggers execute synchronously, no wait needed
 
 	// Check status history - should have 2 entries (initial + update)
 	var finalHistoryCount int
@@ -129,7 +127,7 @@ func TestStatusHistoryPreservationMultipleUpdates(t *testing.T) {
 	require.NoError(t, err)
 	itemID := createdItem.ID
 
-	time.Sleep(100 * time.Millisecond)
+	// Database triggers execute synchronously, no wait needed
 
 	// Transition through multiple statuses: todo -> in_progress -> done
 	statuses := []domain.TaskStatus{
@@ -143,7 +141,7 @@ func TestStatusHistoryPreservationMultipleUpdates(t *testing.T) {
 		existingItem.Status = status
 		_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(list.ID, existingItem))
 		require.NoError(t, err)
-		time.Sleep(100 * time.Millisecond)
+		// Database triggers execute synchronously, no wait needed
 	}
 
 	// Should have 3 entries: initial TODO, TODO->IN_PROGRESS, IN_PROGRESS->DONE
@@ -181,14 +179,14 @@ func TestCreateItemDoesNotWipeOtherItemsHistory(t *testing.T) {
 	require.NoError(t, err)
 	item1ID := createdItem1.ID
 
-	time.Sleep(100 * time.Millisecond)
+	// Database triggers execute synchronously, no wait needed
 
 	// Update first item's status
 	createdItem1.Status = domain.TaskStatusDone
 	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(list.ID, createdItem1))
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	// Database triggers execute synchronously, no wait needed
 
 	// Verify item1 has 2 history entries
 	var item1HistoryCount int
@@ -203,7 +201,7 @@ func TestCreateItemDoesNotWipeOtherItemsHistory(t *testing.T) {
 	_, err = todoService.CreateItem(ctx, list.ID, item2)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	// Database triggers execute synchronously, no wait needed
 
 	// Verify item1's history is still intact after creating item2
 	err = db.QueryRowContext(ctx, `
