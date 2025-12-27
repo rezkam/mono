@@ -14,8 +14,8 @@ import (
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/config"
-	httpRouter "github.com/rezkam/mono/internal/http"
-	httpHandler "github.com/rezkam/mono/internal/http/handler"
+	httpServer "github.com/rezkam/mono/internal/infrastructure/http"
+	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	"github.com/rezkam/mono/internal/infrastructure/observability"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
@@ -62,7 +62,7 @@ func run() error {
 	}()
 
 	// Initialize HTTP server
-	server, cleanup, err := initializeHTTPServer(logger, store)
+	server, cleanup, err := initializeAPIServer(store)
 	if err != nil {
 		slog.Error("failed to initialize server", "error", err)
 		return fmt.Errorf("failed to initialize server: %w", err)
@@ -83,7 +83,8 @@ func run() error {
 		slog.Info("Shutdown signal received")
 
 		// Graceful shutdown with configured timeout
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), server.ShutdownTimeout())
+		shutdownTimeout := provideShutdownTimeout()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer shutdownCancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -98,9 +99,9 @@ func run() error {
 	}
 }
 
-// initializeHTTPServer wires application services and HTTP components.
+// initializeAPIServer wires application services and HTTP components.
 // Returns the server, a cleanup function, and any initialization error.
-func initializeHTTPServer(logger *slog.Logger, store *postgres.Store) (*HTTPServer, func(), error) {
+func initializeAPIServer(store *postgres.Store) (*httpServer.APIServer, func(), error) {
 	// Initialize todo service
 	todoConfig := provideTodoConfig()
 	todoService := todo.NewService(store, todoConfig)
@@ -118,22 +119,22 @@ func initializeHTTPServer(logger *slog.Logger, store *postgres.Store) (*HTTPServ
 		}
 	}
 
-	// Get HTTP server configuration
-	httpServerConfig := provideHTTPServerConfig()
-
-	// Initialize HTTP handler
-	handler := httpHandler.NewServer(todoService)
-
-	// Create router with configuration
-	routerConfig := httpRouter.Config{
-		MaxBodyBytes: httpServerConfig.MaxBodyBytes,
+	// Build API handler with OpenAPI routing and validation
+	apiHandler, err := provideAPIHandler(todoService)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to provide API handler: %w", err)
 	}
-	router := httpRouter.NewRouter(handler, authenticator, routerConfig)
 
-	// Create HTTP server
-	httpServer := NewHTTPServer(router, logger, httpServerConfig)
+	// Get HTTP server configuration and create server
+	serverConfig := provideHTTPServerConfig()
+	server := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
 
-	return httpServer, cleanup, nil
+	return server, cleanup, nil
+}
+
+// provideAPIHandler creates the API router with OpenAPI validation and route mounting.
+func provideAPIHandler(todoService *todo.Service) (http.Handler, error) {
+	return handler.NewOpenAPIRouter(todoService)
 }
 
 // provideDBConfig reads database config from environment.
@@ -239,23 +240,23 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 }
 
 // provideHTTPServerConfig reads HTTP server config from environment.
-func provideHTTPServerConfig() HTTPServerConfig {
+func provideHTTPServerConfig() httpServer.ServerConfig {
+	host, _ := config.GetEnv[string]("MONO_HTTP_HOST")
 	port, _ := config.GetEnv[string]("MONO_HTTP_PORT")
 	readTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_READ_TIMEOUT_SEC")
 	writeTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_WRITE_TIMEOUT_SEC")
 	idleTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_IDLE_TIMEOUT_SEC")
 	readHeaderTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_READ_HEADER_TIMEOUT_SEC")
-	shutdownTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_SHUTDOWN_TIMEOUT_SEC")
 	maxHeaderBytes, _ := config.GetEnv[int]("MONO_HTTP_MAX_HEADER_BYTES")
 	maxBodyBytes, _ := config.GetEnv[int]("MONO_HTTP_MAX_BODY_BYTES")
 
-	return HTTPServerConfig{
+	return httpServer.ServerConfig{
+		Host:              host,
 		Port:              port,
 		ReadTimeout:       time.Duration(readTimeoutSec) * time.Second,
 		WriteTimeout:      time.Duration(writeTimeoutSec) * time.Second,
 		IdleTimeout:       time.Duration(idleTimeoutSec) * time.Second,
 		ReadHeaderTimeout: time.Duration(readHeaderTimeoutSec) * time.Second,
-		ShutdownTimeout:   time.Duration(shutdownTimeoutSec) * time.Second,
 		MaxHeaderBytes:    maxHeaderBytes,
 		MaxBodyBytes:      int64(maxBodyBytes),
 	}

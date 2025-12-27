@@ -19,8 +19,8 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/config"
 	"github.com/rezkam/mono/internal/domain"
-	httpRouter "github.com/rezkam/mono/internal/http"
-	"github.com/rezkam/mono/internal/http/handler"
+	httpServer "github.com/rezkam/mono/internal/infrastructure/http"
+	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,14 +58,14 @@ func TestMain(m *testing.M) {
 		panic(fmt.Errorf("failed to generate API key with tool: %w", err))
 	}
 
-	// Create HTTP handler
-	server := handler.NewServer(todoService)
-
-	// Create router with default 1MB body limit
-	routerConfig := httpRouter.Config{
-		MaxBodyBytes: 1 << 20, // 1MB
+	// Create API handler with OpenAPI validation (reuses production logic)
+	apiHandler, err := handler.NewOpenAPIRouter(todoService)
+	if err != nil {
+		panic(fmt.Errorf("failed to create API handler: %w", err))
 	}
-	router := httpRouter.NewRouter(server, authenticator, routerConfig)
+
+	// Create HTTP server
+	server := httpServer.NewAPIServer(apiHandler, authenticator, httpServer.ServerConfig{})
 
 	// Start HTTP server
 	httpLis, err := net.Listen("tcp", "localhost:0") // Random port
@@ -74,9 +74,9 @@ func TestMain(m *testing.M) {
 	}
 	httpAddr = fmt.Sprintf("http://%s", httpLis.Addr().String())
 
-	httpServer := &http.Server{Handler: router}
+	httpSrv := &http.Server{Handler: server.Handler()}
 	go func() {
-		if err := httpServer.Serve(httpLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := httpSrv.Serve(httpLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
@@ -90,7 +90,7 @@ func TestMain(m *testing.M) {
 
 	// Shutdown: cancel context first to signal shutdown, then wait for completion
 	cancel()
-	httpServer.Shutdown(context.Background())
+	httpSrv.Shutdown(context.Background())
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	authenticator.Shutdown(shutdownCtx)

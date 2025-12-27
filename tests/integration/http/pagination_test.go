@@ -10,7 +10,7 @@ import (
 
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
-	"github.com/rezkam/mono/internal/http/openapi"
+	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

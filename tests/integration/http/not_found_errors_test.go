@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/rezkam/mono/internal/http/openapi"
+	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

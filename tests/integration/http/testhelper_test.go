@@ -2,22 +2,22 @@ package http_test
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/config"
-	httpRouter "github.com/rezkam/mono/internal/http"
-	"github.com/rezkam/mono/internal/http/handler"
+	httpServer "github.com/rezkam/mono/internal/infrastructure/http"
+	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
 
 // TestServer holds the test HTTP server and its dependencies.
 type TestServer struct {
-	Router        *chi.Mux
+	Router        http.Handler
 	Store         *postgres.Store
 	TodoService   *todo.Service
 	Authenticator *auth.Authenticator
@@ -48,14 +48,20 @@ func SetupTestServer(t *testing.T) *TestServer {
 	todoService := todo.NewService(store, todo.Config{})
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
-	// Create handler
-	server := handler.NewServer(todoService)
+	// Create API handler with OpenAPI validation (reuses production logic)
+	apiHandler, err := handler.NewOpenAPIRouter(todoService)
+	if err != nil {
+		cancel()
+		_ = store.Close()
+		t.Fatalf("failed to create API handler: %v", err)
+	}
 
-	// Create router with default 1MB body limit for tests
-	routerConfig := httpRouter.Config{
+	// Create server with default 1MB body limit for tests
+	serverConfig := httpServer.ServerConfig{
 		MaxBodyBytes: 1 << 20, // 1MB
 	}
-	router := httpRouter.NewRouter(server, authenticator, routerConfig)
+	server := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
+	router := server.Handler()
 
 	// Generate test API key
 	apiKey, err := auth.CreateAPIKey(ctx, store, "sk", "test", "v1", "test-key", nil)
