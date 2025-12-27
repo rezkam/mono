@@ -8,16 +8,16 @@ import (
 // TodoList is an aggregate root representing a collection of tasks.
 //
 // Items may be populated or empty depending on the query:
-//   - List view (dashboard): counts populated, Items empty
-//   - Detail view: Items populated with full details
+//   - Detail view (GetList): Items populated with full details, counts are 0
+//   - List view (ListLists/FindLists): Items empty, counts populated
 type TodoList struct {
 	ID         string
 	Title      string
-	Items      []TodoItem // Populated only in detail views
+	Items      []TodoItem // Populated only by GetList. Empty in ListLists/FindLists.
 	CreateTime time.Time
 
-	// Count fields (optional, populated only in list views for performance)
-	// These are 0 when not populated (detail views don't compute counts).
+	// Count fields populated only in list views (ListLists/FindLists) for performance.
+	// These are 0 in detail views (GetList) which don't compute counts.
 	TotalItems  int // Total number of items in the list
 	UndoneItems int // Number of active items (TODO, IN_PROGRESS, BLOCKED)
 }

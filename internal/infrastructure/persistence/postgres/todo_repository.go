@@ -109,32 +109,8 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 	return list, nil
 }
 
-// FindAllLists retrieves all todo lists with counts but without items.
-func (s *Store) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
-	// Get lists with counts (domain defines which statuses are "undone")
-	dbListsWithCounts, err := s.queries.ListTodoListsWithCounts(ctx, taskStatusesToStrings(domain.UndoneStatuses()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to list lists: %w", err)
-	}
-
-	lists := make([]*domain.TodoList, 0, len(dbListsWithCounts))
-	for _, row := range dbListsWithCounts {
-		list := &domain.TodoList{
-			ID:          pgtypeToUUIDString(row.ID),
-			Title:       row.Title,
-			Items:       []domain.TodoItem{}, // Empty by design
-			CreateTime:  pgtypeToTime(row.CreateTime),
-			TotalItems:  int(row.TotalItems),
-			UndoneItems: int(row.UndoneItems),
-		}
-		lists = append(lists, list)
-	}
-
-	return lists, nil
-}
-
-// FindLists retrieves todo lists with filtering, sorting, and pagination.
-func (s *Store) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+// ListLists retrieves todo lists with filtering, sorting, and pagination.
+func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Build sqlc params from domain params
 	sqlcParams := sqlcgen.FindTodoListsWithFiltersParams{
 		UndoneStatuses: taskStatusesToStrings(domain.UndoneStatuses()),

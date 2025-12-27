@@ -26,11 +26,7 @@ func (m *mockRecurringRepo) FindListByID(ctx context.Context, id string) (*domai
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (m *mockRecurringRepo) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	panic("not used in recurring template tests")
 }
 

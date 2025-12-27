@@ -27,10 +27,7 @@ func (s *stubRepository) CreateList(ctx context.Context, list *domain.TodoList) 
 func (s *stubRepository) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
-	panic("not implemented")
-}
-func (s *stubRepository) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (s *stubRepository) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {

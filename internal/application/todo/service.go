@@ -102,7 +102,7 @@ func (s *Service) CreateList(ctx context.Context, titleStr string) (*domain.Todo
 	return list, nil
 }
 
-// GetList retrieves a todo list by ID.
+// GetList retrieves a todo list by ID with all items populated.
 func (s *Service) GetList(ctx context.Context, id string) (*domain.TodoList, error) {
 	if id == "" {
 		return nil, domain.ErrListNotFound
@@ -116,18 +116,9 @@ func (s *Service) GetList(ctx context.Context, id string) (*domain.TodoList, err
 	return list, nil
 }
 
-// ListLists retrieves all todo lists.
-func (s *Service) ListLists(ctx context.Context) ([]*domain.TodoList, error) {
-	lists, err := s.repo.FindAllLists(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list lists: %w", err)
-	}
-
-	return lists, nil
-}
-
-// FindLists retrieves todo lists with filtering, sorting, and pagination.
-func (s *Service) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+// ListLists retrieves todo lists with filtering, sorting, and pagination.
+// Returns summaries with counts only (Items field will be empty).
+func (s *Service) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Reject negative offsets to prevent database errors
 	if params.Offset < 0 {
 		params.Offset = 0
@@ -142,9 +133,9 @@ func (s *Service) FindLists(ctx context.Context, params domain.ListListsParams) 
 		params.Limit = s.config.MaxPageSize
 	}
 
-	result, err := s.repo.FindLists(ctx, params)
+	result, err := s.repo.ListLists(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find lists: %w", err)
+		return nil, fmt.Errorf("failed to list lists: %w", err)
 	}
 
 	return result, nil

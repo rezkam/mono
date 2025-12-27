@@ -9,25 +9,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockFindListsRepo is a minimal mock for testing FindLists logic
-type mockFindListsRepo struct {
+// mockListListsRepo is a minimal mock for testing ListLists logic
+type mockListListsRepo struct {
 	capturedParams domain.ListListsParams
 	resultToReturn *domain.PagedListResult
 }
 
-func (m *mockFindListsRepo) CreateList(ctx context.Context, list *domain.TodoList) error {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) CreateList(ctx context.Context, list *domain.TodoList) error {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) FindAllLists(ctx context.Context) ([]*domain.TodoList, error) {
-	panic("not used in FindLists tests")
-}
-
-func (m *mockFindListsRepo) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (m *mockListListsRepo) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Capture params for assertion
 	m.capturedParams = params
 	if m.resultToReturn != nil {
@@ -40,49 +36,49 @@ func (m *mockFindListsRepo) FindLists(ctx context.Context, params domain.ListLis
 	}, nil
 }
 
-func (m *mockFindListsRepo) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) DeleteRecurringTemplate(ctx context.Context, id string) error {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) DeleteRecurringTemplate(ctx context.Context, id string) error {
+	panic("not used in ListLists tests")
 }
 
-func (m *mockFindListsRepo) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
-	panic("not used in FindLists tests")
+func (m *mockListListsRepo) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
+	panic("not used in ListLists tests")
 }
 
 // mockUpdateItemRepo is a minimal mock for testing UpdateItem logic
 type mockUpdateItemRepo struct {
-	mockFindListsRepo // embed for interface satisfaction
+	mockListListsRepo // embed for interface satisfaction
 }
 
 func (m *mockUpdateItemRepo) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
@@ -141,10 +137,10 @@ func TestUpdateItem_RejectsTrailingNonNumericEtag(t *testing.T) {
 	}
 }
 
-// TestFindLists_ClampsNegativeOffset tests that FindLists rejects negative
+// TestListLists_ClampsNegativeOffset tests that FindLists rejects negative
 // offsets by clamping them to 0, preventing PostgreSQL errors.
-func TestFindLists_ClampsNegativeOffset(t *testing.T) {
-	repo := &mockFindListsRepo{}
+func TestListLists_ClampsNegativeOffset(t *testing.T) {
+	repo := &mockListListsRepo{}
 	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
 
 	params := domain.ListListsParams{
@@ -152,18 +148,18 @@ func TestFindLists_ClampsNegativeOffset(t *testing.T) {
 		Limit:  10,
 	}
 
-	_, err := service.FindLists(context.Background(), params)
+	_, err := service.ListLists(context.Background(), params)
 	require.NoError(t, err)
 
 	// Verify that the offset passed to the repository was clamped to 0
 	assert.Equal(t, 0, repo.capturedParams.Offset, "negative offset should be clamped to 0")
 }
 
-// TestFindLists_UsesConfiguredDefaultPageSize verifies that when no limit is specified,
+// TestListLists_UsesConfiguredDefaultPageSize verifies that when no limit is specified,
 // the service uses the configured DefaultPageSize, not the compile-time constant.
 // This ensures MONO_DEFAULT_PAGE_SIZE env var takes effect.
-func TestFindLists_UsesConfiguredDefaultPageSize(t *testing.T) {
-	repo := &mockFindListsRepo{}
+func TestListLists_UsesConfiguredDefaultPageSize(t *testing.T) {
+	repo := &mockListListsRepo{}
 
 	// Use non-default values to prove config is used
 	customDefault := 50
@@ -173,18 +169,18 @@ func TestFindLists_UsesConfiguredDefaultPageSize(t *testing.T) {
 		Limit: 0, // Zero means "use default"
 	}
 
-	_, err := service.FindLists(context.Background(), params)
+	_, err := service.ListLists(context.Background(), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, customDefault, repo.capturedParams.Limit,
 		"should use configured DefaultPageSize (%d), not compile-time constant", customDefault)
 }
 
-// TestFindLists_UsesConfiguredMaxPageSize verifies that when limit exceeds max,
+// TestListLists_UsesConfiguredMaxPageSize verifies that when limit exceeds max,
 // the service clamps to the configured MaxPageSize, not the compile-time constant.
 // This ensures MONO_MAX_PAGE_SIZE env var takes effect.
-func TestFindLists_UsesConfiguredMaxPageSize(t *testing.T) {
-	repo := &mockFindListsRepo{}
+func TestListLists_UsesConfiguredMaxPageSize(t *testing.T) {
+	repo := &mockListListsRepo{}
 
 	// Use non-default values to prove config is used
 	customMax := 50
@@ -194,23 +190,23 @@ func TestFindLists_UsesConfiguredMaxPageSize(t *testing.T) {
 		Limit: 1000, // Exceeds max
 	}
 
-	_, err := service.FindLists(context.Background(), params)
+	_, err := service.ListLists(context.Background(), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, customMax, repo.capturedParams.Limit,
 		"should clamp to configured MaxPageSize (%d), not compile-time constant", customMax)
 }
 
-// TestFindLists_RespectsValidLimit verifies that valid limits within range are passed through.
-func TestFindLists_RespectsValidLimit(t *testing.T) {
-	repo := &mockFindListsRepo{}
+// TestListLists_RespectsValidLimit verifies that valid limits within range are passed through.
+func TestListLists_RespectsValidLimit(t *testing.T) {
+	repo := &mockListListsRepo{}
 	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
 
 	params := domain.ListListsParams{
 		Limit: 42, // Within valid range
 	}
 
-	_, err := service.FindLists(context.Background(), params)
+	_, err := service.ListLists(context.Background(), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, 42, repo.capturedParams.Limit, "valid limit should be passed through unchanged")
