@@ -67,14 +67,29 @@ func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) error {
 }
 
 // FindListByID retrieves a todo list by its ID, including all items and counts.
+// Uses REPEATABLE READ isolation to ensure consistent data between the two queries.
 func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	listUUID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
+	// Use REPEATABLE READ to ensure both queries see the same snapshot.
+	// Without this, items could be added between queries, causing TotalItems != len(Items).
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Bind queries to transaction
+	qtx := sqlcgen.New(tx)
+
 	// Get the list with counts (domain defines which statuses are "undone")
-	dbList, err := s.queries.GetTodoListWithCounts(ctx, sqlcgen.GetTodoListWithCountsParams{
+	dbList, err := qtx.GetTodoListWithCounts(ctx, sqlcgen.GetTodoListWithCountsParams{
 		ID:             uuidToPgtype(listUUID),
 		UndoneStatuses: taskStatusesToStrings(domain.UndoneStatuses()),
 	})
@@ -86,9 +101,14 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 	}
 
 	// Get all items for this list
-	dbItems, err := s.queries.GetTodoItemsByListId(ctx, uuidToPgtype(listUUID))
+	dbItems, err := qtx.GetTodoItemsByListId(ctx, uuidToPgtype(listUUID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get items: %w", err)
+	}
+
+	// Commit read-only transaction (releases snapshot)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	// Convert to domain model
