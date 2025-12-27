@@ -198,7 +198,7 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 		updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
 		if updateErr != nil {
 			slog.ErrorContext(ctx, "Failed to mark job as failed after template error", "job_id", jobID, "error", updateErr)
-			return false, fmt.Errorf("failed to get template: %w (additionally, failed to update job status: %v)", err, updateErr)
+			return false, fmt.Errorf("failed to get template: %w (additionally, failed to update job status: %w)", err, updateErr)
 		}
 		return false, fmt.Errorf("failed to get template: %w", err)
 	}
@@ -211,7 +211,7 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 		updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
 		if updateErr != nil {
 			slog.ErrorContext(ctx, "Failed to mark job as failed after generation error", "job_id", jobID, "error", updateErr)
-			return false, fmt.Errorf("failed to generate tasks: %w (additionally, failed to update job status: %v)", err, updateErr)
+			return false, fmt.Errorf("failed to generate tasks: %w (additionally, failed to update job status: %w)", err, updateErr)
 		}
 		return false, fmt.Errorf("failed to generate tasks: %w", err)
 	}
@@ -224,7 +224,7 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 				updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
 				if updateErr != nil {
 					slog.ErrorContext(ctx, "Failed to mark job as failed after task creation error", "job_id", jobID, "error", updateErr)
-					return false, fmt.Errorf("failed to create task: %w (additionally, failed to update job status: %v)", err, updateErr)
+					return false, fmt.Errorf("failed to create task: %w (additionally, failed to update job status: %w)", err, updateErr)
 				}
 				return false, fmt.Errorf("failed to create task: %w", err)
 			}
