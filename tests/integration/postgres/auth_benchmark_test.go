@@ -102,7 +102,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 				}
 
 				// Check expiration
-				if apiKey.ExpiresAt.Valid && apiKey.ExpiresAt.Time.Before(time.Now().UTC()) {
+				if apiKey.ExpiresAt.Valid && apiKey.ExpiresAt.V.Before(time.Now().UTC()) {
 					b.Fatal("Key expired")
 				}
 			}

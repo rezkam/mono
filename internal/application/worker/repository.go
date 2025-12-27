@@ -52,6 +52,9 @@ type Repository interface {
 	// === Item Creation ===
 
 	// CreateTodoItem creates a new todo item in a list.
-	// Returns error if list not found.
 	CreateTodoItem(ctx context.Context, listID string, item *domain.TodoItem) error
+
+	// BatchCreateTodoItems creates multiple todo items in a single operation.
+	// Returns the number of items created.
+	BatchCreateTodoItems(ctx context.Context, listID string, items []domain.TodoItem) (int64, error)
 }

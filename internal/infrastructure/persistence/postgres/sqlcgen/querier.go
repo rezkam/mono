@@ -5,12 +5,22 @@
 package sqlcgen
 
 import (
+	"time"
+
 	"context"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	// Bulk insert using PostgreSQL's COPY protocol.
+	// This bypasses:
+	//   - Query parsing per row
+	//   - Planner overhead per row
+	//   - Network round trips per row
+	// Result: ~10x performance for batch operations (30-90 items → single operation).
+	BatchCreateTodoItems(ctx context.Context, arg []BatchCreateTodoItemsParams) (int64, error)
 	// Checks if an API key exists by ID.
 	// Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
 	CheckAPIKeyExists(ctx context.Context, id pgtype.UUID) (bool, error)
@@ -41,7 +51,7 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Soft delete with existence detection in single operation
 	DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error)
-	DeleteCompletedGenerationJobs(ctx context.Context, completedAt pgtype.Timestamptz) error
+	DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.Null[time.Time]) error
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Hard delete with built-in existence verification

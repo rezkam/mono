@@ -13,6 +13,27 @@ INSERT INTO todo_items (
     1
 );
 
+-- name: BatchCreateTodoItems :copyfrom
+-- Bulk insert using PostgreSQL's COPY protocol.
+-- This bypasses:
+--   - Query parsing per row
+--   - Planner overhead per row
+--   - Network round trips per row
+-- Result: ~10x performance for batch operations (30-90 items → single operation).
+INSERT INTO todo_items (
+    id, list_id, title, status, priority,
+    estimated_duration, actual_duration,
+    create_time, updated_at, due_time, tags,
+    recurring_template_id, instance_date, timezone,
+    version
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14,
+    $15
+);
+
 -- name: GetTodoItem :one
 SELECT * FROM todo_items
 WHERE id = $1;

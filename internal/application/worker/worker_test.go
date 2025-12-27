@@ -25,7 +25,8 @@ type mockRepository struct {
 	hasPendingOrRunningJobFunc func(ctx context.Context, templateID string) (bool, error)
 
 	// Items
-	createTodoItemFunc func(ctx context.Context, listID string, item *domain.TodoItem) error
+	createTodoItemFunc       func(ctx context.Context, listID string, item *domain.TodoItem) error
+	batchCreateTodoItemsFunc func(ctx context.Context, listID string, items []domain.TodoItem) (int64, error)
 }
 
 func (m *mockRepository) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
@@ -89,6 +90,13 @@ func (m *mockRepository) HasPendingOrRunningJob(ctx context.Context, templateID 
 		return m.hasPendingOrRunningJobFunc(ctx, templateID)
 	}
 	return false, nil
+}
+
+func (m *mockRepository) BatchCreateTodoItems(ctx context.Context, listID string, items []domain.TodoItem) (int64, error) {
+	if m.batchCreateTodoItemsFunc != nil {
+		return m.batchCreateTodoItemsFunc(ctx, listID, items)
+	}
+	return int64(len(items)), nil
 }
 
 // TestProcessOneJob_UpdateStatusError_TemplateNotFound tests that errors from
@@ -222,8 +230,8 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 				GenerationWindowDays: 7,
 			}, nil
 		},
-		createTodoItemFunc: func(ctx context.Context, listID string, item *domain.TodoItem) error {
-			return taskCreateErr
+		batchCreateTodoItemsFunc: func(ctx context.Context, listID string, items []domain.TodoItem) (int64, error) {
+			return 0, taskCreateErr
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
 			if status == "failed" {
@@ -245,7 +253,7 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 		t.Fatal("expected error when both task creation and status update fail")
 	}
 	// Error should mention both failures
-	if !strings.Contains(err.Error(), "failed to create task") {
+	if !strings.Contains(err.Error(), "failed to create tasks") {
 		t.Errorf("error should mention task creation failure, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "failed to update job status") {
@@ -257,7 +265,7 @@ func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
 // UpdateGenerationJobStatus are not ignored when marking job as completed.
 func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
 	statusUpdateErr := domain.ErrCompletionFailed
-	tasksCreated := 0
+	var tasksCreated int64
 
 	repo := &mockRepository{
 		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
@@ -281,9 +289,9 @@ func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
 				GenerationWindowDays: 7,
 			}, nil
 		},
-		createTodoItemFunc: func(ctx context.Context, listID string, item *domain.TodoItem) error {
-			tasksCreated++
-			return nil
+		batchCreateTodoItemsFunc: func(ctx context.Context, listID string, items []domain.TodoItem) (int64, error) {
+			tasksCreated = int64(len(items))
+			return tasksCreated, nil
 		},
 		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
 			if status == "completed" {

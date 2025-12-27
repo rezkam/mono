@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -164,11 +165,12 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
+	now := time.Now().UTC()
 	params := sqlcgen.UpdateGenerationJobStatusParams{
 		ID:           uuidToPgtype(jobUUID),
 		Status:       status,
-		StartedAt:    timeToPgtype(time.Now().UTC()),
-		ErrorMessage: errorMessage,
+		StartedAt:    sql.Null[time.Time]{V: now, Valid: true},
+		ErrorMessage: ptrToNullString(errorMessage), // Domain *string → DB sql.Null[string]
 	}
 
 	// Single-query pattern: eliminates two-query anti-pattern (GET then UPDATE)
@@ -211,4 +213,24 @@ func (s *Store) CreateTodoItem(ctx context.Context, listID string, item *domain.
 	}
 
 	return nil
+}
+
+// BatchCreateTodoItems creates multiple todo items in a single operation.
+// Returns the number of items created.
+func (s *Store) BatchCreateTodoItems(ctx context.Context, listID string, items []domain.TodoItem) (int64, error) {
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	params, err := domainTodoItemsToBatchParams(items, listID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert items: %w", err)
+	}
+
+	count, err := s.queries.BatchCreateTodoItems(ctx, params)
+	if err != nil {
+		return 0, fmt.Errorf("failed to batch create items: %w", err)
+	}
+
+	return count, nil
 }

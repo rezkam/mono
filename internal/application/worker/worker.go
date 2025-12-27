@@ -213,19 +213,17 @@ func (w *Worker) RunProcessOnce(ctx context.Context) (bool, error) {
 	}
 
 	if len(tasks) > 0 {
-		for _, task := range tasks {
-			err := w.repo.CreateTodoItem(ctx, template.ListID, &task)
-			if err != nil {
-				errMsg := fmt.Sprintf("failed to create task: %v", err)
-				updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
-				if updateErr != nil {
-					slog.ErrorContext(ctx, "Failed to mark job as failed after task creation error", "job_id", jobID, "error", updateErr)
-					return false, fmt.Errorf("failed to create task: %w (additionally, failed to update job status: %w)", err, updateErr)
-				}
-				return false, fmt.Errorf("failed to create task: %w", err)
+		count, err := w.repo.BatchCreateTodoItems(ctx, template.ListID, tasks)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to create tasks: %v", err)
+			updateErr := w.repo.UpdateGenerationJobStatus(ctx, jobID, "failed", &errMsg)
+			if updateErr != nil {
+				slog.ErrorContext(ctx, "Failed to mark job as failed after task creation error", "job_id", jobID, "error", updateErr)
+				return false, fmt.Errorf("failed to create tasks: %w (additionally, failed to update job status: %w)", err, updateErr)
 			}
+			return false, fmt.Errorf("failed to create tasks: %w", err)
 		}
-		slog.InfoContext(ctx, "Generated tasks for template", "count", len(tasks), "template_id", template.ID)
+		slog.InfoContext(ctx, "Generated tasks for template", "count", count, "template_id", template.ID)
 	}
 
 	err = w.repo.UpdateRecurringTemplateGenerationWindow(ctx, template.ID, job.GenerateUntil)

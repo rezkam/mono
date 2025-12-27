@@ -6,10 +6,32 @@
 package sqlcgen
 
 import (
-	"context"
+	"time"
 
+	"context"
+	"database/sql"
+
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type BatchCreateTodoItemsParams struct {
+	ID                  pgtype.UUID         `json:"id"`
+	ListID              pgtype.UUID         `json:"list_id"`
+	Title               string              `json:"title"`
+	Status              string              `json:"status"`
+	Priority            sql.Null[string]    `json:"priority"`
+	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval     `json:"actual_duration"`
+	CreateTime          pgtype.Timestamptz  `json:"create_time"`
+	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	DueTime             sql.Null[time.Time] `json:"due_time"`
+	Tags                []byte              `json:"tags"`
+	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
+	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
+	Timezone            sql.Null[string]    `json:"timezone"`
+	Version             int32               `json:"version"`
+}
 
 const countTasksWithFilters = `-- name: CountTasksWithFilters :one
 SELECT COUNT(*) FROM todo_items
@@ -77,20 +99,20 @@ INSERT INTO todo_items (
 `
 
 type CreateTodoItemParams struct {
-	ID                  pgtype.UUID        `json:"id"`
-	ListID              pgtype.UUID        `json:"list_id"`
-	Title               string             `json:"title"`
-	Status              string             `json:"status"`
-	Priority            *string            `json:"priority"`
-	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval    `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	DueTime             pgtype.Timestamptz `json:"due_time"`
-	Tags                []byte             `json:"tags"`
-	RecurringTemplateID pgtype.UUID        `json:"recurring_template_id"`
-	InstanceDate        pgtype.Date        `json:"instance_date"`
-	Timezone            *string            `json:"timezone"`
+	ID                  pgtype.UUID         `json:"id"`
+	ListID              pgtype.UUID         `json:"list_id"`
+	Title               string              `json:"title"`
+	Status              string              `json:"status"`
+	Priority            sql.Null[string]    `json:"priority"`
+	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval     `json:"actual_duration"`
+	CreateTime          pgtype.Timestamptz  `json:"create_time"`
+	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	DueTime             sql.Null[time.Time] `json:"due_time"`
+	Tags                []byte              `json:"tags"`
+	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
+	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
+	Timezone            sql.Null[string]    `json:"timezone"`
 }
 
 func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) error {
@@ -312,22 +334,22 @@ type ListTasksWithFiltersParams struct {
 }
 
 type ListTasksWithFiltersRow struct {
-	ID                  pgtype.UUID        `json:"id"`
-	ListID              pgtype.UUID        `json:"list_id"`
-	Title               string             `json:"title"`
-	Status              string             `json:"status"`
-	Priority            *string            `json:"priority"`
-	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval    `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	DueTime             pgtype.Timestamptz `json:"due_time"`
-	Tags                []byte             `json:"tags"`
-	RecurringTemplateID pgtype.UUID        `json:"recurring_template_id"`
-	InstanceDate        pgtype.Date        `json:"instance_date"`
-	Timezone            *string            `json:"timezone"`
-	Version             int32              `json:"version"`
-	TotalCount          int64              `json:"total_count"`
+	ID                  pgtype.UUID         `json:"id"`
+	ListID              pgtype.UUID         `json:"list_id"`
+	Title               string              `json:"title"`
+	Status              string              `json:"status"`
+	Priority            sql.Null[string]    `json:"priority"`
+	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval     `json:"actual_duration"`
+	CreateTime          pgtype.Timestamptz  `json:"create_time"`
+	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	DueTime             sql.Null[time.Time] `json:"due_time"`
+	Tags                []byte              `json:"tags"`
+	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
+	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
+	Timezone            sql.Null[string]    `json:"timezone"`
+	Version             int32               `json:"version"`
+	TotalCount          int64               `json:"total_count"`
 }
 
 // Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
@@ -442,25 +464,25 @@ RETURNING id, list_id, title, status, priority, estimated_duration, actual_durat
 `
 
 type UpdateTodoItemParams struct {
-	SetTitle             bool               `json:"set_title"`
-	Title                *string            `json:"title"`
-	SetStatus            bool               `json:"set_status"`
-	Status               *string            `json:"status"`
-	SetPriority          bool               `json:"set_priority"`
-	Priority             *string            `json:"priority"`
-	SetEstimatedDuration bool               `json:"set_estimated_duration"`
-	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
-	SetActualDuration    bool               `json:"set_actual_duration"`
-	ActualDuration       pgtype.Interval    `json:"actual_duration"`
-	SetDueTime           bool               `json:"set_due_time"`
-	DueTime              pgtype.Timestamptz `json:"due_time"`
-	SetTags              bool               `json:"set_tags"`
-	Tags                 []byte             `json:"tags"`
-	SetTimezone          bool               `json:"set_timezone"`
-	Timezone             *string            `json:"timezone"`
-	ID                   pgtype.UUID        `json:"id"`
-	ListID               pgtype.UUID        `json:"list_id"`
-	ExpectedVersion      *int32             `json:"expected_version"`
+	SetTitle             bool                `json:"set_title"`
+	Title                pgtype.Text         `json:"title"`
+	SetStatus            bool                `json:"set_status"`
+	Status               pgtype.Text         `json:"status"`
+	SetPriority          bool                `json:"set_priority"`
+	Priority             sql.Null[string]    `json:"priority"`
+	SetEstimatedDuration bool                `json:"set_estimated_duration"`
+	EstimatedDuration    pgtype.Interval     `json:"estimated_duration"`
+	SetActualDuration    bool                `json:"set_actual_duration"`
+	ActualDuration       pgtype.Interval     `json:"actual_duration"`
+	SetDueTime           bool                `json:"set_due_time"`
+	DueTime              sql.Null[time.Time] `json:"due_time"`
+	SetTags              bool                `json:"set_tags"`
+	Tags                 []byte              `json:"tags"`
+	SetTimezone          bool                `json:"set_timezone"`
+	Timezone             sql.Null[string]    `json:"timezone"`
+	ID                   pgtype.UUID         `json:"id"`
+	ListID               pgtype.UUID         `json:"list_id"`
+	ExpectedVersion      pgtype.Int4         `json:"expected_version"`
 }
 
 // DATA ACCESS PATTERN: Partial update with explicit flags
