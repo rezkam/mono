@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,10 +21,10 @@ var embedMigrations embed.FS
 // DBConfig holds PostgreSQL database connection configuration.
 type DBConfig struct {
 	DSN             string        // PostgreSQL connection string
-	MaxOpenConns    int           // Maximum open connections (default: 25)
-	MaxIdleConns    int           // Maximum idle connections (default: 5)
-	ConnMaxLifetime time.Duration // Connection max lifetime (default: 5min)
-	ConnMaxIdleTime time.Duration // Connection max idle time (default: 1min)
+	MaxOpenConns    int           // Maximum open connections (0 = auto-scale based on available CPUs)
+	MaxIdleConns    int           // Maximum idle connections (0 = auto-scale based on available CPUs)
+	ConnMaxLifetime time.Duration // Connection max lifetime (0 = default: 5min)
+	ConnMaxIdleTime time.Duration // Connection max idle time (0 = default: 1min)
 }
 
 // NewStoreWithConfig creates a new PostgreSQL store with the given configuration.
@@ -40,14 +41,15 @@ func NewStoreWithConfig(ctx context.Context, cfg DBConfig) (*Store, error) {
 		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
-	// Configure connection pool with defaults if not set
 	maxConns := int32(cfg.MaxOpenConns)
 	if maxConns <= 0 {
-		maxConns = 25
+		cpus := runtime.GOMAXPROCS(0)
+		maxConns = int32(cpus * 4)
 	}
 	minConns := int32(cfg.MaxIdleConns)
 	if minConns <= 0 {
-		minConns = 5
+		cpus := runtime.GOMAXPROCS(0)
+		minConns = int32(cpus)
 	}
 	connMaxLifetime := cfg.ConnMaxLifetime
 	if connMaxLifetime <= 0 {
@@ -84,7 +86,8 @@ func NewStoreWithConfig(ctx context.Context, cfg DBConfig) (*Store, error) {
 	return NewStore(pool), nil
 }
 
-// NewPostgresStore creates a PostgreSQL store with default connection pool settings.
+// NewPostgresStore creates a PostgreSQL store with auto-scaled connection pool.
+// Pool size adapts to available CPU cores (respects container limits in Go 1.25+).
 func NewPostgresStore(ctx context.Context, connString string) (*Store, error) {
 	return NewStoreWithConfig(ctx, DBConfig{
 		DSN: connString,
@@ -92,6 +95,7 @@ func NewPostgresStore(ctx context.Context, connString string) (*Store, error) {
 }
 
 // NewPostgresStoreWithPoolConfig creates a PostgreSQL store with custom connection pool settings.
+// Set pool size fields to 0 to enable auto-scaling based on available CPUs.
 func NewPostgresStoreWithPoolConfig(ctx context.Context, connString string, poolConfig DBConfig) (*Store, error) {
 	poolConfig.DSN = connString
 	return NewStoreWithConfig(ctx, poolConfig)
