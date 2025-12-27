@@ -15,7 +15,7 @@ import (
 
 // Default configuration values for the HTTP server.
 const (
-	DefaultHost              = ""     // Empty means all interfaces (0.0.0.0)
+	DefaultHost              = "" // Empty means all interfaces (0.0.0.0)
 	DefaultPort              = "8081"
 	DefaultReadTimeout       = 15 * time.Second
 	DefaultWriteTimeout      = 15 * time.Second
