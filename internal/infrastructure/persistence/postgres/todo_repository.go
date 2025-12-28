@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rezkam/mono/internal/domain"
@@ -31,8 +32,7 @@ func checkRowsAffected(rowsAffected int64, entityType, entityID string) error {
 func isForeignKeyViolation(err error, column string) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		// 23503 is foreign_key_violation
-		if pgErr.Code == "23503" {
+		if pgErr.Code == pgerrcode.ForeignKeyViolation {
 			if column == "" {
 				return true
 			}
