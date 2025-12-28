@@ -55,15 +55,16 @@ func TestTagFiltering(t *testing.T) {
 	require.NoError(t, err)
 	_ = item4
 
-	// First, verify items were created
-	verifyFilter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
-	verifyResult, err := todoService.ListItems(ctx, domain.ListTasksParams{Filter: verifyFilter})
+	// First, verify items were created by getting the list items
+	allItemsFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
 	require.NoError(t, err)
-	t.Logf("Total items in list: %d", len(verifyResult.Items))
-	for _, item := range verifyResult.Items {
+	allItems, err := todoService.ListItems(ctx, domain.ListTasksParams{ListID: &listID, Filter: allItemsFilter})
+	require.NoError(t, err)
+	t.Logf("Total items in list: %d", len(allItems.Items))
+	for _, item := range allItems.Items {
 		t.Logf("  - %s: tags=%v", item.Title, item.Tags)
 	}
-	require.Len(t, verifyResult.Items, 4, "should have 4 items in the list")
+	require.Len(t, allItems.Items, 4, "should have 4 items in the list")
 
 	// Test 1: Filter by "urgent" tag
 	filter1, err := domain.NewItemsFilter(domain.ItemsFilterInput{

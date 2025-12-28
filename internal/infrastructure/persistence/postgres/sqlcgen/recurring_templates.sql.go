@@ -276,7 +276,7 @@ type UpdateRecurringTemplateParams struct {
 	Tags                 []byte           `json:"tags"`
 	Priority             sql.Null[string] `json:"priority"`
 	EstimatedDuration    pgtype.Interval  `json:"estimated_duration"`
-	RecurrencePattern    string           `json:"recurrence_pattern"`
+	RecurrencePattern    sql.Null[string] `json:"recurrence_pattern"`
 	RecurrenceConfig     []byte           `json:"recurrence_config"`
 	DueOffset            pgtype.Interval  `json:"due_offset"`
 	IsActive             pgtype.Bool      `json:"is_active"`

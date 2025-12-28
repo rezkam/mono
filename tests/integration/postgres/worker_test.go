@@ -154,8 +154,9 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			assert.Equal(t, 1, completedCount, "Job should be completed")
 
 			// Verify tasks were created
-			filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
-			itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
+			itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+			require.NoError(t, err)
+			itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{ListID: &listID, Filter: itemFilter, Limit: 1000}, nil)
 			require.NoError(t, err)
 
 			taskCount := len(itemsResult.Items)
@@ -426,8 +427,9 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	assert.Equal(t, int32(totalTemplates), processedCount.Load())
 
 	// Verify task counts
-	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
-	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
+	itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{ListID: &listID, Filter: itemFilter, Limit: 10000}, nil)
 	require.NoError(t, err)
 
 	taskCount := len(itemsResult.Items)
@@ -503,8 +505,9 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	assert.True(t, processed)
 
 	// Verify tasks start from lastGenerated date
-	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
-	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
+	itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{ListID: &listID, Filter: itemFilter, Limit: 1000}, nil)
 	require.NoError(t, err)
 
 	if len(itemsResult.Items) > 0 {
@@ -616,8 +619,9 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	assert.True(t, processed, "Should process the job")
 
 	// Verify existing task still exists
-	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
-	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
+	itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{ListID: &listID, Filter: itemFilter, Limit: 1000}, nil)
 	require.NoError(t, err)
 
 	var foundExisting bool

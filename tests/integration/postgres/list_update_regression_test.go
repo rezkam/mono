@@ -220,8 +220,9 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	assert.Equal(t, 3, targetList.UndoneItems, "All 3 items should be undone")
 
 	// Mark one item as DONE
-	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
-	itemsResult, err := todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter})
+	itemsFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	require.NoError(t, err)
+	itemsResult, err := todoService.ListItems(ctx, domain.ListTasksParams{ListID: &listID, Filter: itemsFilter})
 	require.NoError(t, err)
 	require.Len(t, itemsResult.Items, 3)
 

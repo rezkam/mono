@@ -73,20 +73,18 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 		}
 		listID := listUUID.String()
 
-		// Create the list first (without items)
+		// Create list first (items are created separately)
 		list := &domain.TodoList{
-			ID:          listID,
-			Title:       fmt.Sprintf("Benchmark List %d", i),
-			CreateTime:  now,
-			TotalItems:  0,
-			UndoneItems: 0,
+			ID:         listID,
+			Title:      fmt.Sprintf("Benchmark List %d", i),
+			CreateTime: now,
 		}
 
 		if err := storage.CreateList(ctx, list); err != nil {
 			b.Fatalf("failed to create list %d: %v", i, err)
 		}
 
-		// Create items separately
+		// Create items for this list
 		for j := 0; j < itemsPerList; j++ {
 			due := now.Add(time.Duration(j+100) * time.Minute)
 			status := domain.TaskStatusTodo

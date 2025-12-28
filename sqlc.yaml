@@ -35,17 +35,6 @@ sql:
           - column: "api_keys.name"
             go_type: "string"
 
-          # ============================================================================
-          # Non-nullable ENUM columns → string (maps to domain enum types)
-          # ============================================================================
-          - column: "todo_items.status"
-            go_type: "string"
-          - column: "recurring_task_templates.recurrence_pattern"
-            go_type: "string"
-          - column: "recurring_generation_jobs.status"
-            go_type: "string"
-          - column: "task_status_history.to_status"
-            go_type: "string"
 
           # ============================================================================
           # Non-nullable UUID columns → string
@@ -118,18 +107,6 @@ sql:
             go_type:
               import: "database/sql"
               type: "Null[string]"
-          - column: "task_status_history.notes"
-            go_type:
-              import: "database/sql"
-              type: "Null[string]"
-          - column: "recurring_generation_jobs.error_message"
-            go_type:
-              import: "database/sql"
-              type: "Null[string]"
-
-          # ============================================================================
-          # Nullable ENUM columns → sql.Null[string] (maps to domain nullable enum types)
-          # ============================================================================
           - column: "todo_items.priority"
             go_type:
               import: "database/sql"
@@ -142,6 +119,15 @@ sql:
             go_type:
               import: "database/sql"
               type: "Null[string]"
+          - column: "task_status_history.notes"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "recurring_generation_jobs.error_message"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+
 
           # ============================================================================
           # Nullable TIMESTAMPTZ columns → sql.Null[time.Time]
@@ -184,3 +170,14 @@ sql:
           # ============================================================================
           - db_type: "pg_catalog.interval"
             go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
+
+          # ============================================================================
+          # Nullable TEXT db_type → sql.Null[string]
+          # This handles sqlc.narg() parameters for TEXT columns (e.g., UpdateTodoItem)
+          # ============================================================================
+          - db_type: "text"
+            nullable: true
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+

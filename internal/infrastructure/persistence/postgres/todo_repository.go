@@ -309,7 +309,7 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 	}
 	if maskSet["status"] {
 		sqlcParams.SetStatus = true
-		sqlcParams.Status = ptr.ToString(params.Status)
+		sqlcParams.Status = sql.Null[string]{V: ptr.ToString(params.Status), Valid: true}
 	}
 	if maskSet["priority"] {
 		sqlcParams.SetPriority = true
@@ -606,7 +606,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		sqlcParams.EstimatedDuration = durationPtrToPgtypeInterval(params.EstimatedDuration)
 	}
 	if maskSet["recurrence_pattern"] {
-		sqlcParams.RecurrencePattern = ptr.ToString(params.RecurrencePattern)
+		sqlcParams.RecurrencePattern = sql.Null[string]{V: ptr.ToString(params.RecurrencePattern), Valid: true}
 	}
 	if maskSet["recurrence_config"] {
 		if params.RecurrenceConfig != nil {

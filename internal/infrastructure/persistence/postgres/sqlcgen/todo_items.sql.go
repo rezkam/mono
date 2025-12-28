@@ -466,7 +466,7 @@ type UpdateTodoItemParams struct {
 	SetTitle             bool                `json:"set_title"`
 	Title                string              `json:"title"`
 	SetStatus            bool                `json:"set_status"`
-	Status               string              `json:"status"`
+	Status               sql.Null[string]    `json:"status"`
 	SetPriority          bool                `json:"set_priority"`
 	Priority             sql.Null[string]    `json:"priority"`
 	SetEstimatedDuration bool                `json:"set_estimated_duration"`
