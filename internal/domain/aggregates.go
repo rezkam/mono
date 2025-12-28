@@ -7,37 +7,17 @@ import (
 
 // TodoList is an aggregate root representing a collection of tasks.
 //
-// Items may be populated or empty depending on the query:
-//   - Detail view (GetList): Items populated with full details, counts are 0
-//   - List view (ListLists/FindLists): Items empty, counts populated
+// Items are NOT included in this aggregate. They are always fetched separately
+// via FindItems (with pagination) to prevent unbounded data loading.
+// Use GET /v1/lists/{list_id}/items to fetch items with filtering and pagination.
 type TodoList struct {
 	ID         string
 	Title      string
-	Items      []TodoItem // Populated only by GetList. Empty in ListLists/FindLists.
 	CreateTime time.Time
 
-	// Count fields populated only in list views (ListLists/FindLists) for performance.
-	// These are 0 in detail views (GetList) which don't compute counts.
+	// Count fields are always populated from database aggregation.
 	TotalItems  int // Total number of items in the list
 	UndoneItems int // Number of active items (TODO, IN_PROGRESS, BLOCKED)
-}
-
-// AddItem adds a new item to the list.
-func (l *TodoList) AddItem(item TodoItem) {
-	l.Items = append(l.Items, item)
-}
-
-// UpdateItemStatus updates the status of an item in the list.
-// Returns true if the item was found and updated.
-func (l *TodoList) UpdateItemStatus(itemID string, status TaskStatus) bool {
-	for i, item := range l.Items {
-		if item.ID == itemID {
-			l.Items[i].Status = status
-			l.Items[i].UpdatedAt = time.Now().UTC()
-			return true
-		}
-	}
-	return false
 }
 
 // TodoItem is an entity within the TodoList aggregate.

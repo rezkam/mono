@@ -89,10 +89,11 @@ func (s *Service) CreateList(ctx context.Context, titleStr string) (*domain.Todo
 	}
 
 	list := &domain.TodoList{
-		ID:         idObj.String(),
-		Title:      title.String(),
-		Items:      []domain.TodoItem{},
-		CreateTime: time.Now().UTC(),
+		ID:          idObj.String(),
+		Title:       title.String(),
+		CreateTime:  time.Now().UTC(),
+		TotalItems:  0,
+		UndoneItems: 0,
 	}
 
 	if err := s.repo.CreateList(ctx, list); err != nil {

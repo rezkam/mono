@@ -13,12 +13,13 @@ type Repository interface {
 	// CreateList creates a new todo list.
 	CreateList(ctx context.Context, list *domain.TodoList) error
 
-	// FindListByID retrieves a todo list by its ID, including all items.
+	// FindListByID retrieves a todo list by its ID with metadata and counts.
+	// Items are fetched separately via FindItems to support pagination.
 	// Returns error if list not found.
 	FindListByID(ctx context.Context, id string) (*domain.TodoList, error)
 
 	// ListLists retrieves todo lists with filtering, sorting, and pagination.
-	// Returns summaries with counts but without items.
+	// Items are fetched separately via FindItems to support pagination.
 	ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error)
 
 	// UpdateList updates a list using field mask.
