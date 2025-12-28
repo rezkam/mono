@@ -22,24 +22,6 @@ type TodoList struct {
 	UndoneItems int // Number of active items (TODO, IN_PROGRESS, BLOCKED)
 }
 
-// AddItem adds a new item to the list.
-func (l *TodoList) AddItem(item TodoItem) {
-	l.Items = append(l.Items, item)
-}
-
-// UpdateItemStatus updates the status of an item in the list.
-// Returns true if the item was found and updated.
-func (l *TodoList) UpdateItemStatus(itemID string, status TaskStatus) bool {
-	for i, item := range l.Items {
-		if item.ID == itemID {
-			l.Items[i].Status = status
-			l.Items[i].UpdatedAt = time.Now().UTC()
-			return true
-		}
-	}
-	return false
-}
-
 // TodoItem is an entity within the TodoList aggregate.
 // It represents a single task with rich metadata.
 type TodoItem struct {
