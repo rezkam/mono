@@ -74,8 +74,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	// Use REPEATABLE READ to ensure both queries see the same snapshot.
-	// Without this, items could be added between queries, causing TotalItems != len(Items).
+	// Use REPEATABLE READ to ensure consistent snapshot for counts.
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel:   pgx.RepeatableRead,
 		AccessMode: pgx.ReadOnly,
@@ -105,7 +104,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	// Convert to domain model
+	// Convert to domain model (items fetched separately via FindItems)
 	list := &domain.TodoList{
 		ID:          dbList.ID,
 		Title:       dbList.Title,
