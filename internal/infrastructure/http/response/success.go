@@ -7,7 +7,7 @@ import (
 
 // OK sends a 200 OK response with JSON data.
 // If JSON marshaling fails, sends 500 Internal Server Error with standard error format.
-func OK(w http.ResponseWriter, data interface{}) {
+func OK(w http.ResponseWriter, data any) {
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		writeMarshalingError(w, err)
@@ -21,7 +21,7 @@ func OK(w http.ResponseWriter, data interface{}) {
 
 // Created sends a 201 Created response with JSON data.
 // If JSON marshaling fails, sends 500 Internal Server Error with standard error format.
-func Created(w http.ResponseWriter, data interface{}) {
+func Created(w http.ResponseWriter, data any) {
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		writeMarshalingError(w, err)

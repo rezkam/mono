@@ -338,7 +338,6 @@ func createTestList(t *testing.T, store *postgres.Store, title string) string {
 		ID:         listID,
 		Title:      title,
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err := store.CreateList(context.Background(), list)
 	require.NoError(t, err)

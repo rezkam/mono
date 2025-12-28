@@ -39,7 +39,6 @@ func TestUpdateList_PreservesCreateTime(t *testing.T) {
 		ID:         listID,
 		Title:      "Original Title",
 		CreateTime: originalCreateTime,
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -92,7 +91,6 @@ func TestUpdateList_PreservesCreateTime_MultipleUpdates(t *testing.T) {
 		ID:         listID,
 		Title:      "Title v1",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -222,11 +220,12 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	assert.Equal(t, 3, targetList.UndoneItems, "All 3 items should be undone")
 
 	// Mark one item as DONE
-	fetchedList, err := todoService.GetList(ctx, listID)
+	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	itemsResult, err := todoService.ListItems(ctx, domain.ListTasksParams{Filter: filter})
 	require.NoError(t, err)
-	require.Len(t, fetchedList.Items, 3)
+	require.Len(t, itemsResult.Items, 3)
 
-	firstItem := &fetchedList.Items[0]
+	firstItem := &itemsResult.Items[0]
 	firstItem.Status = domain.TaskStatusDone
 	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, firstItem))
 	require.NoError(t, err)

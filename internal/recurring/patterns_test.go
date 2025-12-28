@@ -13,7 +13,7 @@ func TestDailyCalculator(t *testing.T) {
 	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	t.Run("default interval (1 day)", func(t *testing.T) {
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(start, config)
 		if next == nil {
 			t.Fatal("expected next occurrence, got nil")
@@ -25,7 +25,7 @@ func TestDailyCalculator(t *testing.T) {
 	})
 
 	t.Run("custom interval (3 days)", func(t *testing.T) {
-		config := map[string]interface{}{"interval": 3.0}
+		config := map[string]any{"interval": 3.0}
 		next := calc.NextOccurrence(start, config)
 		expected := start.AddDate(0, 0, 3)
 		if !next.Equal(expected) {
@@ -34,7 +34,7 @@ func TestDailyCalculator(t *testing.T) {
 	})
 
 	t.Run("occurrences between", func(t *testing.T) {
-		config := map[string]interface{}{"interval": 2.0}
+		config := map[string]any{"interval": 2.0}
 		end := start.AddDate(0, 0, 7) // 7 days later
 		occurrences := calc.OccurrencesBetween(start, end, config)
 		// Should get: day 0, 2, 4, 6 = 4 occurrences
@@ -50,7 +50,7 @@ func TestWeeklyCalculator(t *testing.T) {
 	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC) // Wednesday
 
 	t.Run("default interval (1 week)", func(t *testing.T) {
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(start, config)
 		expected := start.AddDate(0, 0, 7)
 		if !next.Equal(expected) {
@@ -59,7 +59,7 @@ func TestWeeklyCalculator(t *testing.T) {
 	})
 
 	t.Run("custom interval (2 weeks)", func(t *testing.T) {
-		config := map[string]interface{}{"interval": 2.0}
+		config := map[string]any{"interval": 2.0}
 		next := calc.NextOccurrence(start, config)
 		expected := start.AddDate(0, 0, 14)
 		if !next.Equal(expected) {
@@ -74,7 +74,7 @@ func TestMonthlyCalculator(t *testing.T) {
 	start := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
 
 	t.Run("default interval (1 month)", func(t *testing.T) {
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(start, config)
 		expected := start.AddDate(0, 1, 0)
 		if !next.Equal(expected) {
@@ -83,7 +83,7 @@ func TestMonthlyCalculator(t *testing.T) {
 	})
 
 	t.Run("custom interval (3 months)", func(t *testing.T) {
-		config := map[string]interface{}{"interval": 3.0}
+		config := map[string]any{"interval": 3.0}
 		next := calc.NextOccurrence(start, config)
 		expected := start.AddDate(0, 3, 0)
 		if !next.Equal(expected) {
@@ -93,7 +93,7 @@ func TestMonthlyCalculator(t *testing.T) {
 
 	t.Run("year boundary", func(t *testing.T) {
 		dec := time.Date(2024, 12, 15, 12, 0, 0, 0, time.UTC)
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(dec, config)
 		expected := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
 		if !next.Equal(expected) {
@@ -108,7 +108,7 @@ func TestWeekdaysCalculator(t *testing.T) {
 
 	t.Run("skip weekend", func(t *testing.T) {
 		friday := time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC) // Friday
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(friday, config)
 		// Should skip Saturday and Sunday, land on Monday
 		monday := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
@@ -119,7 +119,7 @@ func TestWeekdaysCalculator(t *testing.T) {
 
 	t.Run("weekday to weekday", func(t *testing.T) {
 		monday := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC) // Monday
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(monday, config)
 		tuesday := time.Date(2025, 1, 7, 12, 0, 0, 0, time.UTC)
 		if !next.Equal(tuesday) {
@@ -131,7 +131,7 @@ func TestWeekdaysCalculator(t *testing.T) {
 		// Start Monday, end next Monday (7 days)
 		start := time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC)
 		end := time.Date(2025, 1, 13, 12, 0, 0, 0, time.UTC)
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		occurrences := calc.OccurrencesBetween(start, end, config)
 		// Mon, Tue, Wed, Thu, Fri (5) + Mon, Tue, Wed, Thu, Fri (5) = 10 weekdays (excluding weekends)
 		// Actually: Jan 6-10 (5 days) + Jan 13 (1 day) = 6 weekdays
@@ -148,7 +148,7 @@ func TestYearlyCalculator(t *testing.T) {
 	start := time.Date(2024, 3, 15, 12, 0, 0, 0, time.UTC)
 
 	t.Run("next year", func(t *testing.T) {
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(start, config)
 		expected := time.Date(2025, 3, 15, 12, 0, 0, 0, time.UTC)
 		if !next.Equal(expected) {
@@ -163,7 +163,7 @@ func TestQuarterlyCalculator(t *testing.T) {
 	start := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	t.Run("next quarter", func(t *testing.T) {
-		config := map[string]interface{}{}
+		config := map[string]any{}
 		next := calc.NextOccurrence(start, config)
 		expected := time.Date(2025, 4, 1, 12, 0, 0, 0, time.UTC) // 3 months later
 		if !next.Equal(expected) {

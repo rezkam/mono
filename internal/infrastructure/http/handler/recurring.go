@@ -75,7 +75,7 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 	// RecurrenceConfig is JSON string, parse it to map
 	// Default to empty object if not provided (database requires NOT NULL)
 	if req.RecurrenceConfig != nil && *req.RecurrenceConfig != "" {
-		var config map[string]interface{}
+		var config map[string]any
 		if err := json.Unmarshal([]byte(*req.RecurrenceConfig), &config); err != nil {
 			response.BadRequest(w, "invalid recurrence_config JSON")
 			return
@@ -83,7 +83,7 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 		template.RecurrenceConfig = config
 	} else {
 		// Set default empty config
-		template.RecurrenceConfig = make(map[string]interface{})
+		template.RecurrenceConfig = make(map[string]any)
 	}
 
 	// Call service layer (validation happens here)
@@ -192,7 +192,7 @@ func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Req
 			}
 		case "recurrence_config":
 			if req.Template.RecurrenceConfig != nil && *req.Template.RecurrenceConfig != "" {
-				var config map[string]interface{}
+				var config map[string]any
 				if err := json.Unmarshal([]byte(*req.Template.RecurrenceConfig), &config); err != nil {
 					response.BadRequest(w, "invalid recurrence_config JSON")
 					return

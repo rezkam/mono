@@ -181,13 +181,28 @@ build-timeutc-linter: ## Build custom timezone linter
 	@echo "Building timeutc linter..."
 	@cd tools/linters/timeutc && go build -o ../../../timeutc ./cmd/timeutc
 
-lint: build-timeutc-linter ## Run linters (golangci-lint + custom timezone linter)
+build-nointerface-linter: ## Build custom interface{} linter
+	@echo "Building nointerface linter..."
+	@cd tools/linters/nointerface && go build -o ../../../nointerface ./cmd/nointerface
+
+lint-interface: build-nointerface-linter ## Run interface{} linter (detects interface{} usage)
+	@echo "Running custom interface{} linter..."
+	@go list ./... | grep -v sqlcgen | xargs ./nointerface
+
+lint-interface-fix: build-nointerface-linter ## Fix all interface{} by replacing with 'any'
+	@echo "Automatically fixing interface{} → any..."
+	@go list ./... | grep -v sqlcgen | xargs ./nointerface -fix
+	@echo "✅ All interface{} replaced with 'any'"
+
+lint: build-timeutc-linter build-nointerface-linter ## Run linters (golangci-lint + custom linters)
 	@echo "Verifying golangci-lint config..."
 	golangci-lint config verify
 	@echo "Running golangci-lint..."
 	golangci-lint run
 	@echo "Running custom timezone linter..."
-	./timeutc ./...
+	@go list ./... | grep -v sqlcgen | xargs ./timeutc
+	@echo "Running custom interface{} linter..."
+	@go list ./... | grep -v sqlcgen | xargs ./nointerface
 
 setup-hooks: ## Configure git hooks to run automatically
 	@git config core.hooksPath .githooks
@@ -199,7 +214,7 @@ run: build ## Build and run server using dev database
 
 clean: ## Remove built binaries
 	@echo "Cleaning up..."
-	@rm -f mono-server mono-worker mono-apikey timeutc
+	@rm -f mono-server mono-worker mono-apikey timeutc nointerface
 	@echo "All binaries removed"
 
 docker-build: ## Build the Docker image

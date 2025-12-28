@@ -34,14 +34,12 @@ func (s *Store) FindByShortToken(ctx context.Context, shortToken string) (*domai
 // Returns success (nil) if timestamp is not later (idempotent behavior).
 // Returns ErrNotFound if the API key doesn't exist.
 func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time.Time) error {
-	id, err := uuid.Parse(keyID)
-	if err != nil {
+	if _, err := uuid.Parse(keyID); err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	pgID := uuidToPgtype(id)
 	params := sqlcgen.UpdateAPIKeyLastUsedParams{
-		ID:         pgID,
+		ID:         keyID,
 		LastUsedAt: sql.Null[time.Time]{V: timestamp, Valid: true},
 	}
 
@@ -53,7 +51,7 @@ func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time
 	if rowsAffected == 0 {
 		// Either key doesn't exist OR timestamp wasn't later
 		// Check existence to distinguish these cases
-		exists, err := s.queries.CheckAPIKeyExists(ctx, pgID)
+		exists, err := s.queries.CheckAPIKeyExists(ctx, keyID)
 		if err != nil {
 			return fmt.Errorf("failed to check key existence: %w", err)
 		}
@@ -69,13 +67,12 @@ func (s *Store) UpdateLastUsed(ctx context.Context, keyID string, timestamp time
 
 // Create creates a new API key in storage.
 func (s *Store) Create(ctx context.Context, key *domain.APIKey) error {
-	id, err := uuid.Parse(key.ID)
-	if err != nil {
+	if _, err := uuid.Parse(key.ID); err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.CreateAPIKeyParams{
-		ID:             uuidToPgtype(id),
+		ID:             key.ID,
 		KeyType:        key.KeyType,
 		Service:        key.Service,
 		Version:        key.Version,
@@ -83,7 +80,7 @@ func (s *Store) Create(ctx context.Context, key *domain.APIKey) error {
 		LongSecretHash: key.LongSecretHash,
 		Name:           key.Name,
 		IsActive:       key.IsActive,
-		CreatedAt:      timeToPgtype(key.CreatedAt),
+		CreatedAt:      key.CreatedAt,
 		ExpiresAt:      ptrToNullTime(key.ExpiresAt), // Domain *time.Time → DB sql.Null[time.Time]
 	}
 

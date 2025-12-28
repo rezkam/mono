@@ -2,6 +2,49 @@
 -- +goose StatementBegin
 
 -- ============================================================================
+-- Domain Enum Types
+-- ============================================================================
+-- These ENUM types are defined from the domain layer (internal/domain/values.go)
+-- to provide database-level type safety and validation.
+
+-- Task status enum (domain.TaskStatus)
+CREATE TYPE task_status AS ENUM (
+    'todo',
+    'in_progress',
+    'blocked',
+    'done',
+    'archived',
+    'cancelled'
+);
+
+-- Task priority enum (domain.TaskPriority)
+CREATE TYPE task_priority AS ENUM (
+    'low',
+    'medium',
+    'high',
+    'urgent'
+);
+
+-- Recurrence pattern enum (domain.RecurrencePattern)
+CREATE TYPE recurrence_pattern AS ENUM (
+    'daily',
+    'weekly',
+    'biweekly',
+    'monthly',
+    'yearly',
+    'quarterly',
+    'weekdays'
+);
+
+-- Job status enum (for recurring_generation_jobs)
+CREATE TYPE job_status AS ENUM (
+    'pending',
+    'running',
+    'completed',
+    'failed'
+);
+
+-- ============================================================================
 -- Core Tables
 -- ============================================================================
 
@@ -20,11 +63,9 @@ CREATE TABLE todo_items (
     list_id uuid NOT NULL,
     title TEXT NOT NULL,
 
-    -- Status and priority
-    status TEXT NOT NULL DEFAULT 'todo'
-        CHECK (status IN ('todo', 'in_progress', 'blocked', 'done', 'archived', 'cancelled')),
-    priority TEXT
-        CHECK (priority IS NULL OR priority IN ('low', 'medium', 'high', 'urgent')),
+    -- Status and priority (using ENUM types for type safety)
+    status task_status NOT NULL DEFAULT 'todo',
+    priority task_priority,
 
     -- Time tracking
     estimated_duration INTERVAL,
@@ -46,6 +87,9 @@ CREATE TABLE todo_items (
     -- NULL = floating time (9am stays 9am regardless of user's location)
     -- Non-NULL = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
     timezone TEXT,
+
+    -- Optimistic locking version - incremented on each update to detect concurrent modifications
+    version INTEGER NOT NULL DEFAULT 1,
 
     FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
 );
@@ -93,9 +137,8 @@ CREATE INDEX idx_todo_items_instance_date ON todo_items(instance_date)
 CREATE TABLE task_status_history (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     task_id uuid NOT NULL,
-    from_status TEXT,
-    to_status TEXT NOT NULL
-        CHECK (to_status IN ('todo', 'in_progress', 'blocked', 'done', 'archived', 'cancelled')),
+    from_status task_status,
+    to_status task_status NOT NULL,
     changed_at timestamptz NOT NULL DEFAULT now(),
     notes TEXT,
 
@@ -119,13 +162,11 @@ CREATE TABLE recurring_task_templates (
     -- Template fields (same structure as todo_items)
     title TEXT NOT NULL,
     tags jsonb,
-    priority TEXT
-        CHECK (priority IS NULL OR priority IN ('low', 'medium', 'high', 'urgent')),
+    priority task_priority,
     estimated_duration INTERVAL,
 
-    -- Recurrence pattern
-    recurrence_pattern TEXT NOT NULL
-        CHECK (recurrence_pattern IN ('daily', 'weekly', 'biweekly', 'monthly', 'yearly', 'quarterly', 'weekdays')),
+    -- Recurrence pattern (using ENUM type)
+    recurrence_pattern recurrence_pattern NOT NULL,
 
     -- Pattern-specific configuration (JSONB for flexibility)
     recurrence_config jsonb NOT NULL,
@@ -189,9 +230,8 @@ CREATE TABLE recurring_generation_jobs (
     completed_at timestamptz,
     failed_at timestamptz,
 
-    -- Job state
-    status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+    -- Job state (using ENUM type)
+    status job_status NOT NULL DEFAULT 'pending',
 
     error_message TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
@@ -393,5 +433,11 @@ DROP TABLE IF EXISTS recurring_task_templates CASCADE;
 DROP TABLE IF EXISTS task_status_history;
 DROP TABLE IF EXISTS todo_items;
 DROP TABLE IF EXISTS todo_lists;
+
+-- Drop ENUM types
+DROP TYPE IF EXISTS job_status;
+DROP TYPE IF EXISTS recurrence_pattern;
+DROP TYPE IF EXISTS task_priority;
+DROP TYPE IF EXISTS task_status;
 
 -- +goose StatementEnd

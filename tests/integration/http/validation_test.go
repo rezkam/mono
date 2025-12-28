@@ -340,7 +340,7 @@ func TestValidation_UpdateRecurringTemplate_TitleInMaskNoValue(t *testing.T) {
 		ListID:            list.ID,
 		Title:             "Original Title",
 		RecurrencePattern: domain.RecurrenceDaily,
-		RecurrenceConfig:  make(map[string]interface{}),
+		RecurrenceConfig:  make(map[string]any),
 	})
 	require.NoError(t, err)
 
@@ -393,7 +393,7 @@ func TestValidation_UpdateRecurringTemplate_RecurrencePatternInMaskNoValue(t *te
 		ListID:            list.ID,
 		Title:             "Test Template",
 		RecurrencePattern: domain.RecurrenceDaily,
-		RecurrenceConfig:  make(map[string]interface{}),
+		RecurrenceConfig:  make(map[string]any),
 	})
 	require.NoError(t, err)
 
@@ -656,7 +656,7 @@ func TestValidation_MissingUpdateMask_UpdateRecurringTemplate(t *testing.T) {
 		ListID:            list.ID,
 		Title:             "Test Template",
 		RecurrencePattern: domain.RecurrenceDaily,
-		RecurrenceConfig:  make(map[string]interface{}),
+		RecurrenceConfig:  make(map[string]any),
 	})
 	require.NoError(t, err)
 
@@ -778,7 +778,7 @@ func TestValidation_UnknownUpdateMaskField_UpdateRecurringTemplate(t *testing.T)
 		ListID:            list.ID,
 		Title:             "Test Template",
 		RecurrencePattern: domain.RecurrenceDaily,
-		RecurrenceConfig:  make(map[string]interface{}),
+		RecurrenceConfig:  make(map[string]any),
 	})
 	require.NoError(t, err)
 

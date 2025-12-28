@@ -30,7 +30,6 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 		ID:         listID,
 		Title:      "Concurrent Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -121,7 +120,6 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 		ID:         listID,
 		Title:      "Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -245,7 +243,6 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		ID:         listID,
 		Title:      "Concurrent Field Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -363,7 +360,6 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 		ID:         listID,
 		Title:      "Timestamp Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -457,7 +453,6 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 		ID:         listID,
 		Title:      "Multi-Item Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

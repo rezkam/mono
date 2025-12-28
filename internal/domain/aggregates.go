@@ -118,7 +118,7 @@ type UpdateRecurringTemplateParams struct {
 	Priority             *TaskPriority
 	EstimatedDuration    *time.Duration
 	RecurrencePattern    *RecurrencePattern
-	RecurrenceConfig     map[string]interface{}
+	RecurrenceConfig     map[string]any
 	DueOffset            *time.Duration
 	IsActive             *bool
 	GenerationWindowDays *int
@@ -147,8 +147,8 @@ type RecurringTemplate struct {
 
 	// Recurrence configuration
 	RecurrencePattern RecurrencePattern
-	RecurrenceConfig  map[string]interface{} // Pattern-specific config as JSON
-	DueOffset         *time.Duration         // Optional offset for due time
+	RecurrenceConfig  map[string]any // Pattern-specific config as JSON
+	DueOffset         *time.Duration // Optional offset for due time
 
 	// Template state
 	IsActive             bool

@@ -110,7 +110,7 @@ func TestCreated_EncodingFailure_Returns500WithErrorJSON(t *testing.T) {
 func TestOK_Success_ReturnsValidJSON(t *testing.T) {
 	// Arrange: Create normal, encodable data
 	w := httptest.NewRecorder()
-	data := map[string]interface{}{
+	data := map[string]any{
 		"id":      "123",
 		"message": "success",
 		"items":   []string{"a", "b", "c"},
@@ -133,7 +133,7 @@ func TestOK_Success_ReturnsValidJSON(t *testing.T) {
 	}
 
 	// Verify response is valid JSON
-	var decoded map[string]interface{}
+	var decoded map[string]any
 	if err := json.NewDecoder(result.Body).Decode(&decoded); err != nil {
 		t.Fatalf("Response is not valid JSON: %v", err)
 	}

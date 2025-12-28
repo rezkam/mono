@@ -171,7 +171,7 @@ func createTestRecurringTemplate(t *testing.T, ts *TestServer, listID, title str
 		ListID:            listID,
 		Title:             title,
 		RecurrencePattern: domain.RecurrenceDaily,
-		RecurrenceConfig:  make(map[string]interface{}),
+		RecurrenceConfig:  make(map[string]any),
 	}
 
 	created, err := ts.TodoService.CreateRecurringTemplate(context.Background(), template)

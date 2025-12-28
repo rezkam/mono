@@ -163,12 +163,12 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 
 		// Parse response
-		var response map[string]interface{}
+		var response map[string]any
 		err = json.NewDecoder(w.Body).Decode(&response)
 		require.NoError(t, err)
 
 		// Verify create_time is ISO 8601 with 'Z' suffix
-		listMap, ok := response["list"].(map[string]interface{})
+		listMap, ok := response["list"].(map[string]any)
 		require.True(t, ok, "response should contain list object")
 		createTimeStr, ok := listMap["create_time"].(string)
 		require.True(t, ok, "create_time should be a string")
@@ -233,12 +233,12 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 				require.Equal(t, http.StatusCreated, w.Code,
 					"Should accept %s timezone in request", tc.name)
 
-				var response map[string]interface{}
+				var response map[string]any
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				require.NoError(t, err)
 
 				// Extract item ID
-				itemMap, ok := response["item"].(map[string]interface{})
+				itemMap, ok := response["item"].(map[string]any)
 				require.True(t, ok, "response should contain item object")
 				itemID, ok := itemMap["id"].(string)
 				require.True(t, ok, "Response should contain item ID")

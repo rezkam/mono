@@ -6,12 +6,9 @@
 package sqlcgen
 
 import (
-	"time"
-
 	"context"
 	"database/sql"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
 
 const createGenerationJob = `-- name: CreateGenerationJob :exec
@@ -24,13 +21,13 @@ INSERT INTO recurring_generation_jobs (
 `
 
 type CreateGenerationJobParams struct {
-	ID            pgtype.UUID        `json:"id"`
-	TemplateID    pgtype.UUID        `json:"template_id"`
-	Column3       interface{}        `json:"column_3"`
-	Status        string             `json:"status"`
-	GenerateFrom  pgtype.Date        `json:"generate_from"`
-	GenerateUntil pgtype.Date        `json:"generate_until"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID            string      `json:"id"`
+	TemplateID    string      `json:"template_id"`
+	Column3       interface{} `json:"column_3"`
+	Status        string      `json:"status"`
+	GenerateFrom  time.Time   `json:"generate_from"`
+	GenerateUntil time.Time   `json:"generate_until"`
+	CreatedAt     time.Time   `json:"created_at"`
 }
 
 // Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
@@ -65,7 +62,7 @@ SELECT id, template_id, scheduled_for, started_at, completed_at, failed_at, stat
 WHERE id = $1
 `
 
-func (q *Queries) GetGenerationJob(ctx context.Context, id pgtype.UUID) (RecurringGenerationJob, error) {
+func (q *Queries) GetGenerationJob(ctx context.Context, id string) (RecurringGenerationJob, error) {
 	row := q.db.QueryRow(ctx, getGenerationJob, id)
 	var i RecurringGenerationJob
 	err := row.Scan(
@@ -94,7 +91,7 @@ SELECT EXISTS(
 
 // Checks if a template already has a pending or running job to prevent duplicates.
 // Returns true if such a job exists, false otherwise.
-func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID pgtype.UUID) (bool, error) {
+func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPendingOrRunningJob, templateID)
 	var has_job bool
 	err := row.Scan(&has_job)
@@ -109,8 +106,8 @@ LIMIT $2
 `
 
 type ListPendingGenerationJobsParams struct {
-	ScheduledFor pgtype.Timestamptz `json:"scheduled_for"`
-	Limit        int32              `json:"limit"`
+	ScheduledFor time.Time `json:"scheduled_for"`
+	Limit        int32     `json:"limit"`
 }
 
 func (q *Queries) ListPendingGenerationJobs(ctx context.Context, arg ListPendingGenerationJobsParams) ([]RecurringGenerationJob, error) {
@@ -160,7 +157,7 @@ type UpdateGenerationJobStatusParams struct {
 	Status       string              `json:"status"`
 	StartedAt    sql.Null[time.Time] `json:"started_at"`
 	ErrorMessage sql.Null[string]    `json:"error_message"`
-	ID           pgtype.UUID         `json:"id"`
+	ID           string              `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected

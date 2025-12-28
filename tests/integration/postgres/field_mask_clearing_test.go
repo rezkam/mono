@@ -43,7 +43,6 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 		ID:         listID,
 		Title:      "Field Mask Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -111,7 +110,6 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 		ID:         listID,
 		Title:      "DueTime Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -178,7 +176,6 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		ID:         listID,
 		Title:      "Duration Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -246,7 +243,6 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 		ID:         listID,
 		Title:      "Timezone Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -314,7 +310,6 @@ func TestFieldMask_ClearTags(t *testing.T) {
 		ID:         listID,
 		Title:      "Tags Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -381,7 +376,6 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		ID:         listID,
 		Title:      "Partial Update Test List",
 		CreateTime: time.Now().UTC().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

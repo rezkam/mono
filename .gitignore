@@ -26,6 +26,7 @@ go.work
 .vscode/
 *.swp
 *.swo
+*.bak
 
 # OS
 .DS_Store
@@ -44,3 +45,4 @@ docs/
 *.binpb
 
 /timeutc
+/nointerface

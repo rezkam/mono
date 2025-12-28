@@ -44,7 +44,6 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 		ID:         listID,
 		Title:      "Priority Semantic Order Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -214,7 +213,6 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 		ID:         listID,
 		Title:      "Not Alphabetical Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -323,7 +321,6 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 		ID:         listID,
 		Title:      "Nulls Last Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

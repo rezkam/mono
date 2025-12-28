@@ -49,7 +49,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 	testCases := []struct {
 		name             string
 		pattern          domain.RecurrencePattern
-		config           map[string]interface{}
+		config           map[string]any
 		generationWindow int
 		expectedMinTasks int // Minimum tasks expected
 		expectedMaxTasks int // Maximum tasks expected
@@ -57,7 +57,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		{
 			name:             "Daily",
 			pattern:          domain.RecurrenceDaily,
-			config:           map[string]interface{}{"interval": float64(1)},
+			config:           map[string]any{"interval": float64(1)},
 			generationWindow: 30,
 			expectedMinTasks: 30,
 			expectedMaxTasks: 31, // Account for edge cases
@@ -65,7 +65,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		{
 			name:             "Weekly",
 			pattern:          domain.RecurrenceWeekly,
-			config:           map[string]interface{}{"interval": float64(1)},
+			config:           map[string]any{"interval": float64(1)},
 			generationWindow: 90,
 			expectedMinTasks: 12,
 			expectedMaxTasks: 14,
@@ -73,7 +73,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		{
 			name:             "Monthly",
 			pattern:          domain.RecurrenceMonthly,
-			config:           map[string]interface{}{"interval": float64(1)},
+			config:           map[string]any{"interval": float64(1)},
 			generationWindow: 365,
 			expectedMinTasks: 11,
 			expectedMaxTasks: 13,
@@ -81,7 +81,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 		{
 			name:             "Weekdays",
 			pattern:          domain.RecurrenceWeekdays,
-			config:           map[string]interface{}{},
+			config:           map[string]any{},
 			generationWindow: 30,
 			expectedMinTasks: 21,
 			expectedMaxTasks: 23,
@@ -103,7 +103,6 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			list := &domain.TodoList{
 				ID:         listID,
 				Title:      fmt.Sprintf("Test List - %s", tc.name),
-				Items:      []domain.TodoItem{},
 				CreateTime: time.Now().UTC(),
 			}
 			err = store.CreateList(ctx, list)
@@ -155,10 +154,11 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			assert.Equal(t, 1, completedCount, "Job should be completed")
 
 			// Verify tasks were created
-			updatedList, err := store.FindListByID(ctx, listID)
+			filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
+			itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
 			require.NoError(t, err)
 
-			taskCount := len(updatedList.Items)
+			taskCount := len(itemsResult.Items)
 			assert.GreaterOrEqual(t, taskCount, tc.expectedMinTasks,
 				"Should have at least %d tasks", tc.expectedMinTasks)
 			assert.LessOrEqual(t, taskCount, tc.expectedMaxTasks,
@@ -166,8 +166,8 @@ func TestWorker_CompleteFlow(t *testing.T) {
 
 			// Verify tasks span into the future
 			if taskCount > 0 {
-				firstTask := updatedList.Items[0]
-				lastTask := updatedList.Items[taskCount-1]
+				firstTask := itemsResult.Items[0]
+				lastTask := itemsResult.Items[taskCount-1]
 
 				if lastTask.DueTime != nil && firstTask.DueTime != nil {
 					assert.True(t, lastTask.DueTime.After(*firstTask.DueTime),
@@ -205,7 +205,6 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Distribution Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -225,7 +224,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 			ListID:               listID,
 			Title:                fmt.Sprintf("Task %d", i),
 			RecurrencePattern:    domain.RecurrenceDaily,
-			RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
+			RecurrenceConfig:     map[string]any{"interval": float64(1)},
 			GenerationWindowDays: 7,
 			IsActive:             true,
 			CreatedAt:            time.Now().UTC(),
@@ -324,7 +323,6 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "High Load Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -334,14 +332,14 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	totalTemplates := 500
 	patterns := []struct {
 		pattern domain.RecurrencePattern
-		config  map[string]interface{}
+		config  map[string]any
 		count   int
 		window  int
 	}{
-		{domain.RecurrenceDaily, map[string]interface{}{"interval": float64(1)}, 200, 15},
-		{domain.RecurrenceWeekly, map[string]interface{}{"interval": float64(1)}, 150, 60},
-		{domain.RecurrenceMonthly, map[string]interface{}{"interval": float64(1)}, 100, 180},
-		{domain.RecurrenceWeekdays, map[string]interface{}{}, 50, 30},
+		{domain.RecurrenceDaily, map[string]any{"interval": float64(1)}, 200, 15},
+		{domain.RecurrenceWeekly, map[string]any{"interval": float64(1)}, 150, 60},
+		{domain.RecurrenceMonthly, map[string]any{"interval": float64(1)}, 100, 180},
+		{domain.RecurrenceWeekdays, map[string]any{}, 50, 30},
 	}
 
 	templateCount := 0
@@ -428,10 +426,11 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	assert.Equal(t, int32(totalTemplates), processedCount.Load())
 
 	// Verify task counts
-	updatedList, err := store.FindListByID(ctx, listID)
+	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
 	require.NoError(t, err)
 
-	taskCount := len(updatedList.Items)
+	taskCount := len(itemsResult.Items)
 	t.Logf("Generated %d total tasks", taskCount)
 
 	// Rough estimate: should have thousands of tasks
@@ -466,7 +465,6 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Window Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -483,7 +481,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 		ListID:               listID,
 		Title:                "Window Test Task",
 		RecurrencePattern:    domain.RecurrenceMonthly,
-		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
+		RecurrenceConfig:     map[string]any{"interval": float64(1)},
 		GenerationWindowDays: 180,
 		LastGeneratedUntil:   lastGenerated,
 		IsActive:             true,
@@ -505,11 +503,12 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	assert.True(t, processed)
 
 	// Verify tasks start from lastGenerated date
-	updatedList, err := store.FindListByID(ctx, listID)
+	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
 	require.NoError(t, err)
 
-	if len(updatedList.Items) > 0 {
-		firstTask := updatedList.Items[0]
+	if len(itemsResult.Items) > 0 {
+		firstTask := itemsResult.Items[0]
 
 		// First task should be at or after the last generated date
 		if firstTask.DueTime != nil {
@@ -552,7 +551,6 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "History Preservation Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -600,7 +598,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		ListID:               listID,
 		Title:                "Recurring Task",
 		RecurrencePattern:    domain.RecurrenceDaily,
-		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
+		RecurrenceConfig:     map[string]any{"interval": float64(1)},
 		GenerationWindowDays: 7,
 		IsActive:             true,
 		CreatedAt:            time.Now().UTC(),
@@ -618,12 +616,13 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	assert.True(t, processed, "Should process the job")
 
 	// Verify existing task still exists
-	updatedList, err := store.FindListByID(ctx, listID)
+	filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{})
+	itemsResult, err := store.FindItems(ctx, domain.ListTasksParams{Filter: filter}, []domain.TaskStatus{})
 	require.NoError(t, err)
 
 	var foundExisting bool
 	var foundRecurring int
-	for _, item := range updatedList.Items {
+	for _, item := range itemsResult.Items {
 		if item.ID == existingTaskID {
 			foundExisting = true
 			assert.Equal(t, "Existing Task - Do Not Delete", item.Title)
@@ -667,5 +666,5 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 
 	t.Logf("✓ Existing task preserved with %d history entries", historyCountAfter)
 	t.Logf("✓ Generated %d new recurring tasks", foundRecurring)
-	t.Logf("✓ Total items in list: %d", len(updatedList.Items))
+	t.Logf("✓ Total items in list: %d", len(itemsResult.Items))
 }

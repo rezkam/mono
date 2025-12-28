@@ -50,7 +50,6 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 		ID:         listID,
 		Title:      "Order By Direction Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -212,7 +211,6 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 		ID:         listID,
 		Title:      "Due Time Order Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -313,7 +311,6 @@ func TestOrderByDirection_Priority(t *testing.T) {
 		ID:         listID,
 		Title:      "Priority Order Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

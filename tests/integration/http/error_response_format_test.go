@@ -268,13 +268,13 @@ func TestErrorResponses_AllErrorsHaveArrayDetails(t *testing.T) {
 	ts.Router.ServeHTTP(w, req)
 
 	// Decode as raw JSON to verify the structure
-	var rawResponse map[string]interface{}
+	var rawResponse map[string]any
 	body := bytes.NewReader(w.Body.Bytes())
 	if err := json.NewDecoder(body).Decode(&rawResponse); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	errorObj, ok := rawResponse["error"].(map[string]interface{})
+	errorObj, ok := rawResponse["error"].(map[string]any)
 	if !ok {
 		t.Fatal("Response missing 'error' object")
 	}
@@ -292,7 +292,7 @@ func TestErrorResponses_AllErrorsHaveArrayDetails(t *testing.T) {
 	}
 
 	// Verify it's an array type
-	if _, ok := details.([]interface{}); !ok {
+	if _, ok := details.([]any); !ok {
 		t.Errorf("error.details must be an array, got type %T", details)
 	}
 }

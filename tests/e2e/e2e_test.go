@@ -143,11 +143,11 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var createResp map[string]interface{}
+	var createResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createResp)
 	require.NoError(t, err)
 
-	list := createResp["list"].(map[string]interface{})
+	list := createResp["list"].(map[string]any)
 	listID := list["id"].(string)
 	assert.NotEmpty(t, listID)
 	assert.Equal(t, "E2E List", list["title"])
@@ -160,10 +160,10 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var itemResp1 map[string]interface{}
+	var itemResp1 map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&itemResp1)
 	require.NoError(t, err)
-	item1 := itemResp1["item"].(map[string]interface{})
+	item1 := itemResp1["item"].(map[string]any)
 	assert.Equal(t, "Buy Milk", item1["title"])
 
 	// 3. Create Item with tags and due time
@@ -180,16 +180,16 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var itemResp2 map[string]interface{}
+	var itemResp2 map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&itemResp2)
 	require.NoError(t, err)
 
-	item2 := itemResp2["item"].(map[string]interface{})
+	item2 := itemResp2["item"].(map[string]any)
 	itemID := item2["id"].(string)
 	assert.NotEmpty(t, itemID)
 	assert.Equal(t, "Buy Milk", item2["title"])
 
-	tags := item2["tags"].([]interface{})
+	tags := item2["tags"].([]any)
 	assert.Contains(t, tags, "shopping")
 	assert.Contains(t, tags, "urgent")
 
@@ -200,11 +200,11 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var listItemsResp map[string]interface{}
+	var listItemsResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&listItemsResp)
 	require.NoError(t, err)
 
-	items := listItemsResp["items"].([]interface{})
+	items := listItemsResp["items"].([]any)
 	assert.Equal(t, 2, len(items)) // Exactly our 2 items in this list
 
 	// 5. Update Item (Tags and Status)
@@ -223,14 +223,14 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var updateResp map[string]interface{}
+	var updateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&updateResp)
 	require.NoError(t, err)
 
-	updatedItem := updateResp["item"].(map[string]interface{})
+	updatedItem := updateResp["item"].(map[string]any)
 	assert.Equal(t, "done", updatedItem["status"])
 
-	updatedTags := updatedItem["tags"].([]interface{})
+	updatedTags := updatedItem["tags"].([]any)
 	assert.Contains(t, updatedTags, "shopping")
 	assert.Contains(t, updatedTags, "done")
 
@@ -241,11 +241,11 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var getListResp map[string]interface{}
+	var getListResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&getListResp)
 	require.NoError(t, err)
 
-	fetchedList := getListResp["list"].(map[string]interface{})
+	fetchedList := getListResp["list"].(map[string]any)
 	assert.Equal(t, listID, fetchedList["id"])
 	assert.Equal(t, "E2E List", fetchedList["title"])
 }
@@ -260,11 +260,11 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var listResp map[string]interface{}
+	var listResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&listResp)
 	require.NoError(t, err)
 
-	listID := listResp["list"].(map[string]interface{})["id"].(string)
+	listID := listResp["list"].(map[string]any)["id"].(string)
 
 	// 2. Create a recurring template
 	createTemplateJSON := `{
@@ -283,11 +283,11 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 		t.Fatalf("Expected 201, got %d. Response: %s", resp.StatusCode, string(body))
 	}
 
-	var createTemplateResp map[string]interface{}
+	var createTemplateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createTemplateResp)
 	require.NoError(t, err)
 
-	template := createTemplateResp["template"].(map[string]interface{})
+	template := createTemplateResp["template"].(map[string]any)
 	templateID := template["id"].(string)
 	assert.NotEmpty(t, templateID)
 	assert.Equal(t, "Daily Standup", template["title"])
@@ -300,11 +300,11 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var getTemplateResp map[string]interface{}
+	var getTemplateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&getTemplateResp)
 	require.NoError(t, err)
 
-	fetchedTemplate := getTemplateResp["template"].(map[string]interface{})
+	fetchedTemplate := getTemplateResp["template"].(map[string]any)
 	assert.Equal(t, "Daily Standup", fetchedTemplate["title"])
 
 	// 4. Update the template
@@ -328,14 +328,14 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 		t.Fatalf("Expected 200, got %d. Response: %s", resp.StatusCode, string(body))
 	}
 
-	var updateTemplateResp map[string]interface{}
+	var updateTemplateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&updateTemplateResp)
 	require.NoError(t, err)
 
-	updatedTemplate := updateTemplateResp["template"].(map[string]interface{})
+	updatedTemplate := updateTemplateResp["template"].(map[string]any)
 	assert.Equal(t, "Updated Daily Standup", updatedTemplate["title"])
 
-	updatedTags := updatedTemplate["tags"].([]interface{})
+	updatedTags := updatedTemplate["tags"].([]any)
 	assert.Contains(t, updatedTags, "meeting")
 	assert.Contains(t, updatedTags, "team")
 
@@ -346,14 +346,14 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var listTemplatesResp map[string]interface{}
+	var listTemplatesResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&listTemplatesResp)
 	require.NoError(t, err)
 
-	templates := listTemplatesResp["templates"].([]interface{})
+	templates := listTemplatesResp["templates"].([]any)
 	assert.Len(t, templates, 1)
 
-	listedTemplate := templates[0].(map[string]interface{})
+	listedTemplate := templates[0].(map[string]any)
 	assert.Equal(t, "Updated Daily Standup", listedTemplate["title"])
 
 	// 6. Delete the template
@@ -370,11 +370,11 @@ func TestE2E_RecurringTemplates(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var listTemplatesResp2 map[string]interface{}
+	var listTemplatesResp2 map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&listTemplatesResp2)
 	require.NoError(t, err)
 
-	templatesAfterDelete := listTemplatesResp2["templates"].([]interface{})
+	templatesAfterDelete := listTemplatesResp2["templates"].([]any)
 	assert.Len(t, templatesAfterDelete, 0)
 }
 
@@ -386,10 +386,10 @@ func TestE2E_CreateItemWithRecurringMetadata(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createListResp map[string]interface{}
+	var createListResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createListResp)
 	require.NoError(t, err)
-	listID := createListResp["list"].(map[string]interface{})["id"].(string)
+	listID := createListResp["list"].(map[string]any)["id"].(string)
 
 	// 2. Create recurring template
 	createTemplateJSON := `{
@@ -402,10 +402,10 @@ func TestE2E_CreateItemWithRecurringMetadata(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createTemplateResp map[string]interface{}
+	var createTemplateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createTemplateResp)
 	require.NoError(t, err)
-	templateID := createTemplateResp["template"].(map[string]interface{})["id"].(string)
+	templateID := createTemplateResp["template"].(map[string]any)["id"].(string)
 
 	// 3. Create item with recurring metadata
 	createItemJSON := fmt.Sprintf(`{
@@ -422,17 +422,17 @@ func TestE2E_CreateItemWithRecurringMetadata(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var createItemResp map[string]interface{}
+	var createItemResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createItemResp)
 	require.NoError(t, err)
 
-	item := createItemResp["item"].(map[string]interface{})
+	item := createItemResp["item"].(map[string]any)
 	assert.NotEmpty(t, item["id"])
 	assert.Equal(t, "Standup - Dec 18", item["title"])
 	assert.Equal(t, templateID, item["recurring_template_id"])
 	assert.NotEmpty(t, item["instance_date"])
 
-	tags := item["tags"].([]interface{})
+	tags := item["tags"].([]any)
 	assert.Contains(t, tags, "recurring")
 	assert.Contains(t, tags, "meeting")
 	assert.Equal(t, "high", item["priority"])
@@ -446,20 +446,20 @@ func TestE2E_UpdateItemWithFieldMask(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createListResp map[string]interface{}
+	var createListResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createListResp)
 	require.NoError(t, err)
-	listID := createListResp["list"].(map[string]interface{})["id"].(string)
+	listID := createListResp["list"].(map[string]any)["id"].(string)
 
 	createItemJSON := `{"title": "Original Task", "tags": ["work", "urgent"]}`
 	resp, err = httpRequest(t, "POST", fmt.Sprintf("/api/v1/lists/%s/items", listID), createItemJSON)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createItemResp map[string]interface{}
+	var createItemResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createItemResp)
 	require.NoError(t, err)
-	itemID := createItemResp["item"].(map[string]interface{})["id"].(string)
+	itemID := createItemResp["item"].(map[string]any)["id"].(string)
 
 	// 2. Update only status using field mask
 	updateJSON := fmt.Sprintf(`{
@@ -479,15 +479,15 @@ func TestE2E_UpdateItemWithFieldMask(t *testing.T) {
 		t.Fatalf("Expected 200, got %d. Response: %s", resp.StatusCode, string(body))
 	}
 
-	var updateResp map[string]interface{}
+	var updateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&updateResp)
 	require.NoError(t, err)
 
-	item := updateResp["item"].(map[string]interface{})
+	item := updateResp["item"].(map[string]any)
 	assert.Equal(t, "done", item["status"])
 	assert.Equal(t, "Original Task", item["title"]) // Should not change
 
-	tags := item["tags"].([]interface{})
+	tags := item["tags"].([]any)
 	assert.Contains(t, tags, "work")   // Should not change
 	assert.Contains(t, tags, "urgent") // Should not change
 }
@@ -500,10 +500,10 @@ func TestE2E_ListTasksWithFilter(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createListResp map[string]interface{}
+	var createListResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createListResp)
 	require.NoError(t, err)
-	listID := createListResp["list"].(map[string]interface{})["id"].(string)
+	listID := createListResp["list"].(map[string]any)["id"].(string)
 
 	// Use unique tag to avoid interference from other tests
 	uniqueTag := fmt.Sprintf("urgent-%d", time.Now().UTC().Unix())
@@ -528,7 +528,7 @@ func TestE2E_ListTasksWithFilter(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var listResp map[string]interface{}
+	var listResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&listResp)
 	require.NoError(t, err)
 
@@ -544,10 +544,10 @@ func TestE2E_RecurringTemplateFieldMask(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createListResp map[string]interface{}
+	var createListResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createListResp)
 	require.NoError(t, err)
-	listID := createListResp["list"].(map[string]interface{})["id"].(string)
+	listID := createListResp["list"].(map[string]any)["id"].(string)
 
 	createTemplateJSON := `{
 		"title": "Original Template",
@@ -560,10 +560,10 @@ func TestE2E_RecurringTemplateFieldMask(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	var createTemplateResp map[string]interface{}
+	var createTemplateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&createTemplateResp)
 	require.NoError(t, err)
-	templateID := createTemplateResp["template"].(map[string]interface{})["id"].(string)
+	templateID := createTemplateResp["template"].(map[string]any)["id"].(string)
 
 	// 2. Update only title using field mask
 	updateJSON := fmt.Sprintf(`{
@@ -581,15 +581,15 @@ func TestE2E_RecurringTemplateFieldMask(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var updateResp map[string]interface{}
+	var updateResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&updateResp)
 	require.NoError(t, err)
 
-	template := updateResp["template"].(map[string]interface{})
+	template := updateResp["template"].(map[string]any)
 	assert.Equal(t, "Updated Title Only", template["title"])
 	assert.Equal(t, "daily", template["recurrence_pattern"]) // Should not change
 
-	tags := template["tags"].([]interface{})
+	tags := template["tags"].([]any)
 	assert.Contains(t, tags, "original") // Should not change
 }
 
@@ -610,11 +610,11 @@ func TestE2E_ListsPagination(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var listResp map[string]interface{}
+	var listResp map[string]any
 	err = json.NewDecoder(resp.Body).Decode(&listResp)
 	require.NoError(t, err)
 
-	lists := listResp["lists"].([]interface{})
+	lists := listResp["lists"].([]any)
 	assert.LessOrEqual(t, len(lists), 10) // Should respect page size
 
 	// Should have next page token if more results exist

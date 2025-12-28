@@ -37,7 +37,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	listID := listResp.List.Id.String()
 
 	t.Run("title is mapped", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title": "Test Title Mapping",
 		}
 		body, _ := json.Marshal(reqBody)
@@ -60,7 +60,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 
 	t.Run("due_time is mapped", func(t *testing.T) {
 		dueTime := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":    "Due Time Test",
 			"due_time": dueTime.Format(time.RFC3339),
 		}
@@ -83,7 +83,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("tags is mapped", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title": "Tags Test",
 			"tags":  []string{"urgent", "home", "errand"},
 		}
@@ -106,7 +106,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("priority is mapped", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":    "Priority Test",
 			"priority": "high",
 		}
@@ -130,7 +130,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("estimated_duration is mapped", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":              "Estimated Duration Test",
 			"estimated_duration": "PT1H30M", // ISO 8601 format as documented in OpenAPI
 		}
@@ -153,7 +153,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("timezone is mapped", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":    "Timezone Test",
 			"timezone": "Europe/Stockholm",
 		}
@@ -177,7 +177,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 
 	t.Run("instance_date is mapped", func(t *testing.T) {
 		instanceDate := time.Date(2025, 12, 25, 0, 0, 0, 0, time.UTC)
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":         "Instance Date Test",
 			"instance_date": instanceDate.Format(time.RFC3339),
 		}
@@ -203,7 +203,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		dueTime := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
 		instanceDate := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
 
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":              "Complete Item Test",
 			"due_time":           dueTime.Format(time.RFC3339),
 			"tags":               []string{"work", "important"},
@@ -295,7 +295,7 @@ func TestCreateItem_EstimatedDurationFormats(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			reqBody := map[string]interface{}{
+			reqBody := map[string]any{
 				"title":              fmt.Sprintf("Duration %s", tc.name),
 				"estimated_duration": tc.input,
 			}
@@ -319,7 +319,7 @@ func TestCreateItem_EstimatedDurationFormats(t *testing.T) {
 	}
 
 	t.Run("invalid duration returns error", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":              "Invalid Duration",
 			"estimated_duration": "invalid",
 		}
@@ -359,7 +359,7 @@ func TestCreateItem_PriorityValues(t *testing.T) {
 
 	for _, priority := range priorities {
 		t.Run(string(priority), func(t *testing.T) {
-			reqBody := map[string]interface{}{
+			reqBody := map[string]any{
 				"title":    fmt.Sprintf("Priority %s", priority),
 				"priority": string(priority),
 			}
@@ -383,7 +383,7 @@ func TestCreateItem_PriorityValues(t *testing.T) {
 	}
 
 	t.Run("invalid priority returns error", func(t *testing.T) {
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"title":    "Invalid Priority",
 			"priority": "super_urgent",
 		}

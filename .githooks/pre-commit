@@ -37,10 +37,20 @@ if [ -n "$STAGED_GO_FILES" ]; then
     if [ ! -f "./timeutc" ]; then
         make build-timeutc-linter
     fi
-    # Run on packages instead of individual files, excluding testdata
-    LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | tr '\n' ' ')
+    # Run on packages instead of individual files, excluding testdata and generated code
+    LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | grep -v sqlcgen | tr '\n' ' ')
     if [ -n "$LINT_PACKAGES" ]; then
         ./timeutc $LINT_PACKAGES
+    fi
+
+    echo "Running interface{} linter on staged files..."
+    # Build the linter if it doesn't exist
+    if [ ! -f "./nointerface" ]; then
+        make build-nointerface-linter
+    fi
+    # Run on packages instead of individual files, excluding testdata and generated code
+    if [ -n "$LINT_PACKAGES" ]; then
+        ./nointerface $LINT_PACKAGES
     fi
 
     echo "Running tests..."

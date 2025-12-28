@@ -34,7 +34,6 @@ func TestFindItemByID_Success(t *testing.T) {
 		ID:         listID,
 		Title:      "FindItemByID Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -139,7 +138,6 @@ func TestFindItemByID_ReturnsAllFields(t *testing.T) {
 		ID:         listID,
 		Title:      "Full Fields Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

@@ -9,8 +9,6 @@ import (
 
 	"context"
 	"database/sql"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -23,7 +21,7 @@ type Querier interface {
 	BatchCreateTodoItems(ctx context.Context, arg []BatchCreateTodoItemsParams) (int64, error)
 	// Checks if an API key exists by ID.
 	// Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
-	CheckAPIKeyExists(ctx context.Context, id pgtype.UUID) (bool, error)
+	CheckAPIKeyExists(ctx context.Context, id string) (bool, error)
 	// Counts total matching items for pagination (used when main query returns empty page).
 	// Uses same WHERE clause as ListTasksWithFilters for consistency.
 	// $2: statuses array (empty array skips filter, OR logic within array)
@@ -46,7 +44,7 @@ type Querier interface {
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Revokes API key with existence check in single operation
-	DeactivateAPIKey(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeactivateAPIKey(ctx context.Context, id string) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Soft delete with existence detection in single operation
@@ -55,16 +53,16 @@ type Querier interface {
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Hard delete with built-in existence verification
-	DeleteRecurringTemplate(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteRecurringTemplate(ctx context.Context, id string) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Single-query delete with existence detection built-in
-	DeleteTodoItem(ctx context.Context, id pgtype.UUID) (int64, error)
-	DeleteTodoItemsByListId(ctx context.Context, listID pgtype.UUID) error
+	DeleteTodoItem(ctx context.Context, id string) (int64, error)
+	DeleteTodoItemsByListId(ctx context.Context, listID string) error
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Efficient detection of non-existent records without separate SELECT query
-	DeleteTodoList(ctx context.Context, id pgtype.UUID) (int64, error)
+	DeleteTodoList(ctx context.Context, id string) (int64, error)
 	// Advanced list query with filtering, sorting, and pagination.
 	// Supports AIP-160-style filtering and AIP-132-style sorting.
 	//
@@ -79,24 +77,24 @@ type Querier interface {
 	FindTodoListsWithFilters(ctx context.Context, arg FindTodoListsWithFiltersParams) ([]FindTodoListsWithFiltersRow, error)
 	GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error)
 	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
-	GetGenerationJob(ctx context.Context, id pgtype.UUID) (RecurringGenerationJob, error)
-	GetRecurringTemplate(ctx context.Context, id pgtype.UUID) (RecurringTaskTemplate, error)
-	GetTaskStatusHistory(ctx context.Context, taskID pgtype.UUID) ([]TaskStatusHistory, error)
+	GetGenerationJob(ctx context.Context, id string) (RecurringGenerationJob, error)
+	GetRecurringTemplate(ctx context.Context, id string) (RecurringTaskTemplate, error)
+	GetTaskStatusHistory(ctx context.Context, taskID string) ([]TaskStatusHistory, error)
 	GetTaskStatusHistoryByDateRange(ctx context.Context, arg GetTaskStatusHistoryByDateRangeParams) ([]TaskStatusHistory, error)
-	GetTodoItem(ctx context.Context, id pgtype.UUID) (TodoItem, error)
-	GetTodoItemsByListId(ctx context.Context, listID pgtype.UUID) ([]TodoItem, error)
-	GetTodoList(ctx context.Context, id pgtype.UUID) (TodoList, error)
+	GetTodoItem(ctx context.Context, id string) (TodoItem, error)
+	GetTodoItemsByListId(ctx context.Context, listID string) ([]TodoItem, error)
+	GetTodoList(ctx context.Context, id string) (TodoList, error)
 	// Returns a single list by ID with item counts (for detail view).
 	// undone_statuses parameter: domain layer defines which statuses count as "undone".
 	GetTodoListWithCounts(ctx context.Context, arg GetTodoListWithCountsParams) (GetTodoListWithCountsRow, error)
 	// Checks if a template already has a pending or running job to prevent duplicates.
 	// Returns true if such a job exists, false otherwise.
-	HasPendingOrRunningJob(ctx context.Context, templateID pgtype.UUID) (bool, error)
+	HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error)
 	ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListAllActiveRecurringTemplates(ctx context.Context) ([]RecurringTaskTemplate, error)
-	ListAllRecurringTemplatesByList(ctx context.Context, listID pgtype.UUID) ([]RecurringTaskTemplate, error)
+	ListAllRecurringTemplatesByList(ctx context.Context, listID string) ([]RecurringTaskTemplate, error)
 	ListPendingGenerationJobs(ctx context.Context, arg ListPendingGenerationJobsParams) ([]RecurringGenerationJob, error)
-	ListRecurringTemplates(ctx context.Context, listID pgtype.UUID) ([]RecurringTaskTemplate, error)
+	ListRecurringTemplates(ctx context.Context, listID string) ([]RecurringTaskTemplate, error)
 	// Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
 	// Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
 	// Use case: Task search, filtered views, "My Tasks" views, pagination through large result sets.

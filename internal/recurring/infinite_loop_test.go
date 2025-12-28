@@ -25,7 +25,7 @@ func TestInfiniteLoopReproduction(t *testing.T) {
 		// }
 		// So if we pass 0.0, interval becomes 0.
 
-		config := map[string]interface{}{"interval": 0.0}
+		config := map[string]any{"interval": 0.0}
 
 		// This should trigger the infinite loop in the buggy version
 		_ = calc.OccurrencesBetween(start, end, config)

@@ -42,7 +42,6 @@ func TestListTasksPaginationExactMultiple(t *testing.T) {
 		ID:         listID,
 		Title:      "Pagination Test List",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

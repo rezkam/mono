@@ -208,7 +208,7 @@ func TestMapTemplateToDTO_IncludesRecurrenceConfig(t *testing.T) {
 		ListID:            "list-123",
 		Title:             "Daily Standup",
 		RecurrencePattern: domain.RecurrenceDaily,
-		RecurrenceConfig: map[string]interface{}{
+		RecurrenceConfig: map[string]any{
 			"hour":   9,
 			"minute": 30,
 		},
@@ -223,7 +223,7 @@ func TestMapTemplateToDTO_IncludesRecurrenceConfig(t *testing.T) {
 
 	require.NotNil(t, dto.RecurrenceConfig, "recurrence_config should not be nil")
 
-	var config map[string]interface{}
+	var config map[string]any
 	err := json.Unmarshal([]byte(*dto.RecurrenceConfig), &config)
 	require.NoError(t, err, "recurrence_config should be valid JSON")
 

@@ -44,7 +44,6 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Duplicate Prevention Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -59,7 +58,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		ListID:               listID,
 		Title:                "Daily Task",
 		RecurrencePattern:    domain.RecurrenceDaily,
-		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
+		RecurrenceConfig:     map[string]any{"interval": float64(1)},
 		GenerationWindowDays: 30,
 		IsActive:             true,
 		CreatedAt:            time.Now().UTC(),
@@ -172,7 +171,6 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Running Job Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -187,7 +185,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 		ListID:               listID,
 		Title:                "Weekly Task",
 		RecurrencePattern:    domain.RecurrenceWeekly,
-		RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
+		RecurrenceConfig:     map[string]any{"interval": float64(1)},
 		GenerationWindowDays: 60,
 		IsActive:             true,
 		CreatedAt:            time.Now().UTC(),
@@ -254,7 +252,6 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	list := &domain.TodoList{
 		ID:         listID,
 		Title:      "Multi Template Test",
-		Items:      []domain.TodoItem{},
 		CreateTime: time.Now().UTC(),
 	}
 	err = store.CreateList(ctx, list)
@@ -272,7 +269,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 			ListID:               listID,
 			Title:                "Task " + string(rune('A'+i)),
 			RecurrencePattern:    domain.RecurrenceDaily,
-			RecurrenceConfig:     map[string]interface{}{"interval": float64(1)},
+			RecurrenceConfig:     map[string]any{"interval": float64(1)},
 			GenerationWindowDays: 30,
 			IsActive:             true,
 			CreatedAt:            time.Now().UTC(),

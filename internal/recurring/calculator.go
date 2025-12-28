@@ -10,10 +10,10 @@ import (
 type PatternCalculator interface {
 	// NextOccurrence returns the next occurrence date after the given date.
 	// Returns nil if there is no next occurrence.
-	NextOccurrence(after time.Time, config map[string]interface{}) *time.Time
+	NextOccurrence(after time.Time, config map[string]any) *time.Time
 
 	// OccurrencesBetween returns all occurrence dates within the given range.
-	OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time
+	OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time
 }
 
 // GetCalculator returns the appropriate calculator for the given pattern.

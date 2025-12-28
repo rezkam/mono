@@ -72,8 +72,21 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 			b.Fatalf("failed to generate list UUID: %v", err)
 		}
 		listID := listUUID.String()
-		items := make([]domain.TodoItem, itemsPerList)
 
+		// Create the list first (without items)
+		list := &domain.TodoList{
+			ID:          listID,
+			Title:       fmt.Sprintf("Benchmark List %d", i),
+			CreateTime:  now,
+			TotalItems:  0,
+			UndoneItems: 0,
+		}
+
+		if err := storage.CreateList(ctx, list); err != nil {
+			b.Fatalf("failed to create list %d: %v", i, err)
+		}
+
+		// Create items separately
 		for j := 0; j < itemsPerList; j++ {
 			due := now.Add(time.Duration(j+100) * time.Minute)
 			status := domain.TaskStatusTodo
@@ -84,7 +97,7 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 			if err != nil {
 				b.Fatalf("failed to generate item UUID: %v", err)
 			}
-			items[j] = domain.TodoItem{
+			item := &domain.TodoItem{
 				ID:         itemUUID.String(),
 				Title:      fmt.Sprintf("Large Payload Item %d-%d with description and metadata to simulate real object size", i, j),
 				Status:     status,
@@ -93,17 +106,10 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 				DueTime:    &due,
 				Tags:       []string{"common", fmt.Sprintf("tag-%d", j%100)}, // 100 unique tags
 			}
-		}
 
-		list := &domain.TodoList{
-			ID:         listID,
-			Title:      fmt.Sprintf("Benchmark List %d", i),
-			Items:      items,
-			CreateTime: now,
-		}
-
-		if err := storage.CreateList(ctx, list); err != nil {
-			b.Fatalf("failed to create list %d: %v", i, err)
+			if err := storage.CreateItem(ctx, listID, item); err != nil {
+				b.Fatalf("failed to create item %d-%d: %v", i, j, err)
+			}
 		}
 	}
 }

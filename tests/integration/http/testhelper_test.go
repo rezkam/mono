@@ -93,7 +93,7 @@ func SetupTestServer(t *testing.T) *TestServer {
 }
 
 // NewRequest creates an httptest request with authentication header.
-func (ts *TestServer) NewRequest(method, path string, body interface{}) *httptest.ResponseRecorder {
+func (ts *TestServer) NewRequest(method, path string, body any) *httptest.ResponseRecorder {
 	// This is a helper for creating authenticated requests
 	// Actual request creation happens in individual tests
 	return httptest.NewRecorder()

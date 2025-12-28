@@ -13,11 +13,11 @@ import (
 type DomainGenerator struct {
 	// Repository interface for future use (e.g., checking existing tasks)
 	// Currently unused but kept for extensibility
-	repo interface{}
+	repo any
 }
 
 // NewDomainGenerator creates a new task generator that works with domain types.
-func NewDomainGenerator(repo interface{}) *DomainGenerator {
+func NewDomainGenerator(repo any) *DomainGenerator {
 	return &DomainGenerator{
 		repo: repo,
 	}
@@ -33,7 +33,7 @@ func (g *DomainGenerator) GenerateTasksForTemplate(ctx context.Context, template
 	// Parse recurrence config - it's already a map[string]interface{}
 	config := template.RecurrenceConfig
 	if config == nil {
-		config = make(map[string]interface{})
+		config = make(map[string]any)
 	}
 
 	// Calculate all occurrences in the range

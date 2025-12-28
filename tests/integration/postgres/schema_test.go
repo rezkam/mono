@@ -440,7 +440,7 @@ func TestRecurringTemplate_Create(t *testing.T) {
 	assert.Equal(t, "Daily Standup", title)
 	assert.Equal(t, "weekly", pattern)
 
-	var parsedConfig map[string]interface{}
+	var parsedConfig map[string]any
 	require.NoError(t, json.Unmarshal(configJSON, &parsedConfig))
 	assert.Equal(t, float64(1), parsedConfig["interval"])
 }

@@ -44,7 +44,6 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 		ID:         listID,
 		Title:      "TotalCount Test List",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -162,7 +161,6 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 		ID:         listID,
 		Title:      "Filter TotalCount Test",
 		CreateTime: time.Now().UTC(),
-		Items:      []domain.TodoItem{},
 	}
 	err = store.CreateList(ctx, list)
 	require.NoError(t, err)

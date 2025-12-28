@@ -7,14 +7,14 @@ import (
 // DailyCalculator generates daily recurrences.
 type DailyCalculator struct{}
 
-func (c *DailyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *DailyCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	interval := getInterval(config)
 
 	next := after.AddDate(0, 0, interval)
 	return &next
 }
 
-func (c *DailyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *DailyCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	interval := getInterval(config)
 
 	var occurrences []time.Time
@@ -31,14 +31,14 @@ func (c *DailyCalculator) OccurrencesBetween(start, end time.Time, config map[st
 // WeeklyCalculator generates weekly recurrences.
 type WeeklyCalculator struct{}
 
-func (c *WeeklyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *WeeklyCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	interval := getInterval(config)
 
 	next := after.AddDate(0, 0, 7*interval)
 	return &next
 }
 
-func (c *WeeklyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *WeeklyCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	interval := getInterval(config)
 
 	var occurrences []time.Time
@@ -55,12 +55,12 @@ func (c *WeeklyCalculator) OccurrencesBetween(start, end time.Time, config map[s
 // BiweeklyCalculator generates biweekly (every 2 weeks) recurrences.
 type BiweeklyCalculator struct{}
 
-func (c *BiweeklyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *BiweeklyCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	next := after.AddDate(0, 0, 14)
 	return &next
 }
 
-func (c *BiweeklyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *BiweeklyCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	var occurrences []time.Time
 	current := start
 
@@ -75,14 +75,14 @@ func (c *BiweeklyCalculator) OccurrencesBetween(start, end time.Time, config map
 // MonthlyCalculator generates monthly recurrences.
 type MonthlyCalculator struct{}
 
-func (c *MonthlyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *MonthlyCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	interval := getInterval(config)
 
 	next := after.AddDate(0, interval, 0)
 	return &next
 }
 
-func (c *MonthlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *MonthlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	interval := getInterval(config)
 
 	var occurrences []time.Time
@@ -99,12 +99,12 @@ func (c *MonthlyCalculator) OccurrencesBetween(start, end time.Time, config map[
 // YearlyCalculator generates yearly recurrences.
 type YearlyCalculator struct{}
 
-func (c *YearlyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *YearlyCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	next := after.AddDate(1, 0, 0)
 	return &next
 }
 
-func (c *YearlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *YearlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	var occurrences []time.Time
 	current := start
 
@@ -119,12 +119,12 @@ func (c *YearlyCalculator) OccurrencesBetween(start, end time.Time, config map[s
 // QuarterlyCalculator generates quarterly recurrences.
 type QuarterlyCalculator struct{}
 
-func (c *QuarterlyCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *QuarterlyCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	next := after.AddDate(0, 3, 0)
 	return &next
 }
 
-func (c *QuarterlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *QuarterlyCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	var occurrences []time.Time
 	current := start
 
@@ -139,7 +139,7 @@ func (c *QuarterlyCalculator) OccurrencesBetween(start, end time.Time, config ma
 // WeekdaysCalculator generates recurrences on weekdays only (Mon-Fri).
 type WeekdaysCalculator struct{}
 
-func (c *WeekdaysCalculator) NextOccurrence(after time.Time, config map[string]interface{}) *time.Time {
+func (c *WeekdaysCalculator) NextOccurrence(after time.Time, config map[string]any) *time.Time {
 	next := after.AddDate(0, 0, 1)
 
 	// Skip weekends
@@ -150,7 +150,7 @@ func (c *WeekdaysCalculator) NextOccurrence(after time.Time, config map[string]i
 	return &next
 }
 
-func (c *WeekdaysCalculator) OccurrencesBetween(start, end time.Time, config map[string]interface{}) []time.Time {
+func (c *WeekdaysCalculator) OccurrencesBetween(start, end time.Time, config map[string]any) []time.Time {
 	var occurrences []time.Time
 	current := start
 
@@ -166,7 +166,7 @@ func (c *WeekdaysCalculator) OccurrencesBetween(start, end time.Time, config map
 
 // getInterval extracts and validates the interval from the config.
 // Defaults to 1 if missing or invalid (< 1).
-func getInterval(config map[string]interface{}) int {
+func getInterval(config map[string]any) int {
 	interval := 1
 	if v, ok := config["interval"].(float64); ok {
 		interval = int(v)
