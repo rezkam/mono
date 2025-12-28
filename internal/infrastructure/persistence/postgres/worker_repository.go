@@ -39,12 +39,11 @@ func (s *Store) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*dom
 
 // GetRecurringTemplate retrieves a single recurring template by ID.
 func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-	templateUUID, err := uuid.Parse(id)
-	if err != nil {
+	if _, err := uuid.Parse(id); err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, uuidToPgtype(templateUUID))
+	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
@@ -62,15 +61,14 @@ func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.Re
 
 // UpdateRecurringTemplateGenerationWindow updates the last_generated_until timestamp.
 func (s *Store) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id string, until time.Time) error {
-	templateUUID, err := uuid.Parse(id)
-	if err != nil {
+	if _, err := uuid.Parse(id); err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.UpdateRecurringTemplateGenerationWindowParams{
-		ID:                 uuidToPgtype(templateUUID),
-		LastGeneratedUntil: dateToPgtype(until),
-		UpdatedAt:          timeToPgtype(time.Now().UTC()),
+		ID:                 id,
+		LastGeneratedUntil: until,
+		UpdatedAt:          time.Now().UTC(),
 	}
 
 	// Single-query pattern: check rowsAffected to detect if template was deleted
@@ -86,8 +84,7 @@ func (s *Store) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id 
 
 // CreateGenerationJob creates a new background job for generating recurring tasks.
 func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
-	templateUUID, err := uuid.Parse(templateID)
-	if err != nil {
+	if _, err := uuid.Parse(templateID); err != nil {
 		return "", fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
@@ -105,13 +102,13 @@ func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, sche
 	}
 
 	params := sqlcgen.CreateGenerationJobParams{
-		ID:            uuidToPgtype(jobID),
-		TemplateID:    uuidToPgtype(templateUUID),
+		ID:            jobID.String(),
+		TemplateID:    templateID,
 		Column3:       scheduledForParam,
 		Status:        "pending",
-		GenerateFrom:  dateToPgtype(from),
-		GenerateUntil: dateToPgtype(until),
-		CreatedAt:     timeToPgtype(time.Now().UTC()),
+		GenerateFrom:  from,
+		GenerateUntil: until,
+		CreatedAt:     time.Now().UTC(),
 	}
 
 	if err := s.queries.CreateGenerationJob(ctx, params); err != nil {
@@ -142,12 +139,11 @@ func (s *Store) ClaimNextGenerationJob(ctx context.Context) (string, error) {
 
 // GetGenerationJob retrieves job details by ID.
 func (s *Store) GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error) {
-	jobUUID, err := uuid.Parse(id)
-	if err != nil {
+	if _, err := uuid.Parse(id); err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	dbJob, err := s.queries.GetGenerationJob(ctx, uuidToPgtype(jobUUID))
+	dbJob, err := s.queries.GetGenerationJob(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: job %s", domain.ErrNotFound, id)
@@ -160,14 +156,13 @@ func (s *Store) GetGenerationJob(ctx context.Context, id string) (*domain.Genera
 
 // UpdateGenerationJobStatus updates job status and optionally records an error.
 func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string, errorMessage *string) error {
-	jobUUID, err := uuid.Parse(id)
-	if err != nil {
+	if _, err := uuid.Parse(id); err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
 	now := time.Now().UTC()
 	params := sqlcgen.UpdateGenerationJobStatusParams{
-		ID:           uuidToPgtype(jobUUID),
+		ID:           id,
 		Status:       status,
 		StartedAt:    sql.Null[time.Time]{V: now, Valid: true},
 		ErrorMessage: ptrToNullString(errorMessage), // Domain *string → DB sql.Null[string]
@@ -185,12 +180,11 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 
 // HasPendingOrRunningJob checks if a template already has a pending or running job.
 func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
-	templateUUID, err := uuid.Parse(templateID)
-	if err != nil {
+	if _, err := uuid.Parse(templateID); err != nil {
 		return false, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	hasJob, err := s.queries.HasPendingOrRunningJob(ctx, uuidToPgtype(templateUUID))
+	hasJob, err := s.queries.HasPendingOrRunningJob(ctx, templateID)
 	if err != nil {
 		return false, fmt.Errorf("failed to check for existing job: %w", err)
 	}

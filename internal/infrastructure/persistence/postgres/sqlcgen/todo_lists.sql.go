@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -40,9 +41,9 @@ VALUES ($1, $2, $3)
 `
 
 type CreateTodoListParams struct {
-	ID         pgtype.UUID        `json:"id"`
-	Title      string             `json:"title"`
-	CreateTime pgtype.Timestamptz `json:"create_time"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	CreateTime time.Time `json:"create_time"`
 }
 
 func (q *Queries) CreateTodoList(ctx context.Context, arg CreateTodoListParams) error {
@@ -58,7 +59,7 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Efficient detection of non-existent records without separate SELECT query
-func (q *Queries) DeleteTodoList(ctx context.Context, id pgtype.UUID) (int64, error) {
+func (q *Queries) DeleteTodoList(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteTodoList, id)
 	if err != nil {
 		return 0, err
@@ -111,11 +112,11 @@ type FindTodoListsWithFiltersParams struct {
 }
 
 type FindTodoListsWithFiltersRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	Title       string             `json:"title"`
-	CreateTime  pgtype.Timestamptz `json:"create_time"`
-	TotalItems  int32              `json:"total_items"`
-	UndoneItems int32              `json:"undone_items"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	CreateTime  time.Time `json:"create_time"`
+	TotalItems  int32     `json:"total_items"`
+	UndoneItems int32     `json:"undone_items"`
 }
 
 // Advanced list query with filtering, sorting, and pagination.
@@ -169,7 +170,7 @@ SELECT id, title, create_time FROM todo_lists
 WHERE id = $1
 `
 
-func (q *Queries) GetTodoList(ctx context.Context, id pgtype.UUID) (TodoList, error) {
+func (q *Queries) GetTodoList(ctx context.Context, id string) (TodoList, error) {
 	row := q.db.QueryRow(ctx, getTodoList, id)
 	var i TodoList
 	err := row.Scan(&i.ID, &i.Title, &i.CreateTime)
@@ -190,16 +191,16 @@ GROUP BY tl.id, tl.title, tl.create_time
 `
 
 type GetTodoListWithCountsParams struct {
-	UndoneStatuses []string    `json:"undone_statuses"`
-	ID             pgtype.UUID `json:"id"`
+	UndoneStatuses []string `json:"undone_statuses"`
+	ID             string   `json:"id"`
 }
 
 type GetTodoListWithCountsRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	Title       string             `json:"title"`
-	CreateTime  pgtype.Timestamptz `json:"create_time"`
-	TotalItems  int32              `json:"total_items"`
-	UndoneItems int32              `json:"undone_items"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	CreateTime  time.Time `json:"create_time"`
+	TotalItems  int32     `json:"total_items"`
+	UndoneItems int32     `json:"undone_items"`
 }
 
 // Returns a single list by ID with item counts (for detail view).
@@ -257,11 +258,11 @@ ORDER BY tl.create_time DESC
 `
 
 type ListTodoListsWithCountsRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	Title       string             `json:"title"`
-	CreateTime  pgtype.Timestamptz `json:"create_time"`
-	TotalItems  int32              `json:"total_items"`
-	UndoneItems int32              `json:"undone_items"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	CreateTime  time.Time `json:"create_time"`
+	TotalItems  int32     `json:"total_items"`
+	UndoneItems int32     `json:"undone_items"`
 }
 
 // Optimized for LIST VIEW access pattern: Returns list metadata with item counts.
@@ -307,8 +308,8 @@ WHERE id = $2
 `
 
 type UpdateTodoListParams struct {
-	Title string      `json:"title"`
-	ID    pgtype.UUID `json:"id"`
+	Title string `json:"title"`
+	ID    string `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected

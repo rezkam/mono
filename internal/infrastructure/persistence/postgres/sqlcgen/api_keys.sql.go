@@ -6,12 +6,9 @@
 package sqlcgen
 
 import (
-	"time"
-
 	"context"
 	"database/sql"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
 
 const checkAPIKeyExists = `-- name: CheckAPIKeyExists :one
@@ -20,7 +17,7 @@ SELECT EXISTS(SELECT 1 FROM api_keys WHERE id = $1)
 
 // Checks if an API key exists by ID.
 // Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
-func (q *Queries) CheckAPIKeyExists(ctx context.Context, id pgtype.UUID) (bool, error) {
+func (q *Queries) CheckAPIKeyExists(ctx context.Context, id string) (bool, error) {
 	row := q.db.QueryRow(ctx, checkAPIKeyExists, id)
 	var exists bool
 	err := row.Scan(&exists)
@@ -33,7 +30,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateAPIKeyParams struct {
-	ID             pgtype.UUID         `json:"id"`
+	ID             string              `json:"id"`
 	KeyType        string              `json:"key_type"`
 	Service        string              `json:"service"`
 	Version        string              `json:"version"`
@@ -41,7 +38,7 @@ type CreateAPIKeyParams struct {
 	LongSecretHash string              `json:"long_secret_hash"`
 	Name           string              `json:"name"`
 	IsActive       bool                `json:"is_active"`
-	CreatedAt      pgtype.Timestamptz  `json:"created_at"`
+	CreatedAt      time.Time           `json:"created_at"`
 	ExpiresAt      sql.Null[time.Time] `json:"expires_at"`
 }
 
@@ -70,7 +67,7 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Revokes API key with existence check in single operation
-func (q *Queries) DeactivateAPIKey(ctx context.Context, id pgtype.UUID) (int64, error) {
+func (q *Queries) DeactivateAPIKey(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.Exec(ctx, deactivateAPIKey, id)
 	if err != nil {
 		return 0, err
@@ -148,7 +145,7 @@ WHERE id = $1
 `
 
 type UpdateAPIKeyLastUsedParams struct {
-	ID         pgtype.UUID         `json:"id"`
+	ID         string              `json:"id"`
 	LastUsedAt sql.Null[time.Time] `json:"last_used_at"`
 }
 

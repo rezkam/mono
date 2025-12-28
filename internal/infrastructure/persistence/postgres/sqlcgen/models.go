@@ -5,16 +5,198 @@
 package sqlcgen
 
 import (
-	"time"
-
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type JobStatus string
+
+const (
+	JobStatusPending   JobStatus = "pending"
+	JobStatusRunning   JobStatus = "running"
+	JobStatusCompleted JobStatus = "completed"
+	JobStatusFailed    JobStatus = "failed"
+)
+
+func (e *JobStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JobStatus(s)
+	case string:
+		*e = JobStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JobStatus: %T", src)
+	}
+	return nil
+}
+
+type NullJobStatus struct {
+	JobStatus JobStatus `json:"job_status"`
+	Valid     bool      `json:"valid"` // Valid is true if JobStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJobStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.JobStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JobStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJobStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JobStatus), nil
+}
+
+type RecurrencePattern string
+
+const (
+	RecurrencePatternDaily     RecurrencePattern = "daily"
+	RecurrencePatternWeekly    RecurrencePattern = "weekly"
+	RecurrencePatternBiweekly  RecurrencePattern = "biweekly"
+	RecurrencePatternMonthly   RecurrencePattern = "monthly"
+	RecurrencePatternYearly    RecurrencePattern = "yearly"
+	RecurrencePatternQuarterly RecurrencePattern = "quarterly"
+	RecurrencePatternWeekdays  RecurrencePattern = "weekdays"
+)
+
+func (e *RecurrencePattern) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RecurrencePattern(s)
+	case string:
+		*e = RecurrencePattern(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RecurrencePattern: %T", src)
+	}
+	return nil
+}
+
+type NullRecurrencePattern struct {
+	RecurrencePattern RecurrencePattern `json:"recurrence_pattern"`
+	Valid             bool              `json:"valid"` // Valid is true if RecurrencePattern is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRecurrencePattern) Scan(value interface{}) error {
+	if value == nil {
+		ns.RecurrencePattern, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RecurrencePattern.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRecurrencePattern) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RecurrencePattern), nil
+}
+
+type TaskPriority string
+
+const (
+	TaskPriorityLow    TaskPriority = "low"
+	TaskPriorityMedium TaskPriority = "medium"
+	TaskPriorityHigh   TaskPriority = "high"
+	TaskPriorityUrgent TaskPriority = "urgent"
+)
+
+func (e *TaskPriority) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskPriority(s)
+	case string:
+		*e = TaskPriority(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskPriority: %T", src)
+	}
+	return nil
+}
+
+type NullTaskPriority struct {
+	TaskPriority TaskPriority `json:"task_priority"`
+	Valid        bool         `json:"valid"` // Valid is true if TaskPriority is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskPriority) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskPriority, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskPriority.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskPriority) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskPriority), nil
+}
+
+type TaskStatus string
+
+const (
+	TaskStatusTodo       TaskStatus = "todo"
+	TaskStatusInProgress TaskStatus = "in_progress"
+	TaskStatusBlocked    TaskStatus = "blocked"
+	TaskStatusDone       TaskStatus = "done"
+	TaskStatusArchived   TaskStatus = "archived"
+	TaskStatusCancelled  TaskStatus = "cancelled"
+)
+
+func (e *TaskStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskStatus(s)
+	case string:
+		*e = TaskStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTaskStatus struct {
+	TaskStatus TaskStatus `json:"task_status"`
+	Valid      bool       `json:"valid"` // Valid is true if TaskStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskStatus), nil
+}
+
 type ApiKey struct {
-	ID             pgtype.UUID         `json:"id"`
+	ID             string              `json:"id"`
 	KeyType        string              `json:"key_type"`
 	Service        string              `json:"service"`
 	Version        string              `json:"version"`
@@ -22,73 +204,72 @@ type ApiKey struct {
 	LongSecretHash string              `json:"long_secret_hash"`
 	Name           string              `json:"name"`
 	IsActive       bool                `json:"is_active"`
-	CreatedAt      pgtype.Timestamptz  `json:"created_at"`
+	CreatedAt      time.Time           `json:"created_at"`
 	LastUsedAt     sql.Null[time.Time] `json:"last_used_at"`
 	ExpiresAt      sql.Null[time.Time] `json:"expires_at"`
 }
 
 type RecurringGenerationJob struct {
-	ID            pgtype.UUID         `json:"id"`
-	TemplateID    pgtype.UUID         `json:"template_id"`
-	ScheduledFor  pgtype.Timestamptz  `json:"scheduled_for"`
+	ID            string              `json:"id"`
+	TemplateID    string              `json:"template_id"`
+	ScheduledFor  time.Time           `json:"scheduled_for"`
 	StartedAt     sql.Null[time.Time] `json:"started_at"`
 	CompletedAt   sql.Null[time.Time] `json:"completed_at"`
 	FailedAt      sql.Null[time.Time] `json:"failed_at"`
 	Status        string              `json:"status"`
 	ErrorMessage  sql.Null[string]    `json:"error_message"`
 	RetryCount    int32               `json:"retry_count"`
-	GenerateFrom  pgtype.Date         `json:"generate_from"`
-	GenerateUntil pgtype.Date         `json:"generate_until"`
-	CreatedAt     pgtype.Timestamptz  `json:"created_at"`
+	GenerateFrom  time.Time           `json:"generate_from"`
+	GenerateUntil time.Time           `json:"generate_until"`
+	CreatedAt     time.Time           `json:"created_at"`
 }
 
 type RecurringTaskTemplate struct {
-	ID                   pgtype.UUID        `json:"id"`
-	ListID               pgtype.UUID        `json:"list_id"`
-	Title                string             `json:"title"`
-	Tags                 []byte             `json:"tags"`
-	Priority             sql.Null[string]   `json:"priority"`
-	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
-	RecurrencePattern    string             `json:"recurrence_pattern"`
-	RecurrenceConfig     []byte             `json:"recurrence_config"`
-	DueOffset            pgtype.Interval    `json:"due_offset"`
-	IsActive             bool               `json:"is_active"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	LastGeneratedUntil   pgtype.Date        `json:"last_generated_until"`
-	GenerationWindowDays int32              `json:"generation_window_days"`
+	ID                   string           `json:"id"`
+	ListID               string           `json:"list_id"`
+	Title                string           `json:"title"`
+	Tags                 []byte           `json:"tags"`
+	Priority             sql.Null[string] `json:"priority"`
+	EstimatedDuration    pgtype.Interval  `json:"estimated_duration"`
+	RecurrencePattern    string           `json:"recurrence_pattern"`
+	RecurrenceConfig     []byte           `json:"recurrence_config"`
+	DueOffset            pgtype.Interval  `json:"due_offset"`
+	IsActive             bool             `json:"is_active"`
+	CreatedAt            time.Time        `json:"created_at"`
+	UpdatedAt            time.Time        `json:"updated_at"`
+	LastGeneratedUntil   time.Time        `json:"last_generated_until"`
+	GenerationWindowDays int32            `json:"generation_window_days"`
 }
 
 type TaskStatusHistory struct {
-	ID         pgtype.UUID        `json:"id"`
-	TaskID     pgtype.UUID        `json:"task_id"`
-	FromStatus sql.Null[string]   `json:"from_status"`
-	ToStatus   string             `json:"to_status"`
-	ChangedAt  pgtype.Timestamptz `json:"changed_at"`
-	Notes      sql.Null[string]   `json:"notes"`
+	ID         string           `json:"id"`
+	TaskID     string           `json:"task_id"`
+	FromStatus sql.Null[string] `json:"from_status"`
+	ToStatus   string           `json:"to_status"`
+	ChangedAt  time.Time        `json:"changed_at"`
+	Notes      sql.Null[string] `json:"notes"`
 }
 
 type TodoItem struct {
-	ID                  pgtype.UUID         `json:"id"`
-	ListID              pgtype.UUID         `json:"list_id"`
+	ID                  string              `json:"id"`
+	ListID              string              `json:"list_id"`
 	Title               string              `json:"title"`
 	Status              string              `json:"status"`
 	Priority            sql.Null[string]    `json:"priority"`
 	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
 	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz  `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	CreateTime          time.Time           `json:"create_time"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 	DueTime             sql.Null[time.Time] `json:"due_time"`
 	Tags                []byte              `json:"tags"`
 	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
 	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
 	Timezone            sql.Null[string]    `json:"timezone"`
-	// Optimistic locking version - incremented on each update to detect concurrent modifications
-	Version int32 `json:"version"`
+	Version             int32               `json:"version"`
 }
 
 type TodoList struct {
-	ID         pgtype.UUID        `json:"id"`
-	Title      string             `json:"title"`
-	CreateTime pgtype.Timestamptz `json:"create_time"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	CreateTime time.Time `json:"create_time"`
 }

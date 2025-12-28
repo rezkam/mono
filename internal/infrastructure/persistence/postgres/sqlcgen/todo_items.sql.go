@@ -6,25 +6,24 @@
 package sqlcgen
 
 import (
-	"time"
-
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type BatchCreateTodoItemsParams struct {
-	ID                  pgtype.UUID         `json:"id"`
-	ListID              pgtype.UUID         `json:"list_id"`
+	ID                  string              `json:"id"`
+	ListID              string              `json:"list_id"`
 	Title               string              `json:"title"`
 	Status              string              `json:"status"`
 	Priority            sql.Null[string]    `json:"priority"`
 	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
 	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz  `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	CreateTime          time.Time           `json:"create_time"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 	DueTime             sql.Null[time.Time] `json:"due_time"`
 	Tags                []byte              `json:"tags"`
 	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
@@ -99,15 +98,15 @@ INSERT INTO todo_items (
 `
 
 type CreateTodoItemParams struct {
-	ID                  pgtype.UUID         `json:"id"`
-	ListID              pgtype.UUID         `json:"list_id"`
+	ID                  string              `json:"id"`
+	ListID              string              `json:"list_id"`
 	Title               string              `json:"title"`
 	Status              string              `json:"status"`
 	Priority            sql.Null[string]    `json:"priority"`
 	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
 	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz  `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	CreateTime          time.Time           `json:"create_time"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 	DueTime             sql.Null[time.Time] `json:"due_time"`
 	Tags                []byte              `json:"tags"`
 	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
@@ -143,7 +142,7 @@ WHERE id = $1
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 // :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 // Single-query delete with existence detection built-in
-func (q *Queries) DeleteTodoItem(ctx context.Context, id pgtype.UUID) (int64, error) {
+func (q *Queries) DeleteTodoItem(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteTodoItem, id)
 	if err != nil {
 		return 0, err
@@ -156,7 +155,7 @@ DELETE FROM todo_items
 WHERE list_id = $1
 `
 
-func (q *Queries) DeleteTodoItemsByListId(ctx context.Context, listID pgtype.UUID) error {
+func (q *Queries) DeleteTodoItemsByListId(ctx context.Context, listID string) error {
 	_, err := q.db.Exec(ctx, deleteTodoItemsByListId, listID)
 	return err
 }
@@ -207,7 +206,7 @@ SELECT id, list_id, title, status, priority, estimated_duration, actual_duration
 WHERE id = $1
 `
 
-func (q *Queries) GetTodoItem(ctx context.Context, id pgtype.UUID) (TodoItem, error) {
+func (q *Queries) GetTodoItem(ctx context.Context, id string) (TodoItem, error) {
 	row := q.db.QueryRow(ctx, getTodoItem, id)
 	var i TodoItem
 	err := row.Scan(
@@ -236,7 +235,7 @@ WHERE list_id = $1
 ORDER BY create_time ASC
 `
 
-func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID pgtype.UUID) ([]TodoItem, error) {
+func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID string) ([]TodoItem, error) {
 	rows, err := q.db.Query(ctx, getTodoItemsByListId, listID)
 	if err != nil {
 		return nil, err
@@ -334,15 +333,15 @@ type ListTasksWithFiltersParams struct {
 }
 
 type ListTasksWithFiltersRow struct {
-	ID                  pgtype.UUID         `json:"id"`
-	ListID              pgtype.UUID         `json:"list_id"`
+	ID                  string              `json:"id"`
+	ListID              string              `json:"list_id"`
 	Title               string              `json:"title"`
 	Status              string              `json:"status"`
 	Priority            sql.Null[string]    `json:"priority"`
 	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
 	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          pgtype.Timestamptz  `json:"create_time"`
-	UpdatedAt           pgtype.Timestamptz  `json:"updated_at"`
+	CreateTime          time.Time           `json:"create_time"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 	DueTime             sql.Null[time.Time] `json:"due_time"`
 	Tags                []byte              `json:"tags"`
 	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
@@ -465,9 +464,9 @@ RETURNING id, list_id, title, status, priority, estimated_duration, actual_durat
 
 type UpdateTodoItemParams struct {
 	SetTitle             bool                `json:"set_title"`
-	Title                pgtype.Text         `json:"title"`
+	Title                string              `json:"title"`
 	SetStatus            bool                `json:"set_status"`
-	Status               pgtype.Text         `json:"status"`
+	Status               string              `json:"status"`
 	SetPriority          bool                `json:"set_priority"`
 	Priority             sql.Null[string]    `json:"priority"`
 	SetEstimatedDuration bool                `json:"set_estimated_duration"`
@@ -480,8 +479,8 @@ type UpdateTodoItemParams struct {
 	Tags                 []byte              `json:"tags"`
 	SetTimezone          bool                `json:"set_timezone"`
 	Timezone             sql.Null[string]    `json:"timezone"`
-	ID                   pgtype.UUID         `json:"id"`
-	ListID               pgtype.UUID         `json:"list_id"`
+	ID                   string              `json:"id"`
+	ListID               string              `json:"list_id"`
 	ExpectedVersion      pgtype.Int4         `json:"expected_version"`
 }
 
@@ -545,9 +544,9 @@ WHERE id = $3
 `
 
 type UpdateTodoItemStatusParams struct {
-	Status    string             `json:"status"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	ID        pgtype.UUID        `json:"id"`
+	Status    string    `json:"status"`
+	UpdatedAt time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
 }
 
 // DATA ACCESS PATTERN: Single-query existence check via rowsAffected

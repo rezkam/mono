@@ -15,3 +15,13 @@ func Deref[T any](ptr *T, def T) T {
 	}
 	return def
 }
+
+// ToString converts a pointer to a string-based type to its string value.
+// Returns empty string if the pointer is nil.
+// The constraint ~string allows any type with string as underlying type (e.g., domain enums).
+func ToString[T ~string](ptr *T) string {
+	if ptr == nil {
+		return ""
+	}
+	return string(*ptr)
+}

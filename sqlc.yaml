@@ -13,34 +13,108 @@ sql:
         emit_empty_slices: true
         emit_pointers_for_null_types: false
         overrides:
-          # Keep existing interval overrides
-          - db_type: "pg_catalog.interval"
-            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
-          - db_type: "interval"
-            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
-          - column: "todo_items.estimated_duration"
-            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
-          - column: "todo_items.actual_duration"
-            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
-          - column: "recurring_task_templates.estimated_duration"
-            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
-          - column: "recurring_task_templates.due_offset"
-            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"
+          # ============================================================================
+          # Non-nullable TEXT columns → string
+          # ============================================================================
+          - column: "todo_items.title"
+            go_type: "string"
+          - column: "todo_lists.title"
+            go_type: "string"
+          - column: "recurring_task_templates.title"
+            go_type: "string"
+          - column: "api_keys.key_type"
+            go_type: "string"
+          - column: "api_keys.service"
+            go_type: "string"
+          - column: "api_keys.version"
+            go_type: "string"
+          - column: "api_keys.short_token"
+            go_type: "string"
+          - column: "api_keys.long_secret_hash"
+            go_type: "string"
+          - column: "api_keys.name"
+            go_type: "string"
 
-          # Text/String nullable columns → sql.Null[string]
-          - column: "todo_items.priority"
+          # ============================================================================
+          # Non-nullable ENUM columns → string (maps to domain enum types)
+          # ============================================================================
+          - column: "todo_items.status"
+            go_type: "string"
+          - column: "recurring_task_templates.recurrence_pattern"
+            go_type: "string"
+          - column: "recurring_generation_jobs.status"
+            go_type: "string"
+          - column: "task_status_history.to_status"
+            go_type: "string"
+
+          # ============================================================================
+          # Non-nullable UUID columns → string
+          # ============================================================================
+          - column: "api_keys.id"
+            go_type: "string"
+          - column: "todo_lists.id"
+            go_type: "string"
+          - column: "todo_items.id"
+            go_type: "string"
+          - column: "todo_items.list_id"
+            go_type: "string"
+          - column: "recurring_task_templates.id"
+            go_type: "string"
+          - column: "recurring_task_templates.list_id"
+            go_type: "string"
+          - column: "recurring_generation_jobs.id"
+            go_type: "string"
+          - column: "recurring_generation_jobs.template_id"
+            go_type: "string"
+          - column: "task_status_history.id"
+            go_type: "string"
+          - column: "task_status_history.task_id"
+            go_type: "string"
+
+          # ============================================================================
+          # Non-nullable TIMESTAMPTZ columns → time.Time
+          # ============================================================================
+          - column: "api_keys.created_at"
+            go_type: "time.Time"
+          - column: "todo_lists.create_time"
+            go_type: "time.Time"
+          - column: "todo_items.create_time"
+            go_type: "time.Time"
+          - column: "todo_items.updated_at"
+            go_type: "time.Time"
+          - column: "recurring_task_templates.created_at"
+            go_type: "time.Time"
+          - column: "recurring_task_templates.updated_at"
+            go_type: "time.Time"
+          - column: "recurring_generation_jobs.scheduled_for"
+            go_type: "time.Time"
+          - column: "recurring_generation_jobs.created_at"
+            go_type: "time.Time"
+          - column: "task_status_history.changed_at"
+            go_type: "time.Time"
+
+          # ============================================================================
+          # Non-nullable DATE columns → time.Time
+          # ============================================================================
+          - column: "recurring_task_templates.last_generated_until"
+            go_type: "time.Time"
+          - column: "recurring_generation_jobs.generate_from"
+            go_type: "time.Time"
+          - column: "recurring_generation_jobs.generate_until"
+            go_type: "time.Time"
+
+          # ============================================================================
+          # Nullable UUID columns → uuid.NullUUID
+          # ============================================================================
+          - column: "todo_items.recurring_template_id"
             go_type:
-              import: "database/sql"
-              type: "Null[string]"
+              import: "github.com/google/uuid"
+              type: "NullUUID"
+
+          # ============================================================================
+          # Nullable TEXT columns → sql.Null[string]
+          # ============================================================================
           - column: "todo_items.timezone"
-            go_type:
-              import: "database/sql"
-              type: "Null[string]"
-          - column: "recurring_task_templates.priority"
-            go_type:
-              import: "database/sql"
-              type: "Null[string]"
-          - column: "task_status_history.from_status"
             go_type:
               import: "database/sql"
               type: "Null[string]"
@@ -53,7 +127,25 @@ sql:
               import: "database/sql"
               type: "Null[string]"
 
-          # Timestamptz nullable columns → sql.Null[time.Time]
+          # ============================================================================
+          # Nullable ENUM columns → sql.Null[string] (maps to domain nullable enum types)
+          # ============================================================================
+          - column: "todo_items.priority"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "recurring_task_templates.priority"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+          - column: "task_status_history.from_status"
+            go_type:
+              import: "database/sql"
+              type: "Null[string]"
+
+          # ============================================================================
+          # Nullable TIMESTAMPTZ columns → sql.Null[time.Time]
+          # ============================================================================
           - column: "api_keys.last_used_at"
             go_type:
               import: "database/sql"
@@ -79,14 +171,16 @@ sql:
               import: "database/sql"
               type: "Null[time.Time]"
 
-          # Date nullable columns → sql.Null[time.Time]
+          # ============================================================================
+          # Nullable DATE columns → sql.Null[time.Time]
+          # ============================================================================
           - column: "todo_items.instance_date"
             go_type:
               import: "database/sql"
               type: "Null[time.Time]"
 
-          # UUID nullable columns → uuid.NullUUID
-          - column: "todo_items.recurring_template_id"
-            go_type:
-              import: "github.com/google/uuid"
-              type: "NullUUID"
+          # ============================================================================
+          # INTERVAL columns → pgtype.Interval (custom duration conversion required)
+          # ============================================================================
+          - db_type: "pg_catalog.interval"
+            go_type: "github.com/jackc/pgx/v5/pgtype.Interval"

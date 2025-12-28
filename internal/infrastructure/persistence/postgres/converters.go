@@ -14,60 +14,28 @@ import (
 )
 
 // === pgtype Conversion Helpers ===
+// Note: With sqlc configured to use standard Go types, most pgtype conversions are obsolete.
+// However, some query parameters that aren't tied to specific columns still use pgtype.
+// Only these minimal conversions remain for query parameters and duration conversion.
 
-// uuidToPgtype converts google/uuid.UUID to pgtype.UUID.
-func uuidToPgtype(id uuid.UUID) pgtype.UUID {
+// uuidToQueryParam converts uuid.UUID to pgtype.UUID for query parameters.
+// Used only for queries where sqlc cannot infer column type from parameter usage.
+func uuidToQueryParam(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: id, Valid: true}
 }
 
-// pgtypeToUUIDString converts pgtype.UUID to string (empty if invalid).
-func pgtypeToUUIDString(id pgtype.UUID) string {
-	if !id.Valid {
-		return ""
-	}
-	return uuid.UUID(id.Bytes).String()
-}
-
-// timeToPgtype converts time.Time to pgtype.Timestamptz.
-func timeToPgtype(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, Valid: true}
-}
-
-// pgtypeToTime converts pgtype.Timestamptz to time.Time (zero if invalid).
-// Always returns time in UTC location for consistent timezone handling.
-func pgtypeToTime(t pgtype.Timestamptz) time.Time {
-	if !t.Valid {
-		return time.Time{}
-	}
-	return t.Time.UTC()
-}
-
-// timePtrToPgtypeForFilter converts *time.Time to pgtype.Timestamptz for filter parameters.
-// For nil pointers, returns a valid zero time (0001-01-01) instead of NULL.
-// This is required for SQL skip-filter patterns like:
+// timePtrToQueryParam converts *time.Time to pgtype.Timestamptz for query parameters.
+// For nil pointers, returns zero time (0001-01-01) to enable SQL skip-filter patterns like:
 //
 //	($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5)
 //
 // With NULL, both sides of the OR would return NULL (falsy), breaking the pattern.
-func timePtrToPgtypeForFilter(t *time.Time) pgtype.Timestamptz {
+func timePtrToQueryParam(t *time.Time) pgtype.Timestamptz {
 	if t == nil {
-		// Return valid zero time to match SQL's skip-filter pattern
+		// Return zero time to match SQL's skip-filter pattern
 		return pgtype.Timestamptz{Time: time.Time{}, Valid: true}
 	}
 	return pgtype.Timestamptz{Time: *t, Valid: true}
-}
-
-// dateToPgtype converts time.Time to pgtype.Date.
-func dateToPgtype(t time.Time) pgtype.Date {
-	return pgtype.Date{Time: t, Valid: true}
-}
-
-// stringPtrToText converts *string to pgtype.Text for sqlc params.
-func stringPtrToText(s *string) pgtype.Text {
-	if s == nil {
-		return pgtype.Text{Valid: false}
-	}
-	return pgtype.Text{String: *s, Valid: true}
 }
 
 // int32PtrToInt4 converts *int32 to pgtype.Int4 for sqlc params.
@@ -84,14 +52,6 @@ func boolPtrToBool(b *bool) pgtype.Bool {
 		return pgtype.Bool{Valid: false}
 	}
 	return pgtype.Bool{Bool: *b, Valid: true}
-}
-
-// pgtypeToDate converts pgtype.Date to time.Time (zero if invalid).
-func pgtypeToDate(d pgtype.Date) time.Time {
-	if !d.Valid {
-		return time.Time{}
-	}
-	return d.Time
 }
 
 // === sql.Null[T] ↔ Pointer Conversion Helpers ===
@@ -155,7 +115,7 @@ func stringPtrToNullUUID(ptr *string) (uuid.NullUUID, error) {
 
 func dbAPIKeyToDomain(dbKey sqlcgen.ApiKey) *domain.APIKey {
 	return &domain.APIKey{
-		ID:             pgtypeToUUIDString(dbKey.ID),
+		ID:             dbKey.ID,
 		KeyType:        dbKey.KeyType,
 		Service:        dbKey.Service,
 		Version:        dbKey.Version,
@@ -163,7 +123,7 @@ func dbAPIKeyToDomain(dbKey sqlcgen.ApiKey) *domain.APIKey {
 		LongSecretHash: dbKey.LongSecretHash,
 		Name:           dbKey.Name,
 		IsActive:       dbKey.IsActive,
-		CreatedAt:      pgtypeToTime(dbKey.CreatedAt),
+		CreatedAt:      dbKey.CreatedAt.UTC(),
 		LastUsedAt:     nullTimeToPtr(dbKey.LastUsedAt), // DB sql.Null[time.Time] → Domain *time.Time
 		ExpiresAt:      nullTimeToPtr(dbKey.ExpiresAt),  // DB sql.Null[time.Time] → Domain *time.Time
 	}
@@ -171,13 +131,12 @@ func dbAPIKeyToDomain(dbKey sqlcgen.ApiKey) *domain.APIKey {
 
 // === Todo List Conversions ===
 
-func domainTodoListToDB(list *domain.TodoList) (pgtype.UUID, string, pgtype.Timestamptz, error) {
-	id, err := uuid.Parse(list.ID)
-	if err != nil {
-		return pgtype.UUID{}, "", pgtype.Timestamptz{}, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
+func domainTodoListToDB(list *domain.TodoList) (string, string, time.Time, error) {
+	if _, err := uuid.Parse(list.ID); err != nil {
+		return "", "", time.Time{}, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	return uuidToPgtype(id), list.Title, timeToPgtype(list.CreateTime), nil
+	return list.ID, list.Title, list.CreateTime, nil
 }
 
 // taskStatusesToStrings converts domain TaskStatus slice to string slice for SQL queries.
@@ -202,13 +161,13 @@ func taskPrioritiesToStrings(priorities []domain.TaskPriority) []string {
 
 // todoItemFields holds the common fields present in both sqlcgen.TodoItem and sqlcgen.ListTasksWithFiltersRow
 type todoItemFields struct {
-	ID                  pgtype.UUID
-	ListID              pgtype.UUID
+	ID                  string
+	ListID              string
 	Title               string
 	Status              string
 	Priority            sql.Null[string]
-	CreateTime          pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
+	CreateTime          time.Time
+	UpdatedAt           time.Time
 	DueTime             sql.Null[time.Time]
 	Timezone            sql.Null[string]
 	EstimatedDuration   pgtype.Interval
@@ -222,12 +181,12 @@ type todoItemFields struct {
 // convertTodoItemFields converts common todo item fields from database to domain model.
 func convertTodoItemFields(fields todoItemFields) (domain.TodoItem, error) {
 	item := domain.TodoItem{
-		ID:         pgtypeToUUIDString(fields.ID),
-		ListID:     pgtypeToUUIDString(fields.ListID),
+		ID:         fields.ID,
+		ListID:     fields.ListID,
 		Title:      fields.Title,
 		Status:     domain.TaskStatus(fields.Status),
-		CreateTime: pgtypeToTime(fields.CreateTime),
-		UpdatedAt:  pgtypeToTime(fields.UpdatedAt),
+		CreateTime: fields.CreateTime.UTC(),
+		UpdatedAt:  fields.UpdatedAt.UTC(),
 		DueTime:    nullTimeToPtr(fields.DueTime),    // DB sql.Null[time.Time] → Domain *time.Time
 		Timezone:   nullStringToPtr(fields.Timezone), // DB sql.Null[string] → Domain *string
 		Version:    int(fields.Version),
@@ -256,7 +215,7 @@ func convertTodoItemFields(fields todoItemFields) (domain.TodoItem, error) {
 	if len(fields.Tags) > 0 {
 		var tags []string
 		if err := json.Unmarshal(fields.Tags, &tags); err != nil {
-			return domain.TodoItem{}, fmt.Errorf("invalid tags JSON for item %s: %w", pgtypeToUUIDString(fields.ID), err)
+			return domain.TodoItem{}, fmt.Errorf("invalid tags JSON for item %s: %w", fields.ID, err)
 		}
 		item.Tags = tags
 	}
@@ -313,23 +272,21 @@ func dbListTasksRowToDomain(dbItem sqlcgen.ListTasksWithFiltersRow) (domain.Todo
 }
 
 func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTodoItemParams, error) {
-	itemID, err := uuid.Parse(item.ID)
-	if err != nil {
+	if _, err := uuid.Parse(item.ID); err != nil {
 		return sqlcgen.CreateTodoItemParams{}, fmt.Errorf("%w: item %w", domain.ErrInvalidID, err)
 	}
 
-	listUUID, err := uuid.Parse(listID)
-	if err != nil {
+	if _, err := uuid.Parse(listID); err != nil {
 		return sqlcgen.CreateTodoItemParams{}, fmt.Errorf("%w: list %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.CreateTodoItemParams{
-		ID:         uuidToPgtype(itemID),
-		ListID:     uuidToPgtype(listUUID),
+		ID:         item.ID,
+		ListID:     listID,
 		Title:      item.Title,
 		Status:     string(item.Status),
-		CreateTime: timeToPgtype(item.CreateTime),
-		UpdatedAt:  timeToPgtype(item.UpdatedAt),
+		CreateTime: item.CreateTime,
+		UpdatedAt:  item.UpdatedAt,
 		DueTime:    ptrToNullTime(item.DueTime),    // Domain *time.Time → DB sql.Null[time.Time]
 		Timezone:   ptrToNullString(item.Timezone), // Domain *string → DB sql.Null[string]
 	}
@@ -360,10 +317,11 @@ func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTod
 	}
 
 	// Recurring Template ID: Domain *string → DB uuid.NullUUID
-	params.RecurringTemplateID, err = stringPtrToNullUUID(item.RecurringTemplateID)
+	recurringTemplateID, err := stringPtrToNullUUID(item.RecurringTemplateID)
 	if err != nil {
 		return params, fmt.Errorf("invalid recurring template ID: %w", err)
 	}
+	params.RecurringTemplateID = recurringTemplateID
 
 	// Instance Date: Domain *time.Time → DB sql.Null[time.Time]
 	params.InstanceDate = ptrToNullTime(item.InstanceDate)
@@ -375,14 +333,14 @@ func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTod
 
 func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*domain.RecurringTemplate, error) {
 	template := &domain.RecurringTemplate{
-		ID:                   pgtypeToUUIDString(dbTemplate.ID),
-		ListID:               pgtypeToUUIDString(dbTemplate.ListID),
+		ID:                   dbTemplate.ID,
+		ListID:               dbTemplate.ListID,
 		Title:                dbTemplate.Title,
 		RecurrencePattern:    domain.RecurrencePattern(dbTemplate.RecurrencePattern),
 		IsActive:             dbTemplate.IsActive,
-		CreatedAt:            pgtypeToTime(dbTemplate.CreatedAt),
-		UpdatedAt:            pgtypeToTime(dbTemplate.UpdatedAt),
-		LastGeneratedUntil:   pgtypeToDate(dbTemplate.LastGeneratedUntil),
+		CreatedAt:            dbTemplate.CreatedAt.UTC(),
+		UpdatedAt:            dbTemplate.UpdatedAt.UTC(),
+		LastGeneratedUntil:   dbTemplate.LastGeneratedUntil,
 		GenerationWindowDays: int(dbTemplate.GenerationWindowDays),
 		Tags:                 []string{},
 	}
@@ -391,7 +349,7 @@ func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*dom
 	if len(dbTemplate.Tags) > 0 {
 		var tags []string
 		if err := json.Unmarshal(dbTemplate.Tags, &tags); err != nil {
-			return nil, fmt.Errorf("invalid tags JSON for template %s: %w", pgtypeToUUIDString(dbTemplate.ID), err)
+			return nil, fmt.Errorf("invalid tags JSON for template %s: %w", dbTemplate.ID, err)
 		}
 		template.Tags = tags
 	}
@@ -427,25 +385,23 @@ func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*dom
 }
 
 func domainRecurringTemplateToDB(template *domain.RecurringTemplate) (sqlcgen.CreateRecurringTemplateParams, error) {
-	templateID, err := uuid.Parse(template.ID)
-	if err != nil {
+	if _, err := uuid.Parse(template.ID); err != nil {
 		return sqlcgen.CreateRecurringTemplateParams{}, fmt.Errorf("%w: template %w", domain.ErrInvalidID, err)
 	}
 
-	listID, err := uuid.Parse(template.ListID)
-	if err != nil {
+	if _, err := uuid.Parse(template.ListID); err != nil {
 		return sqlcgen.CreateRecurringTemplateParams{}, fmt.Errorf("%w: list %w", domain.ErrInvalidID, err)
 	}
 
 	params := sqlcgen.CreateRecurringTemplateParams{
-		ID:                   uuidToPgtype(templateID),
-		ListID:               uuidToPgtype(listID),
+		ID:                   template.ID,
+		ListID:               template.ListID,
 		Title:                template.Title,
 		RecurrencePattern:    string(template.RecurrencePattern),
 		IsActive:             template.IsActive,
-		CreatedAt:            timeToPgtype(template.CreatedAt),
-		UpdatedAt:            timeToPgtype(template.UpdatedAt),
-		LastGeneratedUntil:   dateToPgtype(template.LastGeneratedUntil),
+		CreatedAt:            template.CreatedAt,
+		UpdatedAt:            template.UpdatedAt,
+		LastGeneratedUntil:   template.LastGeneratedUntil,
 		GenerationWindowDays: int32(template.GenerationWindowDays),
 	}
 
@@ -490,13 +446,13 @@ func domainRecurringTemplateToDB(template *domain.RecurringTemplate) (sqlcgen.Cr
 
 func dbGenerationJobToDomain(dbJob sqlcgen.RecurringGenerationJob) *domain.GenerationJob {
 	return &domain.GenerationJob{
-		ID:            pgtypeToUUIDString(dbJob.ID),
-		TemplateID:    pgtypeToUUIDString(dbJob.TemplateID),
-		ScheduledFor:  pgtypeToTime(dbJob.ScheduledFor),
+		ID:            dbJob.ID,
+		TemplateID:    dbJob.TemplateID,
+		ScheduledFor:  dbJob.ScheduledFor.UTC(),
 		Status:        dbJob.Status,
-		GenerateFrom:  pgtypeToDate(dbJob.GenerateFrom),
-		GenerateUntil: pgtypeToDate(dbJob.GenerateUntil),
-		CreatedAt:     pgtypeToTime(dbJob.CreatedAt),
+		GenerateFrom:  dbJob.GenerateFrom,
+		GenerateUntil: dbJob.GenerateUntil,
+		CreatedAt:     dbJob.CreatedAt.UTC(),
 		RetryCount:    int(dbJob.RetryCount),
 		StartedAt:     nullTimeToPtr(dbJob.StartedAt),      // DB sql.Null[time.Time] → Domain *time.Time
 		CompletedAt:   nullTimeToPtr(dbJob.CompletedAt),    // DB sql.Null[time.Time] → Domain *time.Time
@@ -535,28 +491,25 @@ func durationPtrToPgtypeInterval(d *time.Duration) pgtype.Interval {
 
 // domainTodoItemsToBatchParams converts domain items to batch insert params.
 func domainTodoItemsToBatchParams(items []domain.TodoItem, listID string) ([]sqlcgen.BatchCreateTodoItemsParams, error) {
-	listUUID, err := uuid.Parse(listID)
-	if err != nil {
+	if _, err := uuid.Parse(listID); err != nil {
 		return nil, fmt.Errorf("%w: list %w", domain.ErrInvalidID, err)
 	}
-	listPgUUID := uuidToPgtype(listUUID)
 
 	params := make([]sqlcgen.BatchCreateTodoItemsParams, 0, len(items))
 	for i := range items {
 		item := &items[i]
 
-		itemID, err := uuid.Parse(item.ID)
-		if err != nil {
+		if _, err := uuid.Parse(item.ID); err != nil {
 			return nil, fmt.Errorf("%w: item %w", domain.ErrInvalidID, err)
 		}
 
 		p := sqlcgen.BatchCreateTodoItemsParams{
-			ID:           uuidToPgtype(itemID),
-			ListID:       listPgUUID,
+			ID:           item.ID,
+			ListID:       listID,
 			Title:        item.Title,
 			Status:       string(item.Status),
-			CreateTime:   timeToPgtype(item.CreateTime),
-			UpdatedAt:    timeToPgtype(item.UpdatedAt),
+			CreateTime:   item.CreateTime,
+			UpdatedAt:    item.UpdatedAt,
 			DueTime:      ptrToNullTime(item.DueTime),
 			Timezone:     ptrToNullString(item.Timezone),
 			InstanceDate: ptrToNullTime(item.InstanceDate),
@@ -583,10 +536,11 @@ func domainTodoItemsToBatchParams(items []domain.TodoItem, listID string) ([]sql
 			p.Tags = tagsJSON
 		}
 
-		p.RecurringTemplateID, err = stringPtrToNullUUID(item.RecurringTemplateID)
+		recurringTemplateID, err := stringPtrToNullUUID(item.RecurringTemplateID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid recurring template ID for item %s: %w", item.ID, err)
 		}
+		p.RecurringTemplateID = recurringTemplateID
 
 		params = append(params, p)
 	}
