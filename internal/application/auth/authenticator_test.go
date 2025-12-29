@@ -418,20 +418,18 @@ func TestAuthenticator_Shutdown_ConcurrentCalls(t *testing.T) {
 
 	const numGoroutines = 100
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
 
 	errors := make(chan error, numGoroutines)
 
 	// Many concurrent shutdown calls
-	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(t.Context(), normalShutdownTimeout)
 			defer cancel()
 			if err := auth.Shutdown(ctx); err != nil {
 				errors <- err
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -474,10 +472,8 @@ func TestAuthenticator_ConcurrentValidationAndShutdown(t *testing.T) {
 	shutdownStarted := make(chan struct{})
 
 	// Start validators
-	wg.Add(numValidators)
-	for i := 0; i < numValidators; i++ {
-		go func() {
-			defer wg.Done()
+	for range numValidators {
+		wg.Go(func() {
 			<-shutdownStarted // Wait for shutdown to start
 
 			// Keep validating during shutdown
@@ -486,7 +482,7 @@ func TestAuthenticator_ConcurrentValidationAndShutdown(t *testing.T) {
 				_, _ = auth.ValidateAPIKey(ctx, "test_mono_v1_abc123.secret456")
 				cancel()
 			}
-		}()
+		})
 	}
 
 	// Start shutdown
@@ -526,12 +522,10 @@ func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 	const updatesPerGoroutine = 50
 
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
 
 	// Many concurrent updates
-	for i := 0; i < numGoroutines; i++ {
-		go func(id int) {
-			defer wg.Done()
+	for id := range numGoroutines {
+		wg.Go(func() {
 			for j := 0; j < updatesPerGoroutine; j++ {
 				select {
 				case auth.lastUsedUpdates <- lastUsedUpdate{
@@ -542,7 +536,8 @@ func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 					// Queue full, skip (this is expected behavior)
 				}
 			}
-		}(i)
+			_ = id // Used for potential debugging
+		})
 	}
 
 	wg.Wait()
@@ -584,9 +579,7 @@ func TestAuthenticator_ShutdownDuringQueueing(t *testing.T) {
 	stopQueueing := make(chan struct{})
 
 	// Goroutine that keeps queueing updates
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stopQueueing:
@@ -602,7 +595,7 @@ func TestAuthenticator_ShutdownDuringQueueing(t *testing.T) {
 				}
 			}
 		}
-	}()
+	})
 
 	// Wait for queueing to proceed
 	time.Sleep(50 * time.Millisecond)
@@ -644,9 +637,7 @@ func TestAuthenticator_ConcurrentQueueingDuringShutdown(t *testing.T) {
 	stopQueueing := make(chan struct{})
 
 	// Goroutine that keeps queueing updates during shutdown
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stopQueueing:
@@ -662,7 +653,7 @@ func TestAuthenticator_ConcurrentQueueingDuringShutdown(t *testing.T) {
 				}
 			}
 		}
-	}()
+	})
 
 	// Wait for queueing to proceed
 	time.Sleep(50 * time.Millisecond)

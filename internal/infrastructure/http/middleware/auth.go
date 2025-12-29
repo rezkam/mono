@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/infrastructure/http/response"
@@ -31,12 +32,11 @@ func (a *Auth) Validate(next http.Handler) http.Handler {
 		}
 
 		// Parse Bearer token
-		const bearerPrefix = "Bearer "
-		if len(authHeader) < len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		apiKey, found := strings.CutPrefix(authHeader, "Bearer ")
+		if !found {
 			response.Unauthorized(w, "invalid Authorization header format, expected: Bearer <token>")
 			return
 		}
-		apiKey := authHeader[len(bearerPrefix):]
 
 		// Validate API key using the authenticator
 		_, err := a.authenticator.ValidateAPIKey(r.Context(), apiKey)

@@ -52,16 +52,12 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	// Run concurrent updates
 	const numGoroutines = 10
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
 
 	errors := make(chan error, numGoroutines)
 	startTime := time.Now().UTC()
 
-	for i := 0; i < numGoroutines; i++ {
-		goroutineID := i
-		go func() {
-			defer wg.Done()
-
+	for goroutineID := range numGoroutines {
+		wg.Go(func() {
 			item := &domain.TodoItem{
 				ID:    itemID,
 				Title: fmt.Sprintf("Updated by goroutine %d", goroutineID),
@@ -73,7 +69,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 			if err != nil {
 				errors <- err
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -163,17 +159,14 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var wg sync.WaitGroup
 
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, errA = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestA_item))
-		}()
+		})
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// B slightly delayed - no sleep needed, synctest controls ordering
 			_, errB = todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, requestB_item))
-		}()
+		})
 
 		wg.Wait()
 	})
@@ -279,37 +272,31 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		var wg sync.WaitGroup
 
 		// Goroutine 1: Update title
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Use the same version (simulating concurrent read-modify-write)
 			itemCopy := *originalItem
 			itemCopy.Title = "Updated Title"
 			_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
 			results <- updateResult{"title", err}
-		}()
+		})
 
 		// Goroutine 2: Update status
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// No sleep needed - synctest controls ordering
 			itemCopy := *originalItem
 			itemCopy.Status = domain.TaskStatusInProgress
 			_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
 			results <- updateResult{"status", err}
-		}()
+		})
 
 		// Goroutine 3: Update tags
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// No sleep needed - synctest controls ordering
 			itemCopy := *originalItem
 			itemCopy.Tags = []string{"updated", "concurrent"}
 			_, err := todoService.UpdateItem(ctx, ItemToUpdateParamsWithEtag(listID, &itemCopy))
 			results <- updateResult{"tags", err}
-		}()
+		})
 
 		wg.Wait()
 		close(results)
@@ -405,19 +392,16 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	// Run concurrent updates
 	const numGoroutines = 5
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
-		goroutineID := i
-		go func() {
-			defer wg.Done()
+	for goroutineID := range numGoroutines {
+		wg.Go(func() {
 			item := &domain.TodoItem{
 				ID:     itemID,
 				Title:  fmt.Sprintf("Update %d", goroutineID),
 				Status: domain.TaskStatusTodo,
 			}
 			todoService.UpdateItem(ctx, ItemToUpdateParams(listID, item))
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -478,13 +462,10 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 
 	// Update all items concurrently
 	var wg sync.WaitGroup
-	wg.Add(numItems)
 	errors := make(chan error, numItems)
 
-	for i := 0; i < numItems; i++ {
-		itemIndex := i
-		go func() {
-			defer wg.Done()
+	for itemIndex := range numItems {
+		wg.Go(func() {
 			item := &domain.TodoItem{
 				ID:     itemIDs[itemIndex],
 				Title:  fmt.Sprintf("Updated Item %d", itemIndex),
@@ -494,7 +475,7 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 			if err != nil {
 				errors <- fmt.Errorf("item %d update failed: %w", itemIndex, err)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

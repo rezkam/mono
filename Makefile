@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -151,6 +151,60 @@ bench-test: ## Run benchmarks using test database (port 5433, auto-cleanup)
 		exit $$BENCH_RESULT; \
 	fi
 
+# =============================================================================
+# Profile-Guided Optimization (PGO)
+# =============================================================================
+# PGO uses CPU profiles from benchmarks to optimize the binary at compile time.
+# Go automatically detects default.pgo in the main package directory.
+# Expected improvement: 3-4% runtime performance across all code paths.
+# =============================================================================
+
+pgo-collect: ## Collect CPU profile for PGO optimization (uses test database)
+	@echo "=== Collecting CPU profile for PGO ==="
+	@echo ""
+	@echo "=== Cleaning any existing test database ==="
+	@docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
+	@echo ""
+	@echo "=== Starting fresh test database ==="
+	@$(MAKE) test-integration-up
+	@echo ""
+	@echo "=== Running benchmarks to collect CPU profile (30s per package) ==="
+	@rm -f pgo-*.prof
+	@echo "Profiling integration/postgres benchmarks..."
+	@MONO_STORAGE_DSN="postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable" \
+		go test -cpuprofile=pgo-integration.prof -bench=. -benchtime=30s ./tests/integration/postgres || true
+	@echo "Profiling internal/application/auth benchmarks..."
+	@go test -cpuprofile=pgo-auth.prof -bench=. -benchtime=10s ./internal/application/auth || true
+	@echo "Profiling internal/infrastructure/http/response benchmarks..."
+	@go test -cpuprofile=pgo-response.prof -bench=. -benchtime=10s ./internal/infrastructure/http/response || true
+	@echo ""
+	@echo "=== Merging profiles ==="
+	@go tool pprof -proto pgo-*.prof > merged.pgo 2>/dev/null || cp pgo-integration.prof merged.pgo
+	@rm -f pgo-*.prof
+	@echo ""
+	@echo "=== Cleaning up test database ==="
+	@$(MAKE) test-integration-clean
+	@echo ""
+	@echo "=== Installing PGO profiles ==="
+	@mv merged.pgo cmd/server/default.pgo
+	@cp cmd/server/default.pgo cmd/worker/default.pgo
+	@echo "✅ PGO profiles saved to:"
+	@echo "   - cmd/server/default.pgo"
+	@echo "   - cmd/worker/default.pgo"
+	@echo ""
+	@echo "Run 'make build' to compile with PGO optimization."
+
+pgo-build: pgo-collect build build-worker ## Collect PGO profile and build optimized binaries
+	@echo ""
+	@echo "✅ Built with PGO optimization:"
+	@echo "   - $(BINARY_NAME)"
+	@echo "   - $(WORKER_BINARY_NAME)"
+
+pgo-clean: ## Remove PGO profile files
+	@echo "Removing PGO profiles..."
+	@rm -f cmd/server/default.pgo cmd/worker/default.pgo
+	@rm -f pgo-*.prof merged.pgo cpu.pgo
+	@echo "✅ PGO profiles removed"
 
 build: gen ## Build the server binary
 	@echo "Building binary..."
@@ -212,10 +266,12 @@ run: build ## Build and run server using dev database
 	@echo "Running server..."
 	MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" MONO_HTTP_PORT=8081 MONO_OTEL_ENABLED=false ./$(BINARY_NAME)
 
-clean: ## Remove built binaries
+clean: ## Remove built binaries and PGO profiles
 	@echo "Cleaning up..."
 	@rm -f mono-server mono-worker mono-apikey timeutc nointerface
-	@echo "All binaries removed"
+	@rm -f cmd/server/default.pgo cmd/worker/default.pgo
+	@rm -f pgo-*.prof merged.pgo cpu.pgo
+	@echo "All binaries and PGO profiles removed"
 
 docker-build: ## Build the Docker image
 	@echo "Building Docker image..."
