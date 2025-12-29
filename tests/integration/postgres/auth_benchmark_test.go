@@ -26,7 +26,7 @@ func BenchmarkAuthO1Lookup(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, cfg.Database.DSN)
 	if err != nil {
 		b.Fatalf("Failed to connect: %v", err)
 	}
@@ -122,7 +122,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, cfg.Database.DSN)
 	if err != nil {
 		b.Fatalf("Failed to connect: %v", err)
 	}

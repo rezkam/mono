@@ -1,41 +1,43 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/env"
+)
+
+// Validation errors for API key generation config.
+var (
+	ErrNameRequired = errors.New("name is required (use -name flag)")
+	ErrInvalidDays  = errors.New("days must be >= 0 (0 = never expires)")
 )
 
 // APIKeyConfig holds API key format configuration.
 type APIKeyConfig struct {
-	APIKeyType     string `env:"MONO_API_KEY_TYPE" default:"sk"`
-	APIServiceName string `env:"MONO_API_SERVICE_NAME" default:"mono"`
-	APIVersion     string `env:"MONO_API_VERSION" default:"v1"`
+	KeyType     string `env:"MONO_API_KEY_TYPE"`
+	ServiceName string `env:"MONO_API_SERVICE_NAME"`
+	Version     string `env:"MONO_API_VERSION"`
 }
 
-// APIKeyGenConfig holds all configuration for the apikey binary.
+// APIKeyGenConfig holds all configuration for the apikey generator binary.
 type APIKeyGenConfig struct {
-	StorageConfig
-	APIKeyConfig
-
-	Name      string
-	DaysValid int
+	Database  DatabaseConfig
+	APIKey    APIKeyConfig
+	Name      string // from command-line flag
+	DaysValid int    // from command-line flag
 }
 
-// LoadAPIKeyGenConfig loads and validates apikey generation configuration.
+// LoadAPIKeyGenConfig loads apikey generation configuration from environment.
+// name and daysValid come from command-line flags.
 func LoadAPIKeyGenConfig(name string, daysValid int) (*APIKeyGenConfig, error) {
 	cfg := &APIKeyGenConfig{
 		Name:      name,
 		DaysValid: daysValid,
 	}
 
-	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse apikey config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+	if err := env.Load(cfg); err != nil {
+		return nil, fmt.Errorf("failed to load apikey config: %w", err)
 	}
 
 	return cfg, nil
@@ -43,16 +45,12 @@ func LoadAPIKeyGenConfig(name string, daysValid int) (*APIKeyGenConfig, error) {
 
 // Validate validates apikey generation configuration.
 func (c *APIKeyGenConfig) Validate() error {
-	if err := c.StorageConfig.Validate(); err != nil {
-		return err
-	}
-
 	if c.Name == "" {
-		return fmt.Errorf("%w (use -name flag)", domain.ErrNameRequired)
+		return ErrNameRequired
 	}
 
 	if c.DaysValid < 0 {
-		return fmt.Errorf("%w (0 = never expires)", domain.ErrInvalidDays)
+		return ErrInvalidDays
 	}
 
 	return nil

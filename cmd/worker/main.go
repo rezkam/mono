@@ -34,7 +34,11 @@ func run() error {
 
 	// Connect to database
 	store, err := postgres.NewStoreWithConfig(ctx, postgres.DBConfig{
-		DSN: cfg.StorageDSN,
+		DSN:             cfg.Database.DSN,
+		MaxOpenConns:    cfg.Database.MaxOpenConns,
+		MaxIdleConns:    cfg.Database.MaxIdleConns,
+		ConnMaxLifetime: time.Duration(cfg.Database.ConnMaxLifetime) * time.Second,
+		ConnMaxIdleTime: time.Duration(cfg.Database.ConnMaxIdleTime) * time.Second,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
@@ -45,10 +49,13 @@ func run() error {
 		}
 	}()
 
-	// Create worker with configurable operation timeout
-	w := worker.New(store,
-		worker.WithOperationTimeout(time.Duration(cfg.WorkerOperationTimeout)*time.Second),
-	)
+	// Create worker with options
+	var opts []worker.Option
+	if cfg.OperationTimeout > 0 {
+		opts = append(opts, worker.WithOperationTimeout(cfg.OperationTimeout))
+	}
+
+	w := worker.New(store, opts...)
 
 	slog.InfoContext(ctx, "Recurring task worker started")
 

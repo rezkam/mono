@@ -8,25 +8,16 @@ import (
 
 // TestConfig holds configuration for integration and benchmark tests.
 type TestConfig struct {
-	StorageConfig
+	Database DatabaseConfig
 }
 
-// LoadTestConfig loads and validates test configuration.
+// LoadTestConfig loads and validates test configuration from environment.
 func LoadTestConfig() (*TestConfig, error) {
 	cfg := &TestConfig{}
 
-	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse test config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+	if err := env.Load(cfg); err != nil {
+		return nil, fmt.Errorf("failed to load test config: %w", err)
 	}
 
 	return cfg, nil
-}
-
-// Validate validates test configuration.
-func (c *TestConfig) Validate() error {
-	return c.StorageConfig.Validate()
 }

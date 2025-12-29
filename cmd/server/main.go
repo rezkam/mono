@@ -20,6 +20,11 @@ import (
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 )
 
+// Default values for optional configuration.
+const (
+	defaultShutdownTimeout = 5 * time.Second
+)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to run: %v\n", err)
@@ -28,29 +33,35 @@ func main() {
 }
 
 func run() error {
+	// Load configuration from environment
+	cfg, err := config.LoadServerConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
 	// Create main application context that cancels on SIGTERM/SIGINT
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	// Initialize observability FIRST - before anything that might fail and need logging
-	otelEnabled := provideObservabilityEnabled()
-	logger, otelCleanup, err := provideObservability(ctx, otelEnabled)
+	otelCfg := observability.Config{
+		Enabled:     cfg.Observability.OTelEnabled,
+		ServiceName: cfg.Observability.ServiceName,
+	}
+	if otelCfg.ServiceName == "" {
+		otelCfg.ServiceName = observability.DefaultServiceName
+	}
+	logger, otelCleanup, err := initObservability(ctx, otelCfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize observability: %w", err)
 	}
-	defer otelCleanup() // Cleanup LAST (after server cleanup)
+	defer otelCleanup(shutdownTimeout(cfg.ShutdownTimeout))
 
 	// Set as default so slog.Info(), slog.Error() etc. work globally without passing logger
 	slog.SetDefault(logger)
 
 	// Initialize database
-	dbConfig, err := provideDBConfig()
-	if err != nil {
-		slog.Error("failed to load database configuration", "error", err)
-		return fmt.Errorf("failed to load database configuration: %w", err)
-	}
-
-	store, err := postgres.NewStoreWithConfig(ctx, dbConfig)
+	store, err := postgres.NewStoreWithConfig(ctx, toDBConfig(cfg.Database))
 	if err != nil {
 		slog.Error("failed to initialize database", "error", err)
 		return fmt.Errorf("failed to initialize database: %w", err)
@@ -62,7 +73,7 @@ func run() error {
 	}()
 
 	// Initialize HTTP server
-	server, cleanup, err := initializeAPIServer(store)
+	server, cleanup, err := initializeAPIServer(store, cfg)
 	if err != nil {
 		slog.Error("failed to initialize server", "error", err)
 		return fmt.Errorf("failed to initialize server: %w", err)
@@ -82,9 +93,7 @@ func run() error {
 	case <-ctx.Done():
 		slog.Info("Shutdown signal received")
 
-		// Graceful shutdown with configured timeout
-		shutdownTimeout := provideShutdownTimeout()
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout(cfg.ShutdownTimeout))
 		defer shutdownCancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -100,18 +109,21 @@ func run() error {
 }
 
 // initializeAPIServer wires application services and HTTP components.
-// Returns the server, a cleanup function, and any initialization error.
-func initializeAPIServer(store *postgres.Store) (*httpServer.APIServer, func(), error) {
+func initializeAPIServer(store *postgres.Store, cfg *config.ServerConfig) (*httpServer.APIServer, func(), error) {
 	// Initialize todo service
-	todoConfig := provideTodoConfig()
-	todoService := todo.NewService(store, todoConfig)
+	todoService := todo.NewService(store, todo.Config{
+		DefaultPageSize: cfg.Todo.DefaultPageSize,
+		MaxPageSize:     cfg.Todo.MaxPageSize,
+	})
 
 	// Initialize authenticator
-	authConfig := provideAuthConfig()
-	shutdownTimeout := provideShutdownTimeout()
-	authenticator := auth.NewAuthenticator(store, authConfig)
+	authenticator := auth.NewAuthenticator(store, auth.Config{
+		OperationTimeout: cfg.Auth.OperationTimeout,
+		UpdateQueueSize:  cfg.Auth.UpdateQueueSize,
+	})
+
 	cleanup := func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout(cfg.ShutdownTimeout))
 		defer cancel()
 
 		if err := authenticator.Shutdown(shutdownCtx); err != nil {
@@ -120,109 +132,39 @@ func initializeAPIServer(store *postgres.Store) (*httpServer.APIServer, func(), 
 	}
 
 	// Build API handler with OpenAPI routing and validation
-	apiHandler, err := provideAPIHandler(todoService)
+	apiHandler, err := handler.NewOpenAPIRouter(todoService)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to provide API handler: %w", err)
+		return nil, nil, fmt.Errorf("failed to create API handler: %w", err)
 	}
 
-	// Get HTTP server configuration and create server
-	serverConfig := provideHTTPServerConfig()
-	server := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
+	// Create server with HTTP configuration
+	server := httpServer.NewAPIServer(apiHandler, authenticator, toHTTPConfig(cfg.HTTP))
 
 	return server, cleanup, nil
 }
 
-// provideAPIHandler creates the API router with OpenAPI validation and route mounting.
-func provideAPIHandler(todoService *todo.Service) (http.Handler, error) {
-	return handler.NewOpenAPIRouter(todoService)
-}
-
-// provideDBConfig reads database config from environment.
-// Returns error if required configuration (DSN) is missing.
-func provideDBConfig() (postgres.DBConfig, error) {
-	dsn, err := config.MustGetEnv[string]("MONO_STORAGE_DSN")
-	if err != nil {
-		return postgres.DBConfig{}, fmt.Errorf("database configuration error: %w", err)
-	}
-
-	maxOpenConns, _ := config.GetEnv[int]("MONO_DB_MAX_OPEN_CONNS")
-	maxIdleConns, _ := config.GetEnv[int]("MONO_DB_MAX_IDLE_CONNS")
-	connMaxLifetimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_LIFETIME_SEC")
-	connMaxIdleTimeSec, _ := config.GetEnv[int]("MONO_DB_CONN_MAX_IDLE_TIME_SEC")
-
-	return postgres.DBConfig{
-		DSN:             dsn,
-		MaxOpenConns:    maxOpenConns,
-		MaxIdleConns:    maxIdleConns,
-		ConnMaxLifetime: time.Duration(connMaxLifetimeSec) * time.Second,
-		ConnMaxIdleTime: time.Duration(connMaxIdleTimeSec) * time.Second,
-	}, nil
-}
-
-// provideTodoConfig reads pagination config from environment.
-func provideTodoConfig() todo.Config {
-	defaultPageSize, _ := config.GetEnv[int]("MONO_DEFAULT_PAGE_SIZE")
-	maxPageSize, _ := config.GetEnv[int]("MONO_MAX_PAGE_SIZE")
-
-	return todo.Config{
-		DefaultPageSize: defaultPageSize,
-		MaxPageSize:     maxPageSize,
-	}
-}
-
-// provideAuthConfig reads authenticator config from environment.
-func provideAuthConfig() auth.Config {
-	operationTimeoutSec, _ := config.GetEnv[int]("MONO_AUTH_OPERATION_TIMEOUT_SEC")
-	updateQueueSize, _ := config.GetEnv[int]("MONO_AUTH_UPDATE_QUEUE_SIZE")
-
-	return auth.Config{
-		OperationTimeout: time.Duration(operationTimeoutSec) * time.Second,
-		UpdateQueueSize:  updateQueueSize,
-	}
-}
-
-// provideShutdownTimeout reads shutdown timeout from environment.
-// Defaults to 5 seconds if not configured.
-func provideShutdownTimeout() time.Duration {
-	timeoutSec, exists := config.GetEnv[int]("MONO_SHUTDOWN_TIMEOUT_SEC")
-	if !exists || timeoutSec <= 0 {
-		return 5 * time.Second
-	}
-	return time.Duration(timeoutSec) * time.Second
-}
-
-// provideObservabilityEnabled reads MONO_OTEL_ENABLED from environment.
-func provideObservabilityEnabled() bool {
-	enabled, exists := config.GetEnv[bool]("MONO_OTEL_ENABLED")
-	if !exists {
-		return false
-	}
-	return enabled
-}
-
-// provideObservability initializes OpenTelemetry providers and returns cleanup function.
-func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func(), error) {
-	tracerProvider, err := observability.InitTracerProvider(ctx, enabled)
+// initObservability initializes OpenTelemetry providers and returns cleanup function.
+func initObservability(ctx context.Context, cfg observability.Config) (*slog.Logger, func(time.Duration), error) {
+	tracerProvider, err := observability.InitTracerProvider(ctx, cfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to init tracer provider: %w", err)
 	}
 
-	meterProvider, err := observability.InitMeterProvider(ctx, enabled)
+	meterProvider, err := observability.InitMeterProvider(ctx, cfg)
 	if err != nil {
 		_ = tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init meter provider: %w", err)
 	}
 
-	loggerProvider, logger, err := observability.InitLogger(ctx, enabled)
+	loggerProvider, logger, err := observability.InitLogger(ctx, cfg)
 	if err != nil {
 		_ = meterProvider.Shutdown(ctx)
 		_ = tracerProvider.Shutdown(ctx)
 		return nil, nil, fmt.Errorf("failed to init logger: %w", err)
 	}
 
-	shutdownTimeout := provideShutdownTimeout()
-	cleanup := func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	cleanup := func(timeout time.Duration) {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		if err := loggerProvider.Shutdown(shutdownCtx); err != nil {
@@ -239,25 +181,35 @@ func provideObservability(ctx context.Context, enabled bool) (*slog.Logger, func
 	return logger, cleanup, nil
 }
 
-// provideHTTPServerConfig reads HTTP server config from environment.
-func provideHTTPServerConfig() httpServer.ServerConfig {
-	host, _ := config.GetEnv[string]("MONO_HTTP_HOST")
-	port, _ := config.GetEnv[string]("MONO_HTTP_PORT")
-	readTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_READ_TIMEOUT_SEC")
-	writeTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_WRITE_TIMEOUT_SEC")
-	idleTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_IDLE_TIMEOUT_SEC")
-	readHeaderTimeoutSec, _ := config.GetEnv[int]("MONO_HTTP_READ_HEADER_TIMEOUT_SEC")
-	maxHeaderBytes, _ := config.GetEnv[int]("MONO_HTTP_MAX_HEADER_BYTES")
-	maxBodyBytes, _ := config.GetEnv[int]("MONO_HTTP_MAX_BODY_BYTES")
+// shutdownTimeout returns the configured timeout or default.
+func shutdownTimeout(configured time.Duration) time.Duration {
+	if configured > 0 {
+		return configured
+	}
+	return defaultShutdownTimeout
+}
 
+// toDBConfig converts config.DatabaseConfig to postgres.DBConfig.
+func toDBConfig(cfg config.DatabaseConfig) postgres.DBConfig {
+	return postgres.DBConfig{
+		DSN:             cfg.DSN,
+		MaxOpenConns:    cfg.MaxOpenConns,
+		MaxIdleConns:    cfg.MaxIdleConns,
+		ConnMaxLifetime: time.Duration(cfg.ConnMaxLifetime) * time.Second,
+		ConnMaxIdleTime: time.Duration(cfg.ConnMaxIdleTime) * time.Second,
+	}
+}
+
+// toHTTPConfig converts config.HTTPConfig to httpServer.ServerConfig.
+func toHTTPConfig(cfg config.HTTPConfig) httpServer.ServerConfig {
 	return httpServer.ServerConfig{
-		Host:              host,
-		Port:              port,
-		ReadTimeout:       time.Duration(readTimeoutSec) * time.Second,
-		WriteTimeout:      time.Duration(writeTimeoutSec) * time.Second,
-		IdleTimeout:       time.Duration(idleTimeoutSec) * time.Second,
-		ReadHeaderTimeout: time.Duration(readHeaderTimeoutSec) * time.Second,
-		MaxHeaderBytes:    maxHeaderBytes,
-		MaxBodyBytes:      int64(maxBodyBytes),
+		Host:              cfg.Host,
+		Port:              cfg.Port,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		MaxHeaderBytes:    cfg.MaxHeaderBytes,
+		MaxBodyBytes:      cfg.MaxBodyBytes,
 	}
 }

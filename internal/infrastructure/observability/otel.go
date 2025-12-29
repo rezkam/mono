@@ -19,14 +19,18 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-
-	"github.com/rezkam/mono/internal/config"
 )
 
 const (
 	// DefaultServiceName is the default service name for observability when OTEL_SERVICE_NAME is not set.
 	DefaultServiceName = "mono"
 )
+
+// Config holds observability configuration.
+type Config struct {
+	Enabled     bool   // Whether OpenTelemetry is enabled
+	ServiceName string // Service name for logging (defaults to DefaultServiceName if empty)
+}
 
 // newResource creates a resource with service metadata merged with defaults.
 // Uses resource.Merge to combine default SDK attributes with custom service attributes.
@@ -70,8 +74,8 @@ func newResource(ctx context.Context) (*resource.Resource, error) {
 //   - OTEL_EXPORTER_OTLP_ENDPOINT: Full URL (e.g., https://otlp-gateway-prod-eu-north-0.grafana.net/otlp)
 //   - OTEL_EXPORTER_OTLP_HEADERS: Auth headers (e.g., Authorization=Basic <base64-token>)
 //   - OTEL_RESOURCE_ATTRIBUTES: Resource attributes (e.g., service.name=mono,service.version=1.0.0)
-func InitTracerProvider(ctx context.Context, enabled bool) (*sdktrace.TracerProvider, error) {
-	if !enabled {
+func InitTracerProvider(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
+	if !cfg.Enabled {
 		// Return a no-op provider that satisfies the interface
 		tp := sdktrace.NewTracerProvider()
 		otel.SetTracerProvider(tp)
@@ -121,8 +125,8 @@ func InitTracerProvider(ctx context.Context, enabled bool) (*sdktrace.TracerProv
 //   - OTEL_EXPORTER_OTLP_ENDPOINT: Full URL
 //   - OTEL_EXPORTER_OTLP_HEADERS: Auth headers
 //   - OTEL_RESOURCE_ATTRIBUTES: Resource attributes (e.g., service.name=mono,service.version=1.0.0)
-func InitMeterProvider(ctx context.Context, enabled bool) (*sdkmetric.MeterProvider, error) {
-	if !enabled {
+func InitMeterProvider(ctx context.Context, cfg Config) (*sdkmetric.MeterProvider, error) {
+	if !cfg.Enabled {
 		mp := sdkmetric.NewMeterProvider()
 		otel.SetMeterProvider(mp)
 		return mp, nil
@@ -163,8 +167,8 @@ func InitMeterProvider(ctx context.Context, enabled bool) (*sdkmetric.MeterProvi
 //   - OTEL_EXPORTER_OTLP_ENDPOINT: Full URL
 //   - OTEL_EXPORTER_OTLP_HEADERS: Auth headers
 //   - OTEL_RESOURCE_ATTRIBUTES: Resource attributes (e.g., service.name=mono,service.version=1.0.0)
-func InitLogger(ctx context.Context, enabled bool) (*log.LoggerProvider, *slog.Logger, error) {
-	if !enabled {
+func InitLogger(ctx context.Context, cfg Config) (*log.LoggerProvider, *slog.Logger, error) {
+	if !cfg.Enabled {
 		// Return a no-op provider and stdout JSON logger when disabled
 		return log.NewLoggerProvider(), slog.New(slog.NewJSONHandler(os.Stdout, nil)), nil
 	}
@@ -192,12 +196,7 @@ func InitLogger(ctx context.Context, enabled bool) (*log.LoggerProvider, *slog.L
 	)
 
 	// Create a bridge logger that sends logs to OTel
-	// Service name comes from OTEL_RESOURCE_ATTRIBUTES or OTEL_SERVICE_NAME
-	serviceName, exists := config.GetEnv[string]("OTEL_SERVICE_NAME")
-	if !exists {
-		serviceName = DefaultServiceName
-	}
-	logger := otelslog.NewLogger(serviceName, otelslog.WithLoggerProvider(loggerProvider))
+	logger := otelslog.NewLogger(cfg.ServiceName, otelslog.WithLoggerProvider(loggerProvider))
 
 	return loggerProvider, logger, nil
 }

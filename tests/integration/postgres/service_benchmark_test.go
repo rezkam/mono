@@ -23,7 +23,7 @@ func getBenchmarkStorage(b *testing.B) *postgres.Store {
 	}
 
 	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, cfg.Database.DSN)
 	if err != nil {
 		b.Fatalf("failed to create storage: %v", err)
 	}

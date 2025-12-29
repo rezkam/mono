@@ -31,7 +31,7 @@ func BenchmarkTimingAttack_VULNERABLE(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, cfg.Database.DSN)
 	if err != nil {
 		b.Fatalf("Failed to connect: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestTimingAttack_Statistical(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, cfg.Database.DSN)
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}

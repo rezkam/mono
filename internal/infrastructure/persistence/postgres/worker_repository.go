@@ -120,6 +120,10 @@ func (s *Store) CreateGenerationJob(ctx context.Context, templateID string, sche
 
 // ClaimNextGenerationJob atomically claims the next pending job using SKIP LOCKED.
 // This uses a PostgreSQL function claim_next_generation_job() for atomic claiming.
+//
+// Note: This uses raw SQL instead of sqlc because sqlc cannot infer return types
+// for PostgreSQL functions from the schema, resulting in interface{} and requiring
+// type assertions. The raw SQL approach with pointer scanning is cleaner here.
 func (s *Store) ClaimNextGenerationJob(ctx context.Context) (string, error) {
 	// Call the PostgreSQL function that atomically claims a job
 	row := s.pool.QueryRow(ctx, "SELECT claim_next_generation_job()")

@@ -30,11 +30,12 @@ type TestServer struct {
 func SetupTestServer(t *testing.T) *TestServer {
 	t.Helper()
 
-	// Get storage DSN from environment (same as main.go does)
-	dsn, ok := config.GetEnv[string]("MONO_STORAGE_DSN")
-	if !ok {
-		t.Skipf("Skipping HTTP integration test: storage DSN is required (set MONO_STORAGE_DSN to run)")
+	// Load test configuration
+	cfg, err := config.LoadTestConfig()
+	if err != nil {
+		t.Skipf("Skipping HTTP integration test: %v (set MONO_DB_DSN to run)", err)
 	}
+	dsn := cfg.Database.DSN
 
 	// Create database connection with cancellable context
 	ctx, cancel := context.WithCancel(context.Background())

@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 
 	// Setup Server with PostgreSQL
 	ctx, cancel := context.WithCancel(context.Background())
-	store, err := postgres.NewPostgresStore(ctx, cfg.StorageDSN)
+	store, err := postgres.NewPostgresStore(ctx, cfg.Database.DSN)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Generate API key using the standard apikey tool (tests the tool itself)
-	testAPIKey, err = generateAPIKeyWithTool(cfg.StorageDSN)
+	testAPIKey, err = generateAPIKeyWithTool(cfg.Database.DSN)
 	if err != nil {
 		panic(fmt.Errorf("failed to generate API key with tool: %w", err))
 	}

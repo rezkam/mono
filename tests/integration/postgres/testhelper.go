@@ -24,7 +24,7 @@ func SetupTestDB(t *testing.T) (*sql.DB, func()) {
 		t.Skipf("Failed to load test config: %v (set MONO_STORAGE_DSN to run integration tests)", err)
 	}
 
-	db, err := sql.Open("pgx", cfg.StorageDSN)
+	db, err := sql.Open("pgx", cfg.Database.DSN)
 	require.NoError(t, err)
 
 	require.NoError(t, db.Ping())
@@ -73,7 +73,7 @@ func GetTestStorageDSN(t *testing.T) string {
 		t.Skipf("Failed to load test config: %v (set MONO_STORAGE_DSN to run integration tests)", err)
 	}
 
-	return cfg.StorageDSN
+	return cfg.Database.DSN
 }
 
 // ItemToUpdateParams converts a TodoItem to UpdateItemParams for all fields.
