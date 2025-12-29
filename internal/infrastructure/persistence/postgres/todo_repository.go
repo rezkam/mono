@@ -302,7 +302,11 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 	if maskSet["tags"] {
 		sqlcParams.SetTags = true
 		if params.Tags != nil {
-			sqlcParams.Tags, _ = json.Marshal(*params.Tags)
+			tagsJSON, err := json.Marshal(*params.Tags)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal tags: %w", err)
+			}
+			sqlcParams.Tags = tagsJSON
 		} else {
 			sqlcParams.Tags = []byte("[]")
 		}
@@ -561,7 +565,11 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	}
 	if maskSet["tags"] {
 		if params.Tags != nil {
-			sqlcParams.Tags, _ = json.Marshal(*params.Tags)
+			tagsJSON, err := json.Marshal(*params.Tags)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal tags: %w", err)
+			}
+			sqlcParams.Tags = tagsJSON
 		} else {
 			sqlcParams.Tags = []byte("[]")
 		}
@@ -582,7 +590,11 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	}
 	if maskSet["recurrence_config"] {
 		if params.RecurrenceConfig != nil {
-			sqlcParams.RecurrenceConfig, _ = json.Marshal(params.RecurrenceConfig)
+			configJSON, err := json.Marshal(params.RecurrenceConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal recurrence_config: %w", err)
+			}
+			sqlcParams.RecurrenceConfig = configJSON
 		}
 	}
 	if maskSet["due_offset"] {
