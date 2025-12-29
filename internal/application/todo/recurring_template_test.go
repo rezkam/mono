@@ -238,28 +238,26 @@ func TestUpdateList_AcceptsValidTitle(t *testing.T) {
 	assert.Equal(t, "Valid Title", result.Title)
 }
 
-// TestUpdateList_SkipsValidationWhenTitleNotInMask verifies that title
-// validation is skipped when title is not being updated.
-func TestUpdateList_SkipsValidationWhenTitleNotInMask(t *testing.T) {
-	repoCalled := false
+// TestUpdateList_RejectsEmptyUpdateMask verifies that empty update_mask
+// is rejected before reaching the repository.
+func TestUpdateList_RejectsEmptyUpdateMask(t *testing.T) {
 	repo := &mockRecurringRepo{
 		updateListFn: func(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
-			repoCalled = true
-			return &domain.TodoList{ID: params.ListID}, nil
+			t.Error("repository should not be called when update_mask is empty")
+			return nil, nil
 		},
 	}
 	service := NewService(repo, Config{})
 
 	params := domain.UpdateListParams{
 		ListID:     "list-123",
-		UpdateMask: []string{}, // Empty mask = no fields to update
-		Title:      nil,        // Not updating title
+		UpdateMask: []string{}, // Empty mask should be rejected
+		Title:      nil,
 	}
 
 	_, err := service.UpdateList(context.Background(), params)
 
-	require.NoError(t, err)
-	assert.True(t, repoCalled, "repository should be called when no validation needed")
+	require.ErrorIs(t, err, domain.ErrEmptyUpdateMask)
 }
 
 // TestUpdateRecurringTemplate_RejectsEmptyTitle tests that UpdateRecurringTemplate

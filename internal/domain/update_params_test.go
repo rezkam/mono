@@ -9,6 +9,46 @@ import (
 )
 
 // =============================================================================
+// Empty UpdateMask Tests
+// =============================================================================
+
+func TestUpdateItemParams_Validate_EmptyMask(t *testing.T) {
+	params := UpdateItemParams{
+		ItemID:     "item-123",
+		ListID:     "list-456",
+		UpdateMask: []string{},
+		Title:      ptr.To("Valid Title"),
+	}
+
+	err := params.Validate()
+	assert.ErrorIs(t, err, ErrEmptyUpdateMask)
+}
+
+func TestUpdateListParams_Validate_EmptyMask(t *testing.T) {
+	params := UpdateListParams{
+		ListID:     "list-123",
+		UpdateMask: []string{},
+		Title:      ptr.To("Valid Title"),
+	}
+
+	err := params.Validate()
+	assert.ErrorIs(t, err, ErrEmptyUpdateMask)
+}
+
+func TestUpdateRecurringTemplateParams_Validate_EmptyMask(t *testing.T) {
+	params := UpdateRecurringTemplateParams{
+		TemplateID:        "tmpl-123",
+		ListID:            "list-456",
+		UpdateMask:        []string{},
+		Title:             ptr.To("Valid Title"),
+		RecurrencePattern: ptr.To(RecurrenceDaily),
+	}
+
+	err := params.Validate()
+	assert.ErrorIs(t, err, ErrEmptyUpdateMask)
+}
+
+// =============================================================================
 // UpdateItemParams.Validate() Tests
 // =============================================================================
 
@@ -47,11 +87,6 @@ func TestUpdateItemParams_Validate_UnknownField(t *testing.T) {
 			name:    "unknown field mixed with valid",
 			mask:    []string{"title", "unknown_field"},
 			wantErr: true,
-		},
-		{
-			name:    "empty mask is valid",
-			mask:    []string{},
-			wantErr: false,
 		},
 	}
 
@@ -181,11 +216,6 @@ func TestUpdateListParams_Validate_UnknownField(t *testing.T) {
 			mask:    []string{"description"},
 			wantErr: true,
 		},
-		{
-			name:    "empty mask is valid",
-			mask:    []string{},
-			wantErr: false,
-		},
 	}
 
 	for _, tt := range tests {
@@ -226,12 +256,6 @@ func TestUpdateListParams_Validate_RequiredFieldNil(t *testing.T) {
 			name:    "title in mask with valid value",
 			mask:    []string{"title"},
 			title:   ptr.To("Valid Title"),
-			wantErr: nil,
-		},
-		{
-			name:    "empty mask with nil title is valid",
-			mask:    []string{},
-			title:   nil,
 			wantErr: nil,
 		},
 	}
@@ -284,11 +308,6 @@ func TestUpdateRecurringTemplateParams_Validate_UnknownField(t *testing.T) {
 			name:    "typo in recurrence_pattern",
 			mask:    []string{"recurrence_patern"},
 			wantErr: true,
-		},
-		{
-			name:    "empty mask is valid",
-			mask:    []string{},
-			wantErr: false,
 		},
 	}
 

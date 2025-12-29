@@ -17,6 +17,10 @@ var updateItemValidFields = map[string]struct{}{
 // Validate checks that UpdateMask contains only known fields and that
 // required fields have non-nil values when included in the mask.
 func (p UpdateItemParams) Validate() error {
+	if len(p.UpdateMask) == 0 {
+		return ErrEmptyUpdateMask
+	}
+
 	maskSet := make(map[string]bool, len(p.UpdateMask))
 
 	// Check for unknown fields
@@ -46,6 +50,10 @@ var updateListValidFields = map[string]struct{}{
 // Validate checks that UpdateMask contains only known fields and that
 // required fields have non-nil values when included in the mask.
 func (p UpdateListParams) Validate() error {
+	if len(p.UpdateMask) == 0 {
+		return ErrEmptyUpdateMask
+	}
+
 	maskSet := make(map[string]bool, len(p.UpdateMask))
 
 	// Check for unknown fields
@@ -80,6 +88,10 @@ var updateRecurringTemplateValidFields = map[string]struct{}{
 // Validate checks that UpdateMask contains only known fields and that
 // required fields have non-nil values when included in the mask.
 func (p UpdateRecurringTemplateParams) Validate() error {
+	if len(p.UpdateMask) == 0 {
+		return ErrEmptyUpdateMask
+	}
+
 	maskSet := make(map[string]bool, len(p.UpdateMask))
 
 	// Check for unknown fields
