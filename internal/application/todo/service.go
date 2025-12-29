@@ -147,7 +147,12 @@ func (s *Service) UpdateList(ctx context.Context, params domain.UpdateListParams
 		return nil, domain.ErrListNotFound
 	}
 
-	// Validate title if being updated
+	// Validate update mask and required fields
+	if err := params.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Validate title value if being updated
 	if params.Title != nil {
 		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
@@ -246,34 +251,28 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 		}
 	}
 
-	// Build mask set for validation
-	maskSet := make(map[string]bool)
-	for _, field := range params.UpdateMask {
-		maskSet[field] = true
+	// Validate update mask and required fields
+	if err := params.Validate(); err != nil {
+		return nil, err
 	}
 
-	// Validate title if being updated
+	// Validate title value if being updated
 	if params.Title != nil {
 		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
 			return nil, err
 		}
-		titleStr := title.String()
-		params.Title = &titleStr
+		params.Title = ptr.To(title.String())
 	}
 
-	// Validate status - required field cannot be set to NULL
-	// If status is in update_mask, a value must be provided
-	if maskSet["status"] && params.Status == nil {
-		return nil, domain.ErrStatusRequired
-	}
+	// Validate status value if being updated
 	if params.Status != nil {
 		if _, err := domain.NewTaskStatus(string(*params.Status)); err != nil {
 			return nil, err
 		}
 	}
 
-	// Validate priority if being updated
+	// Validate priority value if being updated
 	if params.Priority != nil {
 		if _, err := domain.NewTaskPriority(string(*params.Priority)); err != nil {
 			return nil, err
@@ -411,17 +410,12 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 		return nil, domain.ErrTemplateNotFound
 	}
 
-	// Build mask set for validation
-	maskSet := make(map[string]bool)
-	for _, field := range params.UpdateMask {
-		maskSet[field] = true
+	// Validate update mask and required fields
+	if err := params.Validate(); err != nil {
+		return nil, err
 	}
 
-	// Validate title - required field cannot be set to NULL
-	// If title is in update_mask, a value must be provided
-	if maskSet["title"] && params.Title == nil {
-		return nil, domain.ErrTitleRequired
-	}
+	// Validate title value if being updated
 	if params.Title != nil {
 		title, err := domain.NewTitle(*params.Title)
 		if err != nil {
@@ -430,11 +424,7 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 		params.Title = ptr.To(title.String())
 	}
 
-	// Validate recurrence pattern - required field cannot be set to NULL
-	// If recurrence_pattern is in update_mask, a value must be provided
-	if maskSet["recurrence_pattern"] && params.RecurrencePattern == nil {
-		return nil, domain.ErrRecurrencePatternRequired
-	}
+	// Validate recurrence pattern value if being updated
 	if params.RecurrencePattern != nil {
 		pattern, err := domain.NewRecurrencePattern(string(*params.RecurrencePattern))
 		if err != nil {
@@ -443,7 +433,7 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 		params.RecurrencePattern = ptr.To(pattern)
 	}
 
-	// Validate generation window if being updated using domain validation
+	// Validate generation window if being updated
 	if params.GenerationWindowDays != nil {
 		if err := domain.ValidateGenerationWindowDays(*params.GenerationWindowDays); err != nil {
 			return nil, err

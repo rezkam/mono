@@ -15,6 +15,7 @@ var (
 	ErrInvalidID = errors.New("invalid ID format")
 
 	// Validation errors
+	ErrUnknownField                  = errors.New("unknown field in update_mask")
 	ErrTitleRequired                 = errors.New("title is required")
 	ErrTitleTooLong                  = errors.New("title must be 255 characters or less")
 	ErrStatusRequired                = errors.New("status value is required when status is in update_mask")

@@ -211,3 +211,23 @@ func TestListLists_RespectsValidLimit(t *testing.T) {
 
 	assert.Equal(t, 42, repo.capturedParams.Limit, "valid limit should be passed through unchanged")
 }
+
+// TestUpdateItem_RejectsTitleInMaskWithNilValue verifies that when "title" is in
+// update_mask but Title is nil, the service returns ErrTitleRequired.
+// This prevents a nil-dereference panic in the repository layer.
+func TestUpdateItem_RejectsTitleInMaskWithNilValue(t *testing.T) {
+	repo := &mockUpdateItemRepo{}
+	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
+
+	params := domain.UpdateItemParams{
+		ListID:     "list-123",
+		ItemID:     "item-456",
+		UpdateMask: []string{"title"}, // title in mask
+		Title:      nil,               // but Title is nil - should be rejected
+	}
+
+	_, err := service.UpdateItem(context.Background(), params)
+
+	assert.ErrorIs(t, err, domain.ErrTitleRequired,
+		"should return ErrTitleRequired when title is in update_mask but Title is nil")
+}
