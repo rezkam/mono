@@ -62,9 +62,29 @@ func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params o
 	// Build domain params from query params
 	offset := parsePageToken(params.PageToken)
 
+	// Validate sorting parameters
+	var sortBy, sortDir *string
+	if params.SortBy != nil {
+		s := string(*params.SortBy)
+		sortBy = &s
+	}
+	if params.SortDir != nil {
+		s := string(*params.SortDir)
+		sortDir = &s
+	}
+	sorting, err := domain.NewListsSorting(domain.ListsSortingInput{
+		OrderBy:  sortBy,
+		OrderDir: sortDir,
+	})
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
+
 	filterParams := domain.ListListsParams{
-		Limit:  getPageSize(params.PageSize),
-		Offset: offset,
+		Limit:   getPageSize(params.PageSize),
+		Offset:  offset,
+		Sorting: sorting,
 	}
 
 	// Set filter parameters if specified
@@ -76,14 +96,6 @@ func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params o
 	}
 	if params.CreatedBefore != nil {
 		filterParams.CreateTimeBefore = params.CreatedBefore
-	}
-
-	// Set sorting if specified
-	if params.SortBy != nil {
-		filterParams.OrderBy = string(*params.SortBy)
-	}
-	if params.SortDir != nil {
-		filterParams.OrderDir = string(*params.SortDir)
 	}
 
 	// Call service layer with filters and sorting

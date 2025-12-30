@@ -218,3 +218,68 @@ func (f ItemsFilter) OrderDir() string {
 func (f ItemsFilter) HasStatusFilter() bool {
 	return len(f.statuses) > 0
 }
+
+// Lists sorting defaults and valid fields.
+const (
+	ListsDefaultOrderBy  = "create_time"
+	ListsDefaultOrderDir = "desc"
+)
+
+// Valid order by fields for lists.
+var validListsOrderByFields = map[string]bool{
+	"create_time": true,
+	"title":       true,
+}
+
+// ListsSorting is a validated sorting configuration for listing lists.
+// Value object - validates sorting parameters at construction time.
+// Actual sorting is performed by the repository layer.
+type ListsSorting struct {
+	orderBy  string
+	orderDir string
+}
+
+// ListsSortingInput holds raw input for creating a ListsSorting.
+type ListsSortingInput struct {
+	OrderBy  *string
+	OrderDir *string
+}
+
+// NewListsSorting creates a validated sorting configuration for listing lists.
+// Returns error if any field is invalid.
+// orderBy defaults to "create_time", orderDir defaults to "desc".
+func NewListsSorting(input ListsSortingInput) (ListsSorting, error) {
+	sorting := ListsSorting{
+		orderBy:  ListsDefaultOrderBy,
+		orderDir: ListsDefaultOrderDir,
+	}
+
+	// Validate and set orderBy if provided, otherwise keep default
+	if input.OrderBy != nil && *input.OrderBy != "" {
+		if !validListsOrderByFields[*input.OrderBy] {
+			return ListsSorting{}, fmt.Errorf("%w: %s (supported: create_time, title)", ErrInvalidListsOrderByField, *input.OrderBy)
+		}
+		sorting.orderBy = *input.OrderBy
+	}
+
+	// Validate and set orderDir if provided, otherwise keep default
+	if input.OrderDir != nil && *input.OrderDir != "" {
+		dir := strings.ToLower(*input.OrderDir)
+		if dir != "asc" && dir != "desc" {
+			return ListsSorting{}, ErrInvalidSortDirection
+		}
+		sorting.orderDir = dir
+	}
+
+	return sorting, nil
+}
+
+// OrderBy returns the order by field (defaults to "create_time").
+func (s ListsSorting) OrderBy() string {
+	return s.orderBy
+}
+
+// OrderDir returns the sort direction (defaults to "desc").
+func (s ListsSorting) OrderDir() string {
+	return s.orderDir
+}

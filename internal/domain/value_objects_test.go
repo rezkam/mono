@@ -556,3 +556,150 @@ func TestValidateGenerationWindowDays_Invalid(t *testing.T) {
 		})
 	}
 }
+
+// TestListsSorting tests the ListsSorting value object
+func TestNewListsSorting_EmptyInput(t *testing.T) {
+	sorting, err := NewListsSorting(ListsSortingInput{})
+
+	require.NoError(t, err)
+	assert.Equal(t, ListsDefaultOrderBy, sorting.OrderBy())
+	assert.Equal(t, ListsDefaultOrderDir, sorting.OrderDir())
+}
+
+func TestNewListsSorting_ValidOrderBy(t *testing.T) {
+	testCases := []string{"create_time", "title"}
+
+	for _, orderBy := range testCases {
+		t.Run(orderBy, func(t *testing.T) {
+			ob := orderBy
+			sorting, err := NewListsSorting(ListsSortingInput{
+				OrderBy: &ob,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, orderBy, sorting.OrderBy())
+		})
+	}
+}
+
+func TestNewListsSorting_InvalidOrderBy(t *testing.T) {
+	invalidField := "invalid_field"
+	_, err := NewListsSorting(ListsSortingInput{
+		OrderBy: &invalidField,
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidListsOrderByField))
+	assert.Contains(t, err.Error(), "invalid_field")
+	assert.Contains(t, err.Error(), "supported:")
+}
+
+func TestNewListsSorting_ItemsOrderByNotAllowed(t *testing.T) {
+	// Order by fields valid for items but not for lists
+	itemsOnlyFields := []string{"due_time", "priority", "created_at", "updated_at"}
+
+	for _, field := range itemsOnlyFields {
+		t.Run(field, func(t *testing.T) {
+			f := field
+			_, err := NewListsSorting(ListsSortingInput{
+				OrderBy: &f,
+			})
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrInvalidListsOrderByField))
+		})
+	}
+}
+
+func TestNewListsSorting_EmptyOrderByUsesDefault(t *testing.T) {
+	empty := ""
+	sorting, err := NewListsSorting(ListsSortingInput{
+		OrderBy: &empty,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ListsDefaultOrderBy, sorting.OrderBy())
+}
+
+func TestNewListsSorting_NilOrderByUsesDefault(t *testing.T) {
+	sorting, err := NewListsSorting(ListsSortingInput{
+		OrderBy: nil,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ListsDefaultOrderBy, sorting.OrderBy())
+}
+
+func TestNewListsSorting_ValidOrderDir(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"asc", "asc"},
+		{"desc", "desc"},
+		{"ASC", "asc"},
+		{"DESC", "desc"},
+		{"Asc", "asc"},
+		{"Desc", "desc"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			dir := tc.input
+			sorting, err := NewListsSorting(ListsSortingInput{
+				OrderDir: &dir,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, sorting.OrderDir())
+		})
+	}
+}
+
+func TestNewListsSorting_InvalidOrderDir(t *testing.T) {
+	invalidDir := "ascending"
+	_, err := NewListsSorting(ListsSortingInput{
+		OrderDir: &invalidDir,
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidSortDirection))
+}
+
+func TestNewListsSorting_EmptyOrderDirUsesDefault(t *testing.T) {
+	empty := ""
+	sorting, err := NewListsSorting(ListsSortingInput{
+		OrderDir: &empty,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ListsDefaultOrderDir, sorting.OrderDir())
+}
+
+func TestNewListsSorting_NilOrderDirUsesDefault(t *testing.T) {
+	sorting, err := NewListsSorting(ListsSortingInput{
+		OrderDir: nil,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ListsDefaultOrderDir, sorting.OrderDir())
+}
+
+func TestNewListsSorting_CombinedSorting(t *testing.T) {
+	orderBy := "title"
+	orderDir := "asc"
+
+	sorting, err := NewListsSorting(ListsSortingInput{
+		OrderBy:  &orderBy,
+		OrderDir: &orderDir,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "title", sorting.OrderBy())
+	assert.Equal(t, "asc", sorting.OrderDir())
+}
+
+func TestNewListsSorting_DefaultValues(t *testing.T) {
+	assert.Equal(t, "create_time", ListsDefaultOrderBy)
+	assert.Equal(t, "desc", ListsDefaultOrderDir)
+}

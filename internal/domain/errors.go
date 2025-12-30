@@ -28,6 +28,7 @@ var (
 	ErrInvalidGenerationWindow       = errors.New("generation window must be 1-365 days")
 	ErrInvalidEtagFormat             = errors.New("etag must be a numeric string (e.g., \"1\", \"2\")")
 	ErrInvalidOrderByField           = errors.New("invalid order_by field")
+	ErrInvalidListsOrderByField      = errors.New("invalid order_by field for lists")
 	ErrInvalidDurationFormat         = errors.New("invalid duration format")
 	ErrDurationEmpty                 = errors.New("duration cannot be empty")
 	ErrInvalidRecurrenceDayOfWeek    = errors.New("invalid recurrence day of week")

@@ -123,18 +123,9 @@ func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*
 		sqlcParams.CreateTimeBefore = timePtrToQueryParam(params.CreateTimeBefore)
 	}
 
-	// Apply sorting (defaults to create_time desc)
-	orderBy := params.OrderBy
-	if orderBy == "" {
-		orderBy = "create_time"
-	}
-	sqlcParams.OrderBy = orderBy
-
-	orderDir := params.OrderDir
-	if orderDir == "" {
-		orderDir = "desc"
-	}
-	sqlcParams.OrderDir = orderDir
+	// Apply validated sorting (defaults already applied by value object)
+	sqlcParams.OrderBy = params.Sorting.OrderBy()
+	sqlcParams.OrderDir = params.Sorting.OrderDir()
 
 	// Execute the query
 	rows, err := s.queries.FindTodoListsWithFilters(ctx, sqlcParams)

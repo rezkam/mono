@@ -39,7 +39,7 @@ type PagedResult struct {
 // ListListsParams contains parameters for listing todo lists with filtering, sorting, and pagination.
 //
 // Common use cases:
-//   - "Recent lists": OrderBy="create_time", OrderDir="desc"
+//   - "Recent lists": Sorting with OrderBy="create_time", OrderDir="desc"
 //   - "Lists created after date": CreateTimeAfter=time
 //   - "Lists with title matching": TitleContains="project"
 type ListListsParams struct {
@@ -48,9 +48,8 @@ type ListListsParams struct {
 	CreateTimeAfter  *time.Time // Filter lists created after this time
 	CreateTimeBefore *time.Time // Filter lists created before this time
 
-	// Sorting (empty uses defaults: create_time field, desc direction)
-	OrderBy  string // Supported: "create_time", "title"
-	OrderDir string // Sort direction: "asc" or "desc" (empty = "desc")
+	// Validated sorting configuration (created via NewListsSorting)
+	Sorting ListsSorting
 
 	// Pagination (both required for correct pagination)
 	Limit  int // Maximum number of items to return (page size)
