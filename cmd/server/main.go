@@ -197,6 +197,7 @@ func toDBConfig(cfg config.DatabaseConfig) postgres.DBConfig {
 		MaxIdleConns:    cfg.MaxIdleConns,
 		ConnMaxLifetime: time.Duration(cfg.ConnMaxLifetime) * time.Second,
 		ConnMaxIdleTime: time.Duration(cfg.ConnMaxIdleTime) * time.Second,
+		AutoMigrate:     cfg.AutoMigrate,
 	}
 }
 

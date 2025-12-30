@@ -16,6 +16,10 @@ type DatabaseConfig struct {
 	MaxIdleConns    int `env:"MONO_DB_MAX_IDLE_CONNS"`
 	ConnMaxLifetime int `env:"MONO_DB_CONN_MAX_LIFETIME_SEC"`  // seconds
 	ConnMaxIdleTime int `env:"MONO_DB_CONN_MAX_IDLE_TIME_SEC"` // seconds
+
+	// AutoMigrate enables automatic migrations on startup.
+	// Disabled by default; set to true for development or when not using external migration tools.
+	AutoMigrate bool `env:"MONO_DB_AUTO_MIGRATE"`
 }
 
 // Validate validates the database configuration.

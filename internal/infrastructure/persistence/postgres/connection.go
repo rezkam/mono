@@ -25,14 +25,17 @@ type DBConfig struct {
 	MaxIdleConns    int           // Maximum idle connections (0 = auto-scale based on available CPUs)
 	ConnMaxLifetime time.Duration // Connection max lifetime (0 = default: 5min)
 	ConnMaxIdleTime time.Duration // Connection max idle time (0 = default: 1min)
+	AutoMigrate     bool          // Run migrations on startup (default: false)
 }
 
 // NewStoreWithConfig creates a new PostgreSQL store with the given configuration.
-// It also runs migrations automatically.
+// Runs migrations only if AutoMigrate is enabled.
 func NewStoreWithConfig(ctx context.Context, cfg DBConfig) (*Store, error) {
 	// Run migrations first using database/sql (goose requires it)
-	if err := runMigrationsWithDSN(ctx, cfg.DSN); err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	if cfg.AutoMigrate {
+		if err := runMigrationsWithDSN(ctx, cfg.DSN); err != nil {
+			return nil, fmt.Errorf("failed to run migrations: %w", err)
+		}
 	}
 
 	// Parse connection string and configure pool

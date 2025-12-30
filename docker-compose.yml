@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: mono-worker
     environment:
-      MONO_STORAGE_DSN: postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable
+      MONO_DB_DSN: postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy

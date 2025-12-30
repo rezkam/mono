@@ -39,6 +39,7 @@ func run() error {
 		MaxIdleConns:    cfg.Database.MaxIdleConns,
 		ConnMaxLifetime: time.Duration(cfg.Database.ConnMaxLifetime) * time.Second,
 		ConnMaxIdleTime: time.Duration(cfg.Database.ConnMaxIdleTime) * time.Second,
+		AutoMigrate:     cfg.Database.AutoMigrate,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)

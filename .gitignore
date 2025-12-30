@@ -32,6 +32,11 @@ go.work
 .DS_Store
 Thumbs.db
 
+# Environment files (contain secrets)
+.env
+.env.local
+.env.production
+
 # Build artifacts
 dist/
 
