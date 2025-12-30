@@ -27,6 +27,11 @@ type HTTPConfig struct {
 	ReadHeaderTimeout time.Duration `env:"MONO_HTTP_READ_HEADER_TIMEOUT"`
 	MaxHeaderBytes    int           `env:"MONO_HTTP_MAX_HEADER_BYTES"`
 	MaxBodyBytes      int64         `env:"MONO_HTTP_MAX_BODY_BYTES"`
+
+	// TLS configuration for HTTPS
+	TLSEnabled  bool   `env:"MONO_TLS_ENABLED"`
+	TLSCertFile string `env:"MONO_TLS_CERT_FILE"`
+	TLSKeyFile  string `env:"MONO_TLS_KEY_FILE"`
 }
 
 // AuthConfig holds authenticator configuration.

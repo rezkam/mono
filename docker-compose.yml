@@ -15,6 +15,47 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - mono-network
+
+  migrate:
+    image: golang:1.25-alpine
+    container_name: mono-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./internal/infrastructure/persistence/postgres/migrations:/migrations:ro
+    command: ["sh", "-c", "go install github.com/pressly/goose/v3/cmd/goose@latest && goose -dir /migrations postgres 'postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable' up"]
+    networks:
+      - mono-network
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mono-server
+    environment:
+      MONO_DB_DSN: postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable
+      MONO_HTTP_HOST: "0.0.0.0"
+      MONO_HTTP_PORT: "8080"
+      # TLS/HTTPS configuration for local development
+      MONO_TLS_ENABLED: "true"
+      MONO_TLS_CERT_FILE: /certs/localhost+2.pem
+      MONO_TLS_KEY_FILE: /certs/localhost+2-key.pem
+    volumes:
+      - ./localhost+2.pem:/certs/localhost+2.pem:ro
+      - ./localhost+2-key.pem:/certs/localhost+2-key.pem:ro
+    ports:
+      - "443:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - mono-network
 
   worker:
     build:
@@ -26,7 +67,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+    networks:
+      - mono-network
 
 volumes:
   postgres_data:
+
+networks:
+  mono-network:
+    driver: bridge

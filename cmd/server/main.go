@@ -138,7 +138,10 @@ func initializeAPIServer(store *postgres.Store, cfg *config.ServerConfig) (*http
 	}
 
 	// Create server with HTTP configuration
-	server := httpServer.NewAPIServer(apiHandler, authenticator, toHTTPConfig(cfg.HTTP))
+	server, err := httpServer.NewAPIServer(apiHandler, authenticator, toHTTPConfig(cfg.HTTP))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create API server: %w", err)
+	}
 
 	return server, cleanup, nil
 }
@@ -212,5 +215,8 @@ func toHTTPConfig(cfg config.HTTPConfig) httpServer.ServerConfig {
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		MaxHeaderBytes:    cfg.MaxHeaderBytes,
 		MaxBodyBytes:      cfg.MaxBodyBytes,
+		TLSEnabled:        cfg.TLSEnabled,
+		TLSCertFile:       cfg.TLSCertFile,
+		TLSKeyFile:        cfg.TLSKeyFile,
 	}
 }

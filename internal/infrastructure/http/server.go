@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -12,6 +13,12 @@ import (
 	"github.com/rezkam/mono/internal/application/auth"
 	mw "github.com/rezkam/mono/internal/infrastructure/http/middleware"
 )
+
+// ErrTLSCertRequired is returned when TLS is enabled but certificate file is not configured.
+var ErrTLSCertRequired = errors.New("TLS enabled but MONO_TLS_CERT_FILE is not set")
+
+// ErrTLSKeyRequired is returned when TLS is enabled but key file is not configured.
+var ErrTLSKeyRequired = errors.New("TLS enabled but MONO_TLS_KEY_FILE is not set")
 
 // Default configuration values for the HTTP server.
 const (
@@ -35,6 +42,11 @@ type ServerConfig struct {
 	ReadHeaderTimeout time.Duration
 	MaxHeaderBytes    int
 	MaxBodyBytes      int64
+
+	// TLS configuration for HTTPS
+	TLSEnabled  bool
+	TLSCertFile string
+	TLSKeyFile  string
 }
 
 // applyDefaults sets default values for any unset (zero) fields.
@@ -64,21 +76,38 @@ func (cfg *ServerConfig) applyDefaults() {
 
 // APIServer wraps the HTTP server with router and all HTTP concerns.
 type APIServer struct {
-	server *http.Server
+	server      *http.Server
+	tlsEnabled  bool
+	tlsCertFile string
+	tlsKeyFile  string
 }
 
 // NewAPIServer creates a new HTTP server with router, middleware, and all HTTP concerns configured.
 // The apiHandler is mounted under /api with authentication.
 // Applies defaults for zero or invalid config values.
-func NewAPIServer(apiHandler http.Handler, authenticator *auth.Authenticator, cfg ServerConfig) *APIServer {
+// Returns error if TLS is enabled but cert/key files are not configured.
+func NewAPIServer(apiHandler http.Handler, authenticator *auth.Authenticator, cfg ServerConfig) (*APIServer, error) {
 	cfg.applyDefaults()
+
+	// Validate TLS configuration
+	if cfg.TLSEnabled {
+		if cfg.TLSCertFile == "" {
+			return nil, ErrTLSCertRequired
+		}
+		if cfg.TLSKeyFile == "" {
+			return nil, ErrTLSKeyRequired
+		}
+	}
 
 	router := setupRouter(apiHandler, authenticator, cfg)
 	httpServer := setupHTTPServer(router, cfg)
 
 	return &APIServer{
-		server: httpServer,
-	}
+		server:      httpServer,
+		tlsEnabled:  cfg.TLSEnabled,
+		tlsCertFile: cfg.TLSCertFile,
+		tlsKeyFile:  cfg.TLSKeyFile,
+	}, nil
 }
 
 // setupRouter creates and configures the Chi router with all middleware and routes.
@@ -127,7 +156,12 @@ func setupHTTPServer(router *chi.Mux, cfg ServerConfig) *http.Server {
 }
 
 // Start starts the HTTP server.
+// Uses HTTPS if TLS is enabled, otherwise HTTP.
 func (s *APIServer) Start() error {
+	if s.tlsEnabled {
+		slog.Info("Starting HTTPS server", "addr", s.server.Addr)
+		return s.server.ListenAndServeTLS(s.tlsCertFile, s.tlsKeyFile)
+	}
 	slog.Info("Starting HTTP server", "addr", s.server.Addr)
 	return s.server.ListenAndServe()
 }
