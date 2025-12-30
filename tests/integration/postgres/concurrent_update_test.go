@@ -31,7 +31,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 		Title:      "Concurrent Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item
@@ -46,7 +46,7 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Run concurrent updates
@@ -117,7 +117,7 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 		Title:      "Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create item: title="Task 1", status="todo"
@@ -132,7 +132,7 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Both requests read the same initial state (version=1)
@@ -237,7 +237,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		Title:      "Concurrent Field Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item
@@ -253,7 +253,7 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Fetch initial item (all goroutines will use same version=1)
@@ -348,7 +348,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 		Title:      "Timestamp Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item
@@ -364,7 +364,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 		CreateTime: createTime,
 		UpdatedAt:  createTime,
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// CRITICAL: Read initial updated_at from database instead of using time.Now()
@@ -438,7 +438,7 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 		Title:      "Multi-Item Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create multiple items
@@ -456,7 +456,7 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 			CreateTime: time.Now().UTC().UTC(),
 			UpdatedAt:  time.Now().UTC().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 

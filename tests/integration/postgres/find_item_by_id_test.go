@@ -35,7 +35,7 @@ func TestFindItemByID_Success(t *testing.T) {
 		Title:      "FindItemByID Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create multiple items
@@ -53,7 +53,7 @@ func TestFindItemByID_Success(t *testing.T) {
 			CreateTime: time.Now().UTC(),
 			UpdatedAt:  time.Now().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 
 		// Mark item 5 as the target
@@ -139,7 +139,7 @@ func TestFindItemByID_ReturnsAllFields(t *testing.T) {
 		Title:      "Full Fields Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with all fields populated
@@ -163,7 +163,7 @@ func TestFindItemByID_ReturnsAllFields(t *testing.T) {
 		CreateTime:        time.Now().UTC(),
 		UpdatedAt:         time.Now().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Retrieve and verify all fields

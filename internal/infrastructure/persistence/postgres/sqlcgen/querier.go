@@ -37,10 +37,10 @@ type Querier interface {
 	// between the application and database from making jobs temporarily unclaimable.
 	// For future scheduling, pass an explicit timestamp to override the default.
 	CreateGenerationJob(ctx context.Context, arg CreateGenerationJobParams) error
-	CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) error
+	CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) (RecurringTaskTemplate, error)
 	CreateStatusHistoryEntry(ctx context.Context, arg CreateStatusHistoryEntryParams) error
-	CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) error
-	CreateTodoList(ctx context.Context, arg CreateTodoListParams) error
+	CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) (TodoItem, error)
+	CreateTodoList(ctx context.Context, arg CreateTodoListParams) (TodoList, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Revokes API key with existence check in single operation
@@ -161,16 +161,12 @@ type Querier interface {
 	// retry_count is preserved automatically (not in SET clause)
 	// Critical for worker: Detects if job was deleted/claimed by another worker between operations
 	UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error)
-	// DATA ACCESS PATTERN: Partial update with COALESCE pattern
-	// Supports field masks by passing NULL for unchanged fields
-	// Returns updated row, or pgx.ErrNoRows if template doesn't exist
-	// TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
-	//
-	// Why this pattern:
-	//   - Single database round-trip with full row returned
-	//   - No race condition: atomically updates and returns result
-	//   - Partial update support: NULL preserves existing values via COALESCE
-	//   - Type safe: sqlc validates all columns against actual schema
+	// FIELD MASK PATTERN: Selective field updates with CASE expressions
+	// Only updates fields where set_<field> = true (field mask support)
+	// CONCURRENCY: Optional version check for optimistic locking
+	// Returns NULL if:
+	//   - Template doesn't exist
+	//   - Version mismatch (when expected_version provided)
 	UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (RecurringTaskTemplate, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
@@ -190,11 +186,16 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Efficient status updates without separate existence check
 	UpdateTodoItemStatus(ctx context.Context, arg UpdateTodoItemStatusParams) (int64, error)
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-	// Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
-	// NOTE: create_time is immutable after creation - only title can be updated
-	UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error)
+	// ATOMIC UPDATE WITH COUNTS: Uses CTE to update and return counts in single statement.
+	// Prevents race conditions where counts could change between UPDATE and SELECT.
+	//
+	// FIELD MASK PATTERN: Selective field updates with CASE expressions
+	// Only updates fields where set_<field> = true (field mask support)
+	// CONCURRENCY: Optional version check for optimistic locking
+	// Returns no rows if:
+	//   - List doesn't exist
+	//   - Version mismatch (when expected_version provided)
+	UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (UpdateTodoListRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

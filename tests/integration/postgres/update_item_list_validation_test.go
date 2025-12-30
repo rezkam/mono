@@ -147,7 +147,7 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 		Title:      "Repository Test List 1",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list1)
+	_, err = store.CreateList(ctx, list1)
 	require.NoError(t, err)
 
 	list2 := &domain.TodoList{
@@ -155,7 +155,7 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 		Title:      "Repository Test List 2",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list2)
+	_, err = store.CreateList(ctx, list2)
 	require.NoError(t, err)
 
 	// Create an item in list1
@@ -170,7 +170,7 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 		CreateTime: time.Now().UTC(),
 		UpdatedAt:  time.Now().UTC(),
 	}
-	err = store.CreateItem(ctx, list1ID, item)
+	_, err = store.CreateItem(ctx, list1ID, item)
 	require.NoError(t, err)
 
 	t.Run("repository_update_with_correct_list_succeeds", func(t *testing.T) {

@@ -80,7 +80,7 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 			CreateTime: now,
 		}
 
-		if err := storage.CreateList(ctx, list); err != nil {
+		if _, err := storage.CreateList(ctx, list); err != nil {
 			b.Fatalf("failed to create list %d: %v", i, err)
 		}
 
@@ -105,7 +105,7 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 				Tags:       []string{"common", fmt.Sprintf("tag-%d", j%100)}, // 100 unique tags
 			}
 
-			if err := storage.CreateItem(ctx, listID, item); err != nil {
+			if _, err := storage.CreateItem(ctx, listID, item); err != nil {
 				b.Fatalf("failed to create item %d-%d: %v", i, j, err)
 			}
 		}

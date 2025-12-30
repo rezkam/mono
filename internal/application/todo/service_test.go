@@ -15,7 +15,7 @@ type mockListListsRepo struct {
 	resultToReturn *domain.PagedListResult
 }
 
-func (m *mockListListsRepo) CreateList(ctx context.Context, list *domain.TodoList) error {
+func (m *mockListListsRepo) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
 	panic("not used in ListLists tests")
 }
 
@@ -40,7 +40,7 @@ func (m *mockListListsRepo) UpdateList(ctx context.Context, params domain.Update
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+func (m *mockListListsRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) (*domain.TodoItem, error) {
 	panic("not used in ListLists tests")
 }
 
@@ -56,7 +56,7 @@ func (m *mockListListsRepo) FindItems(ctx context.Context, params domain.ListTas
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
+func (m *mockListListsRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	panic("not used in ListLists tests")
 }
 

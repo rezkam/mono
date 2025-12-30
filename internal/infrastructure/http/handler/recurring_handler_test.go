@@ -21,7 +21,7 @@ import (
 // stubRepository implements todo.Repository and panics on calls we don't expect.
 type stubRepository struct{}
 
-func (s *stubRepository) CreateList(ctx context.Context, list *domain.TodoList) error {
+func (s *stubRepository) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
@@ -33,7 +33,7 @@ func (s *stubRepository) ListLists(ctx context.Context, params domain.ListListsP
 func (s *stubRepository) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+func (s *stubRepository) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) (*domain.TodoItem, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) FindItemByID(ctx context.Context, id string) (*domain.TodoItem, error) {
@@ -45,7 +45,7 @@ func (s *stubRepository) UpdateItem(ctx context.Context, params domain.UpdateIte
 func (s *stubRepository) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
+func (s *stubRepository) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {

@@ -45,7 +45,7 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 		Title:      "TotalCount Test List",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 50 items
@@ -61,7 +61,7 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 			CreateTime: time.Now().UTC(),
 			UpdatedAt:  time.Now().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
@@ -162,7 +162,7 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 		Title:      "Filter TotalCount Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 30 TODO items and 20 DONE items
@@ -177,7 +177,7 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 			CreateTime: time.Now().UTC(),
 			UpdatedAt:  time.Now().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
@@ -192,7 +192,7 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 			CreateTime: time.Now().UTC(),
 			UpdatedAt:  time.Now().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 

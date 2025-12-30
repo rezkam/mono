@@ -40,7 +40,7 @@ func TestUpdateList_PreservesCreateTime(t *testing.T) {
 		Title:      "Original Title",
 		CreateTime: originalCreateTime,
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Verify create_time was set correctly in database
@@ -92,7 +92,7 @@ func TestUpdateList_PreservesCreateTime_MultipleUpdates(t *testing.T) {
 		Title:      "Title v1",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Get original create_time

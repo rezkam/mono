@@ -200,13 +200,14 @@ func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (
 
 // CreateTodoItem creates a new todo item in a list.
 // Used by worker to create task instances generated from recurring templates.
+// Worker does not need the returned entity, so we discard it.
 func (s *Store) CreateTodoItem(ctx context.Context, listID string, item *domain.TodoItem) error {
 	params, err := domainTodoItemToDB(item, listID)
 	if err != nil {
 		return fmt.Errorf("failed to convert item: %w", err)
 	}
 
-	if err := s.queries.CreateTodoItem(ctx, params); err != nil {
+	if _, err := s.queries.CreateTodoItem(ctx, params); err != nil {
 		return fmt.Errorf("failed to create item: %w", err)
 	}
 

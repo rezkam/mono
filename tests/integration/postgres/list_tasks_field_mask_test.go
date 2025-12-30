@@ -37,7 +37,8 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	require.NoError(t, env.Store().CreateItem(env.Context(), listID, item))
+	_, err = env.Store().CreateItem(env.Context(), listID, item)
+	require.NoError(t, err)
 
 	// Update multiple fields by fetching, modifying, then updating
 	existingItem, err := env.Service().GetItem(env.Context(), itemID)

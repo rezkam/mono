@@ -45,7 +45,7 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 		Title:      "Priority Semantic Order Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create items with all four priorities
@@ -75,7 +75,7 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 			UpdatedAt:  now,
 			Priority:   &p,
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
@@ -214,7 +214,7 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 		Title:      "Not Alphabetical Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create only HIGH and LOW items (alphabetically: HIGH < LOW)
@@ -229,7 +229,7 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 		UpdatedAt:  now,
 		Priority:   &highPriority,
 	}
-	err = store.CreateItem(ctx, listID, highItem)
+	_, err = store.CreateItem(ctx, listID, highItem)
 	require.NoError(t, err)
 
 	lowPriority := domain.TaskPriorityLow
@@ -241,7 +241,7 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 		UpdatedAt:  now,
 		Priority:   &lowPriority,
 	}
-	err = store.CreateItem(ctx, listID, lowItem)
+	_, err = store.CreateItem(ctx, listID, lowItem)
 	require.NoError(t, err)
 
 	t.Run("asc_LOW_before_HIGH_not_alphabetical", func(t *testing.T) {
@@ -322,7 +322,7 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 		Title:      "Nulls Last Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
@@ -337,7 +337,7 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 		UpdatedAt:  now,
 		Priority:   &highPriority,
 	}
-	err = store.CreateItem(ctx, listID, highItem)
+	_, err = store.CreateItem(ctx, listID, highItem)
 	require.NoError(t, err)
 
 	// Create item without priority (NULL)
@@ -349,7 +349,7 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 		UpdatedAt:  now,
 		Priority:   nil, // NULL priority
 	}
-	err = store.CreateItem(ctx, listID, nullItem)
+	_, err = store.CreateItem(ctx, listID, nullItem)
 	require.NoError(t, err)
 
 	lowPriority := domain.TaskPriorityLow
@@ -361,7 +361,7 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 		UpdatedAt:  now,
 		Priority:   &lowPriority,
 	}
-	err = store.CreateItem(ctx, listID, lowItem)
+	_, err = store.CreateItem(ctx, listID, lowItem)
 	require.NoError(t, err)
 
 	t.Run("asc_nulls_last", func(t *testing.T) {

@@ -43,7 +43,7 @@ func TestListTasksPaginationExactMultiple(t *testing.T) {
 		Title:      "Pagination Test List",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create exactly 10 items (same as our test page size)
@@ -58,7 +58,7 @@ func TestListTasksPaginationExactMultiple(t *testing.T) {
 			CreateTime: time.Now().UTC(),
 			UpdatedAt:  time.Now().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 

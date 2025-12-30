@@ -56,6 +56,7 @@ type RecurringTaskTemplate struct {
 	UpdatedAt            time.Time        `json:"updated_at"`
 	LastGeneratedUntil   time.Time        `json:"last_generated_until"`
 	GenerationWindowDays int32            `json:"generation_window_days"`
+	Version              int32            `json:"version"`
 }
 
 type TaskStatusHistory struct {
@@ -89,4 +90,5 @@ type TodoList struct {
 	ID         string    `json:"id"`
 	Title      string    `json:"title"`
 	CreateTime time.Time `json:"create_time"`
+	Version    int32     `json:"version"`
 }

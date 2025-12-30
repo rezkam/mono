@@ -284,8 +284,9 @@ func TestEtag_FieldMaskUpdate(t *testing.T) {
 	assert.Equal(t, []string{"original", "test"}, updatedItem.Tags, "Tags should be preserved")
 }
 
-// TestEtag_CannotBeSetByClient verifies that etag value in payload is ignored.
+// TestEtag_CannotBeSetByClient verifies that etag cannot be included in update_mask.
 // Clients should not be able to set etag to arbitrary values - it's always auto-generated.
+// The validation layer now correctly rejects "etag" as an unknown field in update_mask.
 func TestEtag_CannotBeSetByClient(t *testing.T) {
 	dsn := GetTestStorageDSN(t)
 
@@ -310,9 +311,8 @@ func TestEtag_CannotBeSetByClient(t *testing.T) {
 	require.NoError(t, err)
 	currentEtag := fetchedItem.Etag()
 
-	// Try to update with etag in update_mask AND provide a bogus etag value
-	// Note: The etag in params.Etag is for OCC check, not for setting
-	// But let's verify that even if we include "etag" in UpdateMask, it's ignored
+	// Try to update with etag in update_mask - this should be rejected
+	// because "etag" is not a valid field in update_mask (it's auto-managed)
 	updateParams := domain.UpdateItemParams{
 		ItemID:     item.ID,
 		ListID:     listID,
@@ -321,12 +321,10 @@ func TestEtag_CannotBeSetByClient(t *testing.T) {
 		Title:      ptr.To("Updated Title"),
 	}
 
-	updated, err := todoService.UpdateItem(ctx, updateParams)
-	require.NoError(t, err, "Update should succeed")
-
-	// VERIFY: Etag was auto-incremented to "2", not manipulated by client
-	assert.Equal(t, "2", updated.Etag(), "Etag should auto-increment to \"2\", ignoring 'etag' in update_mask")
-	assert.Equal(t, "Updated Title", updated.Title, "Title should be updated")
+	_, err = todoService.UpdateItem(ctx, updateParams)
+	// VERIFY: Validation correctly rejects "etag" as an unknown field
+	require.Error(t, err, "Update should fail when 'etag' is in update_mask")
+	assert.ErrorIs(t, err, domain.ErrUnknownField, "Should return ErrUnknownField for 'etag' in update_mask")
 }
 
 // Helper functions
@@ -339,7 +337,7 @@ func createTestList(t *testing.T, store *postgres.Store, title string) string {
 		Title:      title,
 		CreateTime: time.Now().UTC(),
 	}
-	err := store.CreateList(context.Background(), list)
+	_, err := store.CreateList(context.Background(), list)
 	require.NoError(t, err)
 	return listID
 }

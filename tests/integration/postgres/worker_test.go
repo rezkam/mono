@@ -105,7 +105,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 				Title:      fmt.Sprintf("Test List - %s", tc.name),
 				CreateTime: time.Now().UTC(),
 			}
-			err = store.CreateList(ctx, list)
+			_, err = store.CreateList(ctx, list)
 			require.NoError(t, err)
 
 			// Create template
@@ -123,7 +123,7 @@ func TestWorker_CompleteFlow(t *testing.T) {
 				CreatedAt:            time.Now().UTC(),
 				UpdatedAt:            time.Now().UTC(),
 			}
-			err = store.CreateRecurringTemplate(ctx, template)
+			_, err = store.CreateRecurringTemplate(ctx, template)
 			require.NoError(t, err)
 
 			// Step 1: Schedule job
@@ -208,7 +208,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 		Title:      "Distribution Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 10 templates
@@ -231,7 +231,7 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 			CreatedAt:            time.Now().UTC(),
 			UpdatedAt:            time.Now().UTC(),
 		}
-		err = store.CreateRecurringTemplate(ctx, template)
+		_, err = store.CreateRecurringTemplate(ctx, template)
 		require.NoError(t, err)
 
 		// Create pending job directly (time.Time{} = schedule immediately)
@@ -326,7 +326,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 		Title:      "High Load Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 500 templates with mix of patterns
@@ -362,7 +362,7 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 				UpdatedAt:            time.Now().UTC(),
 			}
 
-			err = store.CreateRecurringTemplate(ctx, template)
+			_, err = store.CreateRecurringTemplate(ctx, template)
 			require.NoError(t, err)
 
 			// Create pending job (time.Time{} = schedule immediately)
@@ -469,7 +469,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 		Title:      "Window Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create template with specific last_generated_until
@@ -490,7 +490,7 @@ func TestWorker_GenerationWindow(t *testing.T) {
 		CreatedAt:            time.Now().UTC(),
 		UpdatedAt:            time.Now().UTC(),
 	}
-	err = store.CreateRecurringTemplate(ctx, template)
+	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
 	// Create job with specific generation range (time.Time{} = schedule immediately)
@@ -556,7 +556,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		Title:      "History Preservation Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an existing task with status history
@@ -570,7 +570,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		CreateTime: time.Now().UTC().Add(-24 * time.Hour), // Created yesterday
 		UpdatedAt:  time.Now().UTC().Add(-24 * time.Hour),
 	}
-	err = store.CreateItem(ctx, listID, &existingTask)
+	_, err = store.CreateItem(ctx, listID, &existingTask)
 	require.NoError(t, err)
 
 	// Update task status to create status history
@@ -607,7 +607,7 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 		CreatedAt:            time.Now().UTC(),
 		UpdatedAt:            time.Now().UTC(),
 	}
-	err = store.CreateRecurringTemplate(ctx, template)
+	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
 	// Run worker to generate recurring tasks

@@ -1,4 +1,4 @@
--- name: CreateRecurringTemplate :exec
+-- name: CreateRecurringTemplate :one
 INSERT INTO recurring_task_templates (
     id, list_id, title, tags, priority, estimated_duration,
     recurrence_pattern, recurrence_config, due_offset,
@@ -11,7 +11,8 @@ INSERT INTO recurring_task_templates (
     sqlc.narg('due_offset'),
     sqlc.arg(is_active), sqlc.arg(created_at), sqlc.arg(updated_at),
     sqlc.arg(last_generated_until), sqlc.arg(generation_window_days)
-);
+)
+RETURNING *;
 
 -- name: GetRecurringTemplate :one
 SELECT * FROM recurring_task_templates
@@ -33,28 +34,26 @@ WHERE is_active = true
 ORDER BY created_at DESC;
 
 -- name: UpdateRecurringTemplate :one
--- DATA ACCESS PATTERN: Partial update with COALESCE pattern
--- Supports field masks by passing NULL for unchanged fields
--- Returns updated row, or pgx.ErrNoRows if template doesn't exist
--- TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
---
--- Why this pattern:
---   - Single database round-trip with full row returned
---   - No race condition: atomically updates and returns result
---   - Partial update support: NULL preserves existing values via COALESCE
---   - Type safe: sqlc validates all columns against actual schema
+-- FIELD MASK PATTERN: Selective field updates with CASE expressions
+-- Only updates fields where set_<field> = true (field mask support)
+-- CONCURRENCY: Optional version check for optimistic locking
+-- Returns NULL if:
+--   - Template doesn't exist
+--   - Version mismatch (when expected_version provided)
 UPDATE recurring_task_templates
-SET title = COALESCE(sqlc.narg('title'), title),
-    tags = COALESCE(sqlc.narg('tags'), tags),
-    priority = COALESCE(sqlc.narg('priority'), priority),
-    estimated_duration = COALESCE(sqlc.narg('estimated_duration'), estimated_duration),
-    recurrence_pattern = COALESCE(sqlc.narg('recurrence_pattern'), recurrence_pattern),
-    recurrence_config = COALESCE(sqlc.narg('recurrence_config'), recurrence_config),
-    due_offset = COALESCE(sqlc.narg('due_offset'), due_offset),
-    is_active = COALESCE(sqlc.narg('is_active'), is_active),
-    generation_window_days = COALESCE(sqlc.narg('generation_window_days'), generation_window_days),
-    updated_at = NOW()
+SET title = CASE WHEN sqlc.arg('set_title')::boolean THEN sqlc.narg('title') ELSE title END,
+    tags = CASE WHEN sqlc.arg('set_tags')::boolean THEN sqlc.narg('tags') ELSE tags END,
+    priority = CASE WHEN sqlc.arg('set_priority')::boolean THEN sqlc.narg('priority') ELSE priority END,
+    estimated_duration = CASE WHEN sqlc.arg('set_estimated_duration')::boolean THEN sqlc.narg('estimated_duration') ELSE estimated_duration END,
+    recurrence_pattern = CASE WHEN sqlc.arg('set_recurrence_pattern')::boolean THEN sqlc.narg('recurrence_pattern') ELSE recurrence_pattern END,
+    recurrence_config = CASE WHEN sqlc.arg('set_recurrence_config')::boolean THEN sqlc.narg('recurrence_config') ELSE recurrence_config END,
+    due_offset = CASE WHEN sqlc.arg('set_due_offset')::boolean THEN sqlc.narg('due_offset') ELSE due_offset END,
+    is_active = CASE WHEN sqlc.arg('set_is_active')::boolean THEN sqlc.narg('is_active') ELSE is_active END,
+    generation_window_days = CASE WHEN sqlc.arg('set_generation_window_days')::boolean THEN sqlc.narg('generation_window_days') ELSE generation_window_days END,
+    updated_at = NOW(),
+    version = version + 1
 WHERE id = sqlc.arg('id')
+  AND (sqlc.narg('expected_version')::integer IS NULL OR version = sqlc.narg('expected_version')::integer)
 RETURNING *;
 
 -- name: UpdateRecurringTemplateGenerationWindow :execrows

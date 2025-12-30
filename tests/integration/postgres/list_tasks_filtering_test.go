@@ -47,7 +47,8 @@ func TestListTasks_FilteringAndOrdering(t *testing.T) {
 			CreateTime: now,
 			UpdatedAt:  now,
 		}
-		require.NoError(t, env.Store().CreateItem(env.Context(), listID, item))
+		_, err = env.Store().CreateItem(env.Context(), listID, item)
+		require.NoError(t, err)
 	}
 
 	t.Run("filter_by_status_order_by_priority", func(t *testing.T) {

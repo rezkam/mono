@@ -1,17 +1,16 @@
--- name: CreateTodoItem :exec
+-- name: CreateTodoItem :one
 INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
     create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone,
-    version
+    recurring_template_id, instance_date, timezone
 ) VALUES (
     sqlc.arg(id), sqlc.arg(list_id), sqlc.arg(title), sqlc.arg(status), sqlc.arg(priority),
     sqlc.narg('estimated_duration'), sqlc.narg('actual_duration'),
     sqlc.arg(create_time), sqlc.arg(updated_at), sqlc.narg(due_time), sqlc.arg(tags),
-    sqlc.narg(recurring_template_id), sqlc.narg(instance_date), sqlc.narg(timezone),
-    1
-);
+    sqlc.narg(recurring_template_id), sqlc.narg(instance_date), sqlc.narg(timezone)
+)
+RETURNING *;
 
 -- name: BatchCreateTodoItems :copyfrom
 -- Bulk insert using PostgreSQL's COPY protocol.

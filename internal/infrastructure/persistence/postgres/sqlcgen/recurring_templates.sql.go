@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createRecurringTemplate = `-- name: CreateRecurringTemplate :exec
+const createRecurringTemplate = `-- name: CreateRecurringTemplate :one
 INSERT INTO recurring_task_templates (
     id, list_id, title, tags, priority, estimated_duration,
     recurrence_pattern, recurrence_config, due_offset,
@@ -27,6 +27,7 @@ INSERT INTO recurring_task_templates (
     $10, $11, $12,
     $13, $14
 )
+RETURNING id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days, version
 `
 
 type CreateRecurringTemplateParams struct {
@@ -46,8 +47,8 @@ type CreateRecurringTemplateParams struct {
 	GenerationWindowDays int32            `json:"generation_window_days"`
 }
 
-func (q *Queries) CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) error {
-	_, err := q.db.Exec(ctx, createRecurringTemplate,
+func (q *Queries) CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) (RecurringTaskTemplate, error) {
+	row := q.db.QueryRow(ctx, createRecurringTemplate,
 		arg.ID,
 		arg.ListID,
 		arg.Title,
@@ -63,7 +64,25 @@ func (q *Queries) CreateRecurringTemplate(ctx context.Context, arg CreateRecurri
 		arg.LastGeneratedUntil,
 		arg.GenerationWindowDays,
 	)
-	return err
+	var i RecurringTaskTemplate
+	err := row.Scan(
+		&i.ID,
+		&i.ListID,
+		&i.Title,
+		&i.Tags,
+		&i.Priority,
+		&i.EstimatedDuration,
+		&i.RecurrencePattern,
+		&i.RecurrenceConfig,
+		&i.DueOffset,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastGeneratedUntil,
+		&i.GenerationWindowDays,
+		&i.Version,
+	)
+	return i, err
 }
 
 const deactivateRecurringTemplate = `-- name: DeactivateRecurringTemplate :execrows
@@ -106,7 +125,7 @@ func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id string) (int64
 }
 
 const getRecurringTemplate = `-- name: GetRecurringTemplate :one
-SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days FROM recurring_task_templates
+SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days, version FROM recurring_task_templates
 WHERE id = $1
 `
 
@@ -128,12 +147,13 @@ func (q *Queries) GetRecurringTemplate(ctx context.Context, id string) (Recurrin
 		&i.UpdatedAt,
 		&i.LastGeneratedUntil,
 		&i.GenerationWindowDays,
+		&i.Version,
 	)
 	return i, err
 }
 
 const listAllActiveRecurringTemplates = `-- name: ListAllActiveRecurringTemplates :many
-SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days FROM recurring_task_templates
+SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days, version FROM recurring_task_templates
 WHERE is_active = true
 ORDER BY created_at DESC
 `
@@ -162,6 +182,7 @@ func (q *Queries) ListAllActiveRecurringTemplates(ctx context.Context) ([]Recurr
 			&i.UpdatedAt,
 			&i.LastGeneratedUntil,
 			&i.GenerationWindowDays,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -174,7 +195,7 @@ func (q *Queries) ListAllActiveRecurringTemplates(ctx context.Context) ([]Recurr
 }
 
 const listAllRecurringTemplatesByList = `-- name: ListAllRecurringTemplatesByList :many
-SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days FROM recurring_task_templates
+SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days, version FROM recurring_task_templates
 WHERE list_id = $1
 ORDER BY created_at DESC
 `
@@ -203,6 +224,7 @@ func (q *Queries) ListAllRecurringTemplatesByList(ctx context.Context, listID st
 			&i.UpdatedAt,
 			&i.LastGeneratedUntil,
 			&i.GenerationWindowDays,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -215,7 +237,7 @@ func (q *Queries) ListAllRecurringTemplatesByList(ctx context.Context, listID st
 }
 
 const listRecurringTemplates = `-- name: ListRecurringTemplates :many
-SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days FROM recurring_task_templates
+SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days, version FROM recurring_task_templates
 WHERE list_id = $1 AND is_active = true
 ORDER BY created_at DESC
 `
@@ -244,6 +266,7 @@ func (q *Queries) ListRecurringTemplates(ctx context.Context, listID string) ([]
 			&i.UpdatedAt,
 			&i.LastGeneratedUntil,
 			&i.GenerationWindowDays,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -257,55 +280,73 @@ func (q *Queries) ListRecurringTemplates(ctx context.Context, listID string) ([]
 
 const updateRecurringTemplate = `-- name: UpdateRecurringTemplate :one
 UPDATE recurring_task_templates
-SET title = COALESCE($1, title),
-    tags = COALESCE($2, tags),
-    priority = COALESCE($3, priority),
-    estimated_duration = COALESCE($4, estimated_duration),
-    recurrence_pattern = COALESCE($5, recurrence_pattern),
-    recurrence_config = COALESCE($6, recurrence_config),
-    due_offset = COALESCE($7, due_offset),
-    is_active = COALESCE($8, is_active),
-    generation_window_days = COALESCE($9, generation_window_days),
-    updated_at = NOW()
-WHERE id = $10
-RETURNING id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days
+SET title = CASE WHEN $1::boolean THEN $2 ELSE title END,
+    tags = CASE WHEN $3::boolean THEN $4 ELSE tags END,
+    priority = CASE WHEN $5::boolean THEN $6 ELSE priority END,
+    estimated_duration = CASE WHEN $7::boolean THEN $8 ELSE estimated_duration END,
+    recurrence_pattern = CASE WHEN $9::boolean THEN $10 ELSE recurrence_pattern END,
+    recurrence_config = CASE WHEN $11::boolean THEN $12 ELSE recurrence_config END,
+    due_offset = CASE WHEN $13::boolean THEN $14 ELSE due_offset END,
+    is_active = CASE WHEN $15::boolean THEN $16 ELSE is_active END,
+    generation_window_days = CASE WHEN $17::boolean THEN $18 ELSE generation_window_days END,
+    updated_at = NOW(),
+    version = version + 1
+WHERE id = $19
+  AND ($20::integer IS NULL OR version = $20::integer)
+RETURNING id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, last_generated_until, generation_window_days, version
 `
 
 type UpdateRecurringTemplateParams struct {
-	Title                string           `json:"title"`
-	Tags                 []byte           `json:"tags"`
-	Priority             sql.Null[string] `json:"priority"`
-	EstimatedDuration    pgtype.Interval  `json:"estimated_duration"`
-	RecurrencePattern    sql.Null[string] `json:"recurrence_pattern"`
-	RecurrenceConfig     []byte           `json:"recurrence_config"`
-	DueOffset            pgtype.Interval  `json:"due_offset"`
-	IsActive             pgtype.Bool      `json:"is_active"`
-	GenerationWindowDays pgtype.Int4      `json:"generation_window_days"`
-	ID                   string           `json:"id"`
+	SetTitle                bool             `json:"set_title"`
+	Title                   string           `json:"title"`
+	SetTags                 bool             `json:"set_tags"`
+	Tags                    []byte           `json:"tags"`
+	SetPriority             bool             `json:"set_priority"`
+	Priority                sql.Null[string] `json:"priority"`
+	SetEstimatedDuration    bool             `json:"set_estimated_duration"`
+	EstimatedDuration       pgtype.Interval  `json:"estimated_duration"`
+	SetRecurrencePattern    bool             `json:"set_recurrence_pattern"`
+	RecurrencePattern       sql.Null[string] `json:"recurrence_pattern"`
+	SetRecurrenceConfig     bool             `json:"set_recurrence_config"`
+	RecurrenceConfig        []byte           `json:"recurrence_config"`
+	SetDueOffset            bool             `json:"set_due_offset"`
+	DueOffset               pgtype.Interval  `json:"due_offset"`
+	SetIsActive             bool             `json:"set_is_active"`
+	IsActive                pgtype.Bool      `json:"is_active"`
+	SetGenerationWindowDays bool             `json:"set_generation_window_days"`
+	GenerationWindowDays    pgtype.Int4      `json:"generation_window_days"`
+	ID                      string           `json:"id"`
+	ExpectedVersion         pgtype.Int4      `json:"expected_version"`
 }
 
-// DATA ACCESS PATTERN: Partial update with COALESCE pattern
-// Supports field masks by passing NULL for unchanged fields
-// Returns updated row, or pgx.ErrNoRows if template doesn't exist
-// TYPE SAFETY: All fields managed by sqlc - schema changes caught at compile time
-//
-// Why this pattern:
-//   - Single database round-trip with full row returned
-//   - No race condition: atomically updates and returns result
-//   - Partial update support: NULL preserves existing values via COALESCE
-//   - Type safe: sqlc validates all columns against actual schema
+// FIELD MASK PATTERN: Selective field updates with CASE expressions
+// Only updates fields where set_<field> = true (field mask support)
+// CONCURRENCY: Optional version check for optimistic locking
+// Returns NULL if:
+//   - Template doesn't exist
+//   - Version mismatch (when expected_version provided)
 func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (RecurringTaskTemplate, error) {
 	row := q.db.QueryRow(ctx, updateRecurringTemplate,
+		arg.SetTitle,
 		arg.Title,
+		arg.SetTags,
 		arg.Tags,
+		arg.SetPriority,
 		arg.Priority,
+		arg.SetEstimatedDuration,
 		arg.EstimatedDuration,
+		arg.SetRecurrencePattern,
 		arg.RecurrencePattern,
+		arg.SetRecurrenceConfig,
 		arg.RecurrenceConfig,
+		arg.SetDueOffset,
 		arg.DueOffset,
+		arg.SetIsActive,
 		arg.IsActive,
+		arg.SetGenerationWindowDays,
 		arg.GenerationWindowDays,
 		arg.ID,
+		arg.ExpectedVersion,
 	)
 	var i RecurringTaskTemplate
 	err := row.Scan(
@@ -323,6 +364,7 @@ func (q *Queries) UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurri
 		&i.UpdatedAt,
 		&i.LastGeneratedUntil,
 		&i.GenerationWindowDays,
+		&i.Version,
 	)
 	return i, err
 }

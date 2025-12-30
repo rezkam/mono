@@ -84,7 +84,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 			Title:      "Timezone Test List",
 			CreateTime: time.Now().UTC(),
 		}
-		err = store.CreateList(ctx, list)
+		_, err = store.CreateList(ctx, list)
 		require.NoError(t, err)
 
 		// Query the database directly to check stored timezone
@@ -278,7 +278,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 			Title:      "Trigger Test",
 			CreateTime: time.Now().UTC(),
 		}
-		err = store.CreateList(ctx, list)
+		_, err = store.CreateList(ctx, list)
 		require.NoError(t, err)
 
 		// Create an item
@@ -292,7 +292,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 			Status:     domain.TaskStatusTodo,
 			CreateTime: time.Now().UTC(),
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 
 		// Update item status (triggers database status_history insert)

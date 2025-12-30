@@ -44,7 +44,8 @@ func TestOrderBy_WithNullValues(t *testing.T) {
 			CreateTime: now,
 			UpdatedAt:  now,
 		}
-		require.NoError(t, env.Store().CreateItem(env.Context(), listID, item))
+		_, err = env.Store().CreateItem(env.Context(), listID, item)
+		require.NoError(t, err)
 	}
 
 	t.Run("order_by_priority_asc_nulls_last", func(t *testing.T) {

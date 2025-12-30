@@ -35,9 +35,10 @@ func (q *Queries) CountTodoListsWithFilters(ctx context.Context, arg CountTodoLi
 	return total_count, err
 }
 
-const createTodoList = `-- name: CreateTodoList :exec
+const createTodoList = `-- name: CreateTodoList :one
 INSERT INTO todo_lists (id, title, create_time)
 VALUES ($1, $2, $3)
+RETURNING id, title, create_time, version
 `
 
 type CreateTodoListParams struct {
@@ -46,9 +47,16 @@ type CreateTodoListParams struct {
 	CreateTime time.Time `json:"create_time"`
 }
 
-func (q *Queries) CreateTodoList(ctx context.Context, arg CreateTodoListParams) error {
-	_, err := q.db.Exec(ctx, createTodoList, arg.ID, arg.Title, arg.CreateTime)
-	return err
+func (q *Queries) CreateTodoList(ctx context.Context, arg CreateTodoListParams) (TodoList, error) {
+	row := q.db.QueryRow(ctx, createTodoList, arg.ID, arg.Title, arg.CreateTime)
+	var i TodoList
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.CreateTime,
+		&i.Version,
+	)
+	return i, err
 }
 
 const deleteTodoList = `-- name: DeleteTodoList :execrows
@@ -72,6 +80,7 @@ SELECT
     tl.id,
     tl.title,
     tl.create_time,
+    tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM todo_lists tl
@@ -80,7 +89,7 @@ WHERE
     ($2::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || $2 || '%'))
     AND ($3::timestamptz IS NULL OR tl.create_time > $3)
     AND ($4::timestamptz IS NULL OR tl.create_time < $4)
-GROUP BY tl.id, tl.title, tl.create_time
+GROUP BY tl.id, tl.title, tl.create_time, tl.version
 ORDER BY
     CASE
         WHEN $5 = 'title' AND $6 = 'asc' THEN tl.title
@@ -115,6 +124,7 @@ type FindTodoListsWithFiltersRow struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	CreateTime  time.Time `json:"create_time"`
+	Version     int32     `json:"version"`
 	TotalItems  int32     `json:"total_items"`
 	UndoneItems int32     `json:"undone_items"`
 }
@@ -152,6 +162,7 @@ func (q *Queries) FindTodoListsWithFilters(ctx context.Context, arg FindTodoList
 			&i.ID,
 			&i.Title,
 			&i.CreateTime,
+			&i.Version,
 			&i.TotalItems,
 			&i.UndoneItems,
 		); err != nil {
@@ -166,14 +177,19 @@ func (q *Queries) FindTodoListsWithFilters(ctx context.Context, arg FindTodoList
 }
 
 const getTodoList = `-- name: GetTodoList :one
-SELECT id, title, create_time FROM todo_lists
+SELECT id, title, create_time, version FROM todo_lists
 WHERE id = $1
 `
 
 func (q *Queries) GetTodoList(ctx context.Context, id string) (TodoList, error) {
 	row := q.db.QueryRow(ctx, getTodoList, id)
 	var i TodoList
-	err := row.Scan(&i.ID, &i.Title, &i.CreateTime)
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.CreateTime,
+		&i.Version,
+	)
 	return i, err
 }
 
@@ -182,12 +198,13 @@ SELECT
     tl.id,
     tl.title,
     tl.create_time,
+    tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 WHERE tl.id = $2
-GROUP BY tl.id, tl.title, tl.create_time
+GROUP BY tl.id, tl.title, tl.create_time, tl.version
 `
 
 type GetTodoListWithCountsParams struct {
@@ -199,6 +216,7 @@ type GetTodoListWithCountsRow struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	CreateTime  time.Time `json:"create_time"`
+	Version     int32     `json:"version"`
 	TotalItems  int32     `json:"total_items"`
 	UndoneItems int32     `json:"undone_items"`
 }
@@ -212,6 +230,7 @@ func (q *Queries) GetTodoListWithCounts(ctx context.Context, arg GetTodoListWith
 		&i.ID,
 		&i.Title,
 		&i.CreateTime,
+		&i.Version,
 		&i.TotalItems,
 		&i.UndoneItems,
 	)
@@ -219,7 +238,7 @@ func (q *Queries) GetTodoListWithCounts(ctx context.Context, arg GetTodoListWith
 }
 
 const listTodoLists = `-- name: ListTodoLists :many
-SELECT id, title, create_time FROM todo_lists
+SELECT id, title, create_time, version FROM todo_lists
 ORDER BY create_time DESC
 `
 
@@ -233,7 +252,12 @@ func (q *Queries) ListTodoLists(ctx context.Context) ([]TodoList, error) {
 	items := []TodoList{}
 	for rows.Next() {
 		var i TodoList
-		if err := rows.Scan(&i.ID, &i.Title, &i.CreateTime); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.CreateTime,
+			&i.Version,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -249,11 +273,12 @@ SELECT
     tl.id,
     tl.title,
     tl.create_time,
+    tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
-GROUP BY tl.id, tl.title, tl.create_time
+GROUP BY tl.id, tl.title, tl.create_time, tl.version
 ORDER BY tl.create_time DESC
 `
 
@@ -261,6 +286,7 @@ type ListTodoListsWithCountsRow struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	CreateTime  time.Time `json:"create_time"`
+	Version     int32     `json:"version"`
 	TotalItems  int32     `json:"total_items"`
 	UndoneItems int32     `json:"undone_items"`
 }
@@ -288,6 +314,7 @@ func (q *Queries) ListTodoListsWithCounts(ctx context.Context, undoneStatuses []
 			&i.ID,
 			&i.Title,
 			&i.CreateTime,
+			&i.Version,
 			&i.TotalItems,
 			&i.UndoneItems,
 		); err != nil {
@@ -301,25 +328,69 @@ func (q *Queries) ListTodoListsWithCounts(ctx context.Context, undoneStatuses []
 	return items, nil
 }
 
-const updateTodoList = `-- name: UpdateTodoList :execrows
-UPDATE todo_lists
-SET title = $1
-WHERE id = $2
+const updateTodoList = `-- name: UpdateTodoList :one
+WITH updated AS (
+    UPDATE todo_lists tl
+    SET title = CASE WHEN $2::boolean THEN $3 ELSE title END,
+        version = tl.version + 1
+    WHERE tl.id = $4
+      AND ($5::integer IS NULL OR tl.version = $5::integer)
+    RETURNING id, title, create_time, version
+)
+SELECT
+    u.id,
+    u.title,
+    u.create_time,
+    u.version,
+    COALESCE(COUNT(ti.id), 0)::int AS total_items,
+    COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
+FROM updated u
+LEFT JOIN todo_items ti ON u.id = ti.list_id
+GROUP BY u.id, u.title, u.create_time, u.version
 `
 
 type UpdateTodoListParams struct {
-	Title string `json:"title"`
-	ID    string `json:"id"`
+	UndoneStatuses  []string    `json:"undone_statuses"`
+	SetTitle        bool        `json:"set_title"`
+	Title           string      `json:"title"`
+	ID              string      `json:"id"`
+	ExpectedVersion pgtype.Int4 `json:"expected_version"`
 }
 
-// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-// Avoids two-query anti-pattern (SELECT then UPDATE) with race condition and doubled latency
-// NOTE: create_time is immutable after creation - only title can be updated
-func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateTodoList, arg.Title, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type UpdateTodoListRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	Title       string             `json:"title"`
+	CreateTime  pgtype.Timestamptz `json:"create_time"`
+	Version     int32              `json:"version"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
+}
+
+// ATOMIC UPDATE WITH COUNTS: Uses CTE to update and return counts in single statement.
+// Prevents race conditions where counts could change between UPDATE and SELECT.
+//
+// FIELD MASK PATTERN: Selective field updates with CASE expressions
+// Only updates fields where set_<field> = true (field mask support)
+// CONCURRENCY: Optional version check for optimistic locking
+// Returns no rows if:
+//   - List doesn't exist
+//   - Version mismatch (when expected_version provided)
+func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) (UpdateTodoListRow, error) {
+	row := q.db.QueryRow(ctx, updateTodoList,
+		arg.UndoneStatuses,
+		arg.SetTitle,
+		arg.Title,
+		arg.ID,
+		arg.ExpectedVersion,
+	)
+	var i UpdateTodoListRow
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.CreateTime,
+		&i.Version,
+		&i.TotalItems,
+		&i.UndoneItems,
+	)
+	return i, err
 }

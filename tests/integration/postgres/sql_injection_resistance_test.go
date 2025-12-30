@@ -59,7 +59,7 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 		Title:      "SQL Injection Test List",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create test tasks
@@ -76,7 +76,7 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 			Status:   domain.TaskStatusTodo,
 			Priority: &priorityMedium,
 		}
-		err = store.CreateItem(ctx, listID, &task)
+		_, err = store.CreateItem(ctx, listID, &task)
 		require.NoError(t, err)
 	}
 
@@ -187,7 +187,7 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 			Status:   domain.TaskStatusTodo,
 			Priority: &priorityLow,
 		}
-		createErr := store.CreateItem(ctx, listID, &newTask)
+		_, createErr := store.CreateItem(ctx, listID, &newTask)
 		require.NoError(t, createErr,
 			"Should create new tasks after injection attempt")
 

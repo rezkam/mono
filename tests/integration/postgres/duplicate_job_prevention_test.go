@@ -46,7 +46,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		Title:      "Duplicate Prevention Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create a template that needs generation
@@ -64,7 +64,7 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		CreatedAt:            time.Now().UTC(),
 		UpdatedAt:            time.Now().UTC(),
 	}
-	err = store.CreateRecurringTemplate(ctx, template)
+	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
 	t.Run("first_schedule_creates_one_job", func(t *testing.T) {
@@ -173,7 +173,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 		Title:      "Running Job Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create a template
@@ -191,7 +191,7 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 		CreatedAt:            time.Now().UTC(),
 		UpdatedAt:            time.Now().UTC(),
 	}
-	err = store.CreateRecurringTemplate(ctx, template)
+	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
 	// Create a job and claim it (putting it in running state)
@@ -254,7 +254,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 		Title:      "Multi Template Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 3 templates
@@ -275,7 +275,7 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 			CreatedAt:            time.Now().UTC(),
 			UpdatedAt:            time.Now().UTC(),
 		}
-		err = store.CreateRecurringTemplate(ctx, template)
+		_, err = store.CreateRecurringTemplate(ctx, template)
 		require.NoError(t, err)
 	}
 

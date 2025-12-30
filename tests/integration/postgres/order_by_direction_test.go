@@ -51,7 +51,7 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 		Title:      "Order By Direction Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 5 items with distinctly different create times
@@ -74,7 +74,7 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 			CreateTime: createTime,
 			UpdatedAt:  createTime,
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
@@ -212,7 +212,7 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 		Title:      "Due Time Order Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create items with different due times
@@ -233,7 +233,7 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 			UpdatedAt:  now,
 			DueTime:    &dueTime,
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
@@ -312,7 +312,7 @@ func TestOrderByDirection_Priority(t *testing.T) {
 		Title:      "Priority Order Test",
 		CreateTime: time.Now().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create items with different priorities (HIGH, MEDIUM, LOW)
@@ -333,7 +333,7 @@ func TestOrderByDirection_Priority(t *testing.T) {
 			UpdatedAt:  now,
 			Priority:   &p,
 		}
-		err = store.CreateItem(ctx, listID, item)
+		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 

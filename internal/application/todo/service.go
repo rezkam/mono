@@ -96,11 +96,13 @@ func (s *Service) CreateList(ctx context.Context, titleStr string) (*domain.Todo
 		UndoneItems: 0,
 	}
 
-	if err := s.repo.CreateList(ctx, list); err != nil {
+	// Return the persisted entity from repository (includes version from persistence layer)
+	createdList, err := s.repo.CreateList(ctx, list)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create list: %w", err)
 	}
 
-	return list, nil
+	return createdList, nil
 }
 
 // GetList retrieves a todo list by ID with all items populated.
@@ -209,11 +211,13 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 		}
 	}
 
-	if err := s.repo.CreateItem(ctx, listID, item); err != nil {
+	// Return the persisted entity from repository (includes version from persistence layer)
+	createdItem, err := s.repo.CreateItem(ctx, listID, item)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create item: %w", err)
 	}
 
-	return item, nil
+	return createdItem, nil
 }
 
 // GetItem retrieves a single todo item by ID.
@@ -366,11 +370,13 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		return nil, err
 	}
 
-	if err := s.repo.CreateRecurringTemplate(ctx, template); err != nil {
+	// Return the persisted entity from repository (includes version from persistence layer)
+	createdTemplate, err := s.repo.CreateRecurringTemplate(ctx, template)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create template: %w", err)
 	}
 
-	return template, nil
+	return createdTemplate, nil
 }
 
 // GetRecurringTemplate retrieves a recurring template by ID.

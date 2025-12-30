@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -48,10 +47,11 @@ func isForeignKeyViolation(err error, column string) bool {
 // === List Operations ===
 
 // CreateList creates a new todo list.
-func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) error {
+// Returns the created list with version populated by persistence layer.
+func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
 	id, title, createTime, err := domainTodoListToDB(list)
 	if err != nil {
-		return fmt.Errorf("failed to convert list: %w", err)
+		return nil, fmt.Errorf("failed to convert list: %w", err)
 	}
 
 	params := sqlcgen.CreateTodoListParams{
@@ -60,11 +60,19 @@ func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) error {
 		CreateTime: createTime,
 	}
 
-	if err := s.queries.CreateTodoList(ctx, params); err != nil {
-		return fmt.Errorf("failed to create list: %w", err)
+	row, err := s.queries.CreateTodoList(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create list: %w", err)
 	}
 
-	return nil
+	return &domain.TodoList{
+		ID:          row.ID,
+		Title:       row.Title,
+		CreateTime:  row.CreateTime.UTC(),
+		TotalItems:  0, // New list has no items
+		UndoneItems: 0,
+		Version:     int(row.Version),
+	}, nil
 }
 
 // FindListByID retrieves a todo list by its ID with metadata and counts.
@@ -91,6 +99,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 		CreateTime:  dbList.CreateTime.UTC(),
 		TotalItems:  int(dbList.TotalItems),
 		UndoneItems: int(dbList.UndoneItems),
+		Version:     int(dbList.Version),
 	}, nil
 }
 
@@ -142,6 +151,7 @@ func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*
 			CreateTime:  row.CreateTime.UTC(),
 			TotalItems:  int(row.TotalItems),
 			UndoneItems: int(row.UndoneItems),
+			Version:     int(row.Version),
 		}
 		lists = append(lists, list)
 	}
@@ -169,60 +179,104 @@ func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*
 
 // UpdateList updates a list using field mask.
 // Only updates fields specified in UpdateMask.
-// Returns the updated list.
+// Returns domain.ErrListNotFound if list doesn't exist.
+// Returns domain.ErrVersionConflict if etag is provided and doesn't match current version.
 func (s *Store) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
-	id, err := uuid.Parse(params.ListID)
+	listUUID, err := uuid.Parse(params.ListID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	// Check if title is in update mask
-	updateTitle := slices.Contains(params.UpdateMask, "title")
-
-	// Only perform update if there are fields to update
-	if updateTitle && params.Title != nil {
-		sqlParams := sqlcgen.UpdateTodoListParams{
-			ID:    id.String(),
-			Title: *params.Title,
-		}
-
-		rowsAffected, err := s.queries.UpdateTodoList(ctx, sqlParams)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update list: %w", err)
-		}
-
-		if err := checkRowsAffected(rowsAffected, "list", params.ListID); err != nil {
-			return nil, err
-		}
+	// Build update mask set for quick lookup
+	maskSet := make(map[string]bool)
+	for _, field := range params.UpdateMask {
+		maskSet[field] = true
 	}
 
-	// Fetch and return the updated list
-	return s.FindListByID(ctx, params.ListID)
+	// Build sqlc params with field mask support
+	// Uses CTE to atomically update and return counts in single statement
+	sqlParams := sqlcgen.UpdateTodoListParams{
+		ID:             listUUID.String(),
+		UndoneStatuses: taskStatusesToStrings(domain.UndoneStatuses()),
+	}
+
+	// Map field mask to sqlc params
+	if maskSet["title"] {
+		sqlParams.SetTitle = true
+		sqlParams.Title = *params.Title
+	}
+
+	// Handle optimistic locking with etag
+	if params.Etag != nil {
+		version, err := parseEtagToVersion(*params.Etag)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse etag: %w", err)
+		}
+		sqlParams.ExpectedVersion = int32PtrToInt4(&version)
+	}
+
+	// Execute atomic update query (returns updated list with counts)
+	row, err := s.queries.UpdateTodoList(ctx, sqlParams)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Distinguish between not-found and version-conflict
+			existingList, lookupErr := s.queries.GetTodoList(ctx, listUUID.String())
+			if lookupErr != nil {
+				if errors.Is(lookupErr, pgx.ErrNoRows) {
+					return nil, fmt.Errorf("%w: list %s", domain.ErrListNotFound, params.ListID)
+				}
+				return nil, fmt.Errorf("failed to check list existence: %w", lookupErr)
+			}
+
+			// List exists, so update failed due to version mismatch
+			if params.Etag != nil {
+				return nil, fmt.Errorf("%w: expected version %s, current version %d",
+					domain.ErrVersionConflict, *params.Etag, existingList.Version)
+			}
+			return nil, fmt.Errorf("%w: list %s", domain.ErrListNotFound, params.ListID)
+		}
+		return nil, fmt.Errorf("failed to update list: %w", err)
+	}
+
+	// Convert to domain model (all data returned atomically from single query)
+	return &domain.TodoList{
+		ID:          uuid.UUID(row.ID.Bytes).String(),
+		Title:       row.Title,
+		CreateTime:  row.CreateTime.Time.UTC(),
+		TotalItems:  int(row.TotalItems),
+		UndoneItems: int(row.UndoneItems),
+		Version:     int(row.Version),
+	}, nil
 }
 
 // === Item Operations ===
 
 // CreateItem creates a new todo item in a list.
-func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+// Returns the created item with version populated by persistence layer.
+func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) (*domain.TodoItem, error) {
 	params, err := domainTodoItemToDB(item, listID)
 	if err != nil {
-		return fmt.Errorf("failed to convert item: %w", err)
+		return nil, fmt.Errorf("failed to convert item: %w", err)
 	}
 
-	if err := s.queries.CreateTodoItem(ctx, params); err != nil {
+	row, err := s.queries.CreateTodoItem(ctx, params)
+	if err != nil {
 		if isForeignKeyViolation(err, "list_id") {
-			return fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
+			return nil, fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
 		}
 		if isForeignKeyViolation(err, "recurring_template_id") {
-			return fmt.Errorf("%w: %w", domain.ErrTemplateNotFound, err)
+			return nil, fmt.Errorf("%w: %w", domain.ErrTemplateNotFound, err)
 		}
-		return fmt.Errorf("failed to create item: %w", err)
+		return nil, fmt.Errorf("failed to create item: %w", err)
 	}
 
-	// Set version after successful insert (DB defaults to 1)
-	item.Version = 1
+	// Convert returned row to domain model (version comes from persistence layer)
+	createdItem, err := dbTodoItemToDomain(row)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert created item: %w", err)
+	}
 
-	return nil
+	return &createdItem, nil
 }
 
 // FindItemByID retrieves a single todo item by its ID.
@@ -360,7 +414,7 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 				return nil, fmt.Errorf("%w: expected version %s, current version %d",
 					domain.ErrVersionConflict, *params.Etag, existingItem.Version)
 			}
-			return nil, fmt.Errorf("%w: item %s", domain.ErrNotFound, params.ItemID)
+			return nil, fmt.Errorf("%w: item %s", domain.ErrItemNotFound, params.ItemID)
 		}
 		return nil, fmt.Errorf("failed to update item: %w", err)
 	}
@@ -500,20 +554,23 @@ func (s *Store) FindItems(ctx context.Context, params domain.ListTasksParams, ex
 // === Recurring Template Operations ===
 
 // CreateRecurringTemplate creates a new recurring task template.
-func (s *Store) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
+// Returns the created template with version populated by persistence layer.
+func (s *Store) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	params, err := domainRecurringTemplateToDB(template)
 	if err != nil {
-		return fmt.Errorf("failed to convert template: %w", err)
+		return nil, fmt.Errorf("failed to convert template: %w", err)
 	}
 
-	if err := s.queries.CreateRecurringTemplate(ctx, params); err != nil {
+	row, err := s.queries.CreateRecurringTemplate(ctx, params)
+	if err != nil {
 		if isForeignKeyViolation(err, "list_id") {
-			return fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
+			return nil, fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
 		}
-		return fmt.Errorf("failed to create template: %w", err)
+		return nil, fmt.Errorf("failed to create template: %w", err)
 	}
 
-	return nil
+	// Convert returned row to domain model (version comes from persistence layer)
+	return dbRecurringTemplateToDomain(row)
 }
 
 // FindRecurringTemplate retrieves a template by ID.
@@ -541,7 +598,8 @@ func (s *Store) FindRecurringTemplate(ctx context.Context, id string) (*domain.R
 
 // UpdateRecurringTemplate updates a template using field mask.
 // Only updates fields specified in UpdateMask.
-// Returns the updated template.
+// Returns domain.ErrTemplateNotFound if template doesn't exist.
+// Returns domain.ErrVersionConflict if etag is provided and doesn't match current version.
 func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	templateUUID, err := uuid.Parse(params.TemplateID)
 	if err != nil {
@@ -554,16 +612,18 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		maskSet[field] = true
 	}
 
-	// Build sqlc params - pass nil for fields not in mask to preserve existing values
+	// Build sqlc params with field mask support
 	sqlcParams := sqlcgen.UpdateRecurringTemplateParams{
 		ID: templateUUID.String(),
 	}
 
-	// Map field mask to sqlc params (nil = preserve existing value via COALESCE)
+	// Map field mask to sqlc params (Set* = true means update this field)
 	if maskSet["title"] {
+		sqlcParams.SetTitle = true
 		sqlcParams.Title = *params.Title
 	}
 	if maskSet["tags"] {
+		sqlcParams.SetTags = true
 		if params.Tags != nil {
 			tagsJSON, err := json.Marshal(*params.Tags)
 			if err != nil {
@@ -575,6 +635,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		}
 	}
 	if maskSet["priority"] {
+		sqlcParams.SetPriority = true
 		if params.Priority != nil {
 			priorityStr := string(*params.Priority)
 			sqlcParams.Priority = sql.Null[string]{V: priorityStr, Valid: true}
@@ -583,12 +644,15 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		}
 	}
 	if maskSet["estimated_duration"] {
+		sqlcParams.SetEstimatedDuration = true
 		sqlcParams.EstimatedDuration = durationPtrToPgtypeInterval(params.EstimatedDuration)
 	}
 	if maskSet["recurrence_pattern"] {
+		sqlcParams.SetRecurrencePattern = true
 		sqlcParams.RecurrencePattern = sql.Null[string]{V: ptr.ToString(params.RecurrencePattern), Valid: true}
 	}
 	if maskSet["recurrence_config"] {
+		sqlcParams.SetRecurrenceConfig = true
 		if params.RecurrenceConfig != nil {
 			configJSON, err := json.Marshal(params.RecurrenceConfig)
 			if err != nil {
@@ -598,22 +662,48 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		}
 	}
 	if maskSet["due_offset"] {
+		sqlcParams.SetDueOffset = true
 		sqlcParams.DueOffset = durationPtrToPgtypeInterval(params.DueOffset)
 	}
 	if maskSet["is_active"] {
+		sqlcParams.SetIsActive = true
 		sqlcParams.IsActive = boolPtrToBool(params.IsActive)
 	}
 	if maskSet["generation_window_days"] {
+		sqlcParams.SetGenerationWindowDays = true
 		if params.GenerationWindowDays != nil {
 			days := int32(*params.GenerationWindowDays)
 			sqlcParams.GenerationWindowDays = int32PtrToInt4(&days)
 		}
 	}
 
+	// Handle optimistic locking with etag
+	if params.Etag != nil {
+		version, err := parseEtagToVersion(*params.Etag)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse etag: %w", err)
+		}
+		sqlcParams.ExpectedVersion = int32PtrToInt4(&version)
+	}
+
 	// Execute type-safe update query
 	tmpl, err := s.queries.UpdateRecurringTemplate(ctx, sqlcParams)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// Distinguish between not-found and version-conflict
+			existingTemplate, lookupErr := s.queries.GetRecurringTemplate(ctx, templateUUID.String())
+			if lookupErr != nil {
+				if errors.Is(lookupErr, pgx.ErrNoRows) {
+					return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, params.TemplateID)
+				}
+				return nil, fmt.Errorf("failed to check template existence: %w", lookupErr)
+			}
+
+			// Template exists, so update failed due to version mismatch
+			if params.Etag != nil {
+				return nil, fmt.Errorf("%w: expected version %s, current version %d",
+					domain.ErrVersionConflict, *params.Etag, existingTemplate.Version)
+			}
 			return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, params.TemplateID)
 		}
 		return nil, fmt.Errorf("failed to update template: %w", err)

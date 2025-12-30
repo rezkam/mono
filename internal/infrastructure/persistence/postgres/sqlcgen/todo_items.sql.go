@@ -81,20 +81,19 @@ func (q *Queries) CountTasksWithFilters(ctx context.Context, arg CountTasksWithF
 	return count, err
 }
 
-const createTodoItem = `-- name: CreateTodoItem :exec
+const createTodoItem = `-- name: CreateTodoItem :one
 INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
     create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone,
-    version
+    recurring_template_id, instance_date, timezone
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7,
     $8, $9, $10, $11,
-    $12, $13, $14,
-    1
+    $12, $13, $14
 )
+RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version
 `
 
 type CreateTodoItemParams struct {
@@ -114,8 +113,8 @@ type CreateTodoItemParams struct {
 	Timezone            sql.Null[string]    `json:"timezone"`
 }
 
-func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) error {
-	_, err := q.db.Exec(ctx, createTodoItem,
+func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) (TodoItem, error) {
+	row := q.db.QueryRow(ctx, createTodoItem,
 		arg.ID,
 		arg.ListID,
 		arg.Title,
@@ -131,7 +130,25 @@ func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) 
 		arg.InstanceDate,
 		arg.Timezone,
 	)
-	return err
+	var i TodoItem
+	err := row.Scan(
+		&i.ID,
+		&i.ListID,
+		&i.Title,
+		&i.Status,
+		&i.Priority,
+		&i.EstimatedDuration,
+		&i.ActualDuration,
+		&i.CreateTime,
+		&i.UpdatedAt,
+		&i.DueTime,
+		&i.Tags,
+		&i.RecurringTemplateID,
+		&i.InstanceDate,
+		&i.Timezone,
+		&i.Version,
+	)
+	return i, err
 }
 
 const deleteTodoItem = `-- name: DeleteTodoItem :execrows

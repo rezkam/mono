@@ -31,7 +31,8 @@ func TestListTasks_LargePageSize(t *testing.T) {
 			CreateTime: now,
 			UpdatedAt:  now,
 		}
-		require.NoError(t, env.Store().CreateItem(env.Context(), listID, item))
+		_, err = env.Store().CreateItem(env.Context(), listID, item)
+		require.NoError(t, err)
 	}
 
 	testCases := []struct {

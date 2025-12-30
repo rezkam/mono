@@ -44,7 +44,7 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 		Title:      "Field Mask Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with priority
@@ -61,7 +61,7 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Verify priority is set
@@ -111,7 +111,7 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 		Title:      "DueTime Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with due_time
@@ -128,7 +128,7 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Verify due_time is set
@@ -177,7 +177,7 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		Title:      "Duration Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with estimated_duration
@@ -194,7 +194,7 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		CreateTime:        time.Now().UTC().UTC(),
 		UpdatedAt:         time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Verify estimated_duration is set
@@ -244,7 +244,7 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 		Title:      "Timezone Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with timezone
@@ -261,7 +261,7 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Verify timezone is set
@@ -311,7 +311,7 @@ func TestFieldMask_ClearTags(t *testing.T) {
 		Title:      "Tags Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with tags
@@ -327,7 +327,7 @@ func TestFieldMask_ClearTags(t *testing.T) {
 		CreateTime: time.Now().UTC().UTC(),
 		UpdatedAt:  time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Verify tags are set
@@ -377,7 +377,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		Title:      "Partial Update Test List",
 		CreateTime: time.Now().UTC().UTC(),
 	}
-	err = store.CreateList(ctx, list)
+	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create an item with multiple optional fields set
@@ -402,7 +402,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		CreateTime:        time.Now().UTC().UTC(),
 		UpdatedAt:         time.Now().UTC().UTC(),
 	}
-	err = store.CreateItem(ctx, listID, item)
+	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
 	// Update only the title by fetching, modifying title, and updating

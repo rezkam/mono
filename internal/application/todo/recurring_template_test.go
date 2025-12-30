@@ -12,13 +12,13 @@ import (
 
 // mockRecurringRepo is a minimal mock for testing validation logic
 type mockRecurringRepo struct {
-	createTemplateFn func(ctx context.Context, template *domain.RecurringTemplate) error
+	createTemplateFn func(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error)
 	findTemplateFn   func(ctx context.Context, id string) (*domain.RecurringTemplate, error)
 	updateTemplateFn func(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error)
 	updateListFn     func(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error)
 }
 
-func (m *mockRecurringRepo) CreateList(ctx context.Context, list *domain.TodoList) error {
+func (m *mockRecurringRepo) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
 	panic("not used in recurring template tests")
 }
 
@@ -37,7 +37,7 @@ func (m *mockRecurringRepo) UpdateList(ctx context.Context, params domain.Update
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) error {
+func (m *mockRecurringRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) (*domain.TodoItem, error) {
 	panic("not used in recurring template tests")
 }
 
@@ -53,11 +53,11 @@ func (m *mockRecurringRepo) FindItems(ctx context.Context, params domain.ListTas
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) error {
+func (m *mockRecurringRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	if m.createTemplateFn != nil {
 		return m.createTemplateFn(ctx, template)
 	}
-	return nil
+	return template, nil
 }
 
 func (m *mockRecurringRepo) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
