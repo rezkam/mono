@@ -342,6 +342,7 @@ func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*dom
 		UpdatedAt:            dbTemplate.UpdatedAt.UTC(),
 		LastGeneratedUntil:   dbTemplate.LastGeneratedUntil,
 		GenerationWindowDays: int(dbTemplate.GenerationWindowDays),
+		Version:              int(dbTemplate.Version),
 		Tags:                 []string{},
 	}
 

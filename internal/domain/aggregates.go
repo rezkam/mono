@@ -18,6 +18,15 @@ type TodoList struct {
 	// Count fields are always populated from database aggregation.
 	TotalItems  int // Total number of items in the list
 	UndoneItems int // Number of active items (TODO, IN_PROGRESS, BLOCKED)
+
+	// Optimistic locking version for concurrent update protection
+	Version int
+}
+
+// Etag returns the entity tag for this list.
+// The etag is based on the version number and is used for optimistic concurrency control.
+func (list *TodoList) Etag() string {
+	return fmt.Sprintf("%d", list.Version)
 }
 
 // TodoItem is an entity within the TodoList aggregate.
@@ -92,8 +101,14 @@ type UpdateItemParams struct {
 }
 
 // UpdateListParams contains parameters for updating a todo list with field mask support.
+// Uses client-side optimistic concurrency control via etag (AIP-154).
 type UpdateListParams struct {
 	ListID string
+
+	// Etag for optimistic concurrency control.
+	// Format: numeric string, e.g., "1", "2".
+	// If provided and doesn't match current version, returns ErrVersionConflict.
+	Etag *string
 
 	// UpdateMask specifies which fields to update.
 	// Only fields in this list will be modified.
@@ -104,9 +119,15 @@ type UpdateListParams struct {
 }
 
 // UpdateRecurringTemplateParams contains parameters for updating a recurring template with field mask support.
+// Uses client-side optimistic concurrency control via etag (AIP-154).
 type UpdateRecurringTemplateParams struct {
 	TemplateID string
 	ListID     string // Required for ownership validation
+
+	// Etag for optimistic concurrency control.
+	// Format: numeric string, e.g., "1", "2".
+	// If provided and doesn't match current version, returns ErrVersionConflict.
+	Etag *string
 
 	// UpdateMask specifies which fields to update.
 	// Only fields in this list will be modified.
@@ -156,6 +177,15 @@ type RecurringTemplate struct {
 	UpdatedAt            time.Time
 	LastGeneratedUntil   time.Time // Last date we generated tasks up to
 	GenerationWindowDays int       // How many days ahead to generate
+
+	// Optimistic locking version for concurrent update protection
+	Version int
+}
+
+// Etag returns the entity tag for this template.
+// The etag is based on the version number and is used for optimistic concurrency control.
+func (t *RecurringTemplate) Etag() string {
+	return fmt.Sprintf("%d", t.Version)
 }
 
 // GenerationJob is an entity representing a background job for generating recurring task instances.

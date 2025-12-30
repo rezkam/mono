@@ -9,7 +9,10 @@
 CREATE TABLE todo_lists (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     title TEXT NOT NULL,
-    create_time timestamptz NOT NULL DEFAULT now()
+    create_time timestamptz NOT NULL DEFAULT now(),
+
+    -- Optimistic locking version - incremented on each update to detect concurrent modifications
+    version INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX idx_todo_lists_create_time ON todo_lists(create_time DESC);
@@ -154,6 +157,9 @@ CREATE TABLE recurring_task_templates (
     -- Generation tracking
     last_generated_until DATE NOT NULL DEFAULT CURRENT_DATE,
     generation_window_days INTEGER NOT NULL DEFAULT 30,
+
+    -- Optimistic locking version - incremented on each update to detect concurrent modifications
+    version INTEGER NOT NULL DEFAULT 1,
 
     FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
 );

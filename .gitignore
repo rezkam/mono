@@ -37,6 +37,9 @@ Thumbs.db
 .env.local
 .env.production
 
+# Local dev certificates
+*.pem
+
 # Build artifacts
 dist/
 
