@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mono}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mono} -d ${POSTGRES_DB:-mono_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,6 +51,12 @@ services:
       - ${MONO_TLS_KEY_FILE_HOST:-./key.pem}:/certs/key.pem:ro
     ports:
       - "${SERVER_PORT:-80}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "if [ \"$MONO_TLS_ENABLED\" = \"true\" ]; then curl -f -k https://localhost:8080/health; else curl -f http://localhost:8080/health; fi"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy

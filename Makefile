@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-build-up docker-rebuild docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres docker-health docker-health-server db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -303,6 +303,15 @@ docker-up: ## [PROD] Start production services (server, worker, postgres)
 	docker compose -f docker-compose.prod.yml up -d
 	@echo "✅ Services started. Use 'make docker-logs' to view logs"
 
+docker-build-up: ## [PROD] Rebuild images and start services (use after git pull)
+	@echo "Rebuilding images and starting services..."
+	docker compose -f docker-compose.prod.yml up -d --build
+	@echo "✅ Services rebuilt and started. Use 'make docker-logs' to view logs"
+
+docker-rebuild: ## [PROD] Rebuild images only (without starting)
+	@echo "Rebuilding Docker images..."
+	docker compose -f docker-compose.prod.yml build
+
 docker-down: ## [PROD] Stop production services
 	@echo "Stopping production services..."
 	docker compose -f docker-compose.prod.yml down
@@ -364,6 +373,24 @@ docker-shell-worker: ## [PROD] Open shell in worker container
 
 docker-shell-postgres: ## [PROD] Open PostgreSQL shell
 	@docker compose -f docker-compose.prod.yml exec postgres psql -U ${POSTGRES_USER:-mono} -d ${POSTGRES_DB:-mono_db}
+
+docker-health: ## [PROD] Check health status of all services
+	@echo "Checking health status of production services..."
+	@docker compose -f docker-compose.prod.yml ps
+
+docker-health-server: ## [PROD] Test server /health endpoint (detects HTTP/HTTPS from SERVER_PORT)
+	@echo "Testing server health endpoint..."
+	@if [ -f .env ]; then \
+		. ./.env 2>/dev/null || true; \
+	fi; \
+	PORT=$${SERVER_PORT:-80}; \
+	if [ "$${MONO_TLS_ENABLED}" = "true" ]; then \
+		echo "Testing HTTPS endpoint at https://localhost:$$PORT/health"; \
+		curl -f -k -s https://localhost:$$PORT/health && echo "\n✅ Server is healthy" || echo "\n❌ Health check failed"; \
+	else \
+		echo "Testing HTTP endpoint at http://localhost:$$PORT/health"; \
+		curl -f -s http://localhost:$$PORT/health && echo "\n✅ Server is healthy" || echo "\n❌ Health check failed"; \
+	fi
 
 db-up: ## [DEV DB] Start development database (port 5432)
 	@echo "Starting PostgreSQL database..."
