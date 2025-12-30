@@ -33,7 +33,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey run clean docker-build docker-run db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -231,6 +231,19 @@ gen-apikey: build-apikey ## Generate a new API key (usage: NAME="My Key" DAYS=30
 		MONO_STORAGE_DSN="$(DEV_STORAGE_DSN)" ./mono-apikey -name "$(NAME)" -days $(DAYS); \
 	fi
 
+gen-apikey-docker: ## Generate API key using Docker and .env file (usage: NAME="My Key" DAYS=30 make gen-apikey-docker)
+	@if [ -z "$(NAME)" ]; then \
+		echo "Error: NAME is required"; \
+		echo "Usage: NAME=\"My Key\" make gen-apikey-docker"; \
+		echo "       NAME=\"My Key\" DAYS=30 make gen-apikey-docker (with expiration)"; \
+		exit 1; \
+	fi
+	@if [ -z "$(DAYS)" ]; then \
+		docker compose -f docker-compose.prod.yml run --rm -e NAME="$(NAME)" apikey -name "$(NAME)"; \
+	else \
+		docker compose -f docker-compose.prod.yml run --rm -e NAME="$(NAME)" -e DAYS=$(DAYS) apikey -name "$(NAME)" -days $(DAYS); \
+	fi
+
 build-timeutc-linter: ## Build custom timezone linter
 	@echo "Building timeutc linter..."
 	@cd tools/linters/timeutc && go build -o ../../../timeutc ./cmd/timeutc
@@ -280,6 +293,77 @@ docker-build: ## Build the Docker image
 docker-run: ## Run the Docker container
 	@echo "Running Docker container..."
 	docker run -p 8080:8080 -p 8081:8081 $(DOCKER_IMAGE)
+
+# =============================================================================
+# Production Docker Compose Commands (docker-compose.prod.yml)
+# =============================================================================
+
+docker-up: ## [PROD] Start production services (server, worker, postgres)
+	@echo "Starting production services..."
+	docker compose -f docker-compose.prod.yml up -d
+	@echo "✅ Services started. Use 'make docker-logs' to view logs"
+
+docker-down: ## [PROD] Stop production services
+	@echo "Stopping production services..."
+	docker compose -f docker-compose.prod.yml down
+
+docker-restart: ## [PROD] Restart production services (usage: make docker-restart or SERVICE=server make docker-restart)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Restarting all services..."; \
+		docker compose -f docker-compose.prod.yml restart; \
+	else \
+		echo "Restarting $(SERVICE)..."; \
+		docker compose -f docker-compose.prod.yml restart $(SERVICE); \
+	fi
+
+docker-restart-server: ## [PROD] Restart server only (fast, skips migration)
+	@echo "Restarting server..."
+	docker compose -f docker-compose.prod.yml up -d server --force-recreate
+
+docker-restart-worker: ## [PROD] Restart worker only (fast, skips migration)
+	@echo "Restarting worker..."
+	docker compose -f docker-compose.prod.yml up -d worker --force-recreate
+
+docker-logs: ## [PROD] View logs (usage: make docker-logs, SERVICE=server make docker-logs, SERVICE=worker make docker-logs)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Showing logs for all services (Ctrl+C to exit)..."; \
+		docker compose -f docker-compose.prod.yml logs -f; \
+	else \
+		echo "Showing logs for $(SERVICE) (Ctrl+C to exit)..."; \
+		docker compose -f docker-compose.prod.yml logs -f $(SERVICE); \
+	fi
+
+docker-logs-server: ## [PROD] View server logs only
+	@echo "Showing logs for server (Ctrl+C to exit)..."
+	@docker compose -f docker-compose.prod.yml logs -f server
+
+docker-logs-worker: ## [PROD] View worker logs only
+	@echo "Showing logs for worker (Ctrl+C to exit)..."
+	@docker compose -f docker-compose.prod.yml logs -f worker
+
+docker-logs-postgres: ## [PROD] View postgres logs only
+	@echo "Showing logs for postgres (Ctrl+C to exit)..."
+	@docker compose -f docker-compose.prod.yml logs -f postgres
+
+docker-ps: ## [PROD] Show running containers
+	@docker compose -f docker-compose.prod.yml ps
+
+docker-clean: ## [PROD] Stop and remove all containers and volumes (WARNING: deletes data!)
+	@echo "⚠️  WARNING: This will delete all data in the database!"
+	@echo "Press Ctrl+C to cancel, or Enter to continue..."
+	@read dummy
+	@echo "Cleaning up production deployment..."
+	docker compose -f docker-compose.prod.yml down -v
+	@echo "✅ All containers and volumes removed"
+
+docker-shell-server: ## [PROD] Open shell in server container
+	@docker compose -f docker-compose.prod.yml exec server sh
+
+docker-shell-worker: ## [PROD] Open shell in worker container
+	@docker compose -f docker-compose.prod.yml exec worker sh
+
+docker-shell-postgres: ## [PROD] Open PostgreSQL shell
+	@docker compose -f docker-compose.prod.yml exec postgres psql -U ${POSTGRES_USER:-mono} -d ${POSTGRES_DB:-mono_db}
 
 db-up: ## [DEV DB] Start development database (port 5432)
 	@echo "Starting PostgreSQL database..."

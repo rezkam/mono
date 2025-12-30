@@ -76,6 +76,24 @@ services:
     networks:
       - mono-network
 
+  apikey:
+    build:
+      context: .
+      dockerfile: Dockerfile.apikey
+    container_name: mono-apikey
+    environment:
+      MONO_DB_DSN: postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable
+      MONO_API_KEY_TYPE: ${MONO_API_KEY_TYPE:-sk}
+      MONO_API_SERVICE_NAME: ${MONO_API_SERVICE_NAME:-mono}
+      MONO_API_VERSION: ${MONO_API_VERSION:-v1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mono-network
+    profiles:
+      - tools
+
 volumes:
   postgres_data:
 
