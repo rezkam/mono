@@ -3,6 +3,10 @@ BINARY_NAME=mono-server
 WORKER_BINARY_NAME=mono-worker
 # Docker image name
 DOCKER_IMAGE=mono-service
+# Migration image configuration
+GOOSE_VERSION=v3.26.0
+MIGRATE_IMAGE=ghcr.io/rezkam/goose-migrate
+MIGRATE_IMAGE_TAG=$(GOOSE_VERSION)
 # Default DB Driver
 DB_DRIVER ?= postgres
 # Development database DSN (used by db-up, run, gen-apikey, db-migrate-* targets)
@@ -33,7 +37,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-build-up docker-rebuild docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres docker-health docker-health-server db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-build-up docker-rebuild docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres docker-health docker-health-server docker-buildx-setup docker-build-migrate docker-push-migrate db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -391,6 +395,54 @@ docker-health-server: ## [PROD] Test server /health endpoint (detects HTTP/HTTPS
 		echo "Testing HTTP endpoint at http://localhost:$$PORT/health"; \
 		curl -f -s http://localhost:$$PORT/health && echo "\n✅ Server is healthy" || echo "\n❌ Health check failed"; \
 	fi
+
+# =============================================================================
+# Migration Image (goose-migrate) - Multi-architecture
+# =============================================================================
+
+docker-buildx-setup: ## Setup Docker buildx for multi-platform builds
+	@echo "Setting up Docker buildx builder..."
+	@if ! docker buildx inspect multiarch-builder > /dev/null 2>&1; then \
+		docker buildx create --name multiarch-builder --driver docker-container --bootstrap --use; \
+		echo "✅ Created and activated multiarch-builder"; \
+	else \
+		docker buildx use multiarch-builder; \
+		echo "✅ Activated existing multiarch-builder"; \
+	fi
+	@docker buildx inspect --bootstrap
+
+docker-build-migrate: ## Build goose migration image for current platform only (for local testing)
+	@echo "Building migration image $(MIGRATE_IMAGE):$(MIGRATE_IMAGE_TAG) for current platform..."
+	@GIT_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	docker buildx build \
+		-f Dockerfile.migrate \
+		--build-arg GOOSE_VERSION=$(GOOSE_VERSION) \
+		--build-arg BUILD_DATE=$$BUILD_DATE \
+		--build-arg GIT_COMMIT=$$GIT_COMMIT \
+		-t $(MIGRATE_IMAGE):$(MIGRATE_IMAGE_TAG) \
+		-t $(MIGRATE_IMAGE):latest \
+		--load \
+		.
+	@echo "✅ Built $(MIGRATE_IMAGE):$(MIGRATE_IMAGE_TAG) for current platform"
+
+docker-push-migrate: docker-buildx-setup ## Build and push goose migration image to ghcr.io (multi-arch: amd64, arm64)
+	@echo "Building and pushing multi-arch migration image to GitHub Container Registry..."
+	@echo "Note: Make sure you're logged in with: docker login ghcr.io -u USERNAME"
+	@GIT_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	docker buildx build \
+		--builder multiarch-builder \
+		--platform linux/amd64,linux/arm64 \
+		-f Dockerfile.migrate \
+		--build-arg GOOSE_VERSION=$(GOOSE_VERSION) \
+		--build-arg BUILD_DATE=$$BUILD_DATE \
+		--build-arg GIT_COMMIT=$$GIT_COMMIT \
+		-t $(MIGRATE_IMAGE):$(MIGRATE_IMAGE_TAG) \
+		-t $(MIGRATE_IMAGE):latest \
+		--push \
+		.
+	@echo "✅ Pushed $(MIGRATE_IMAGE):$(MIGRATE_IMAGE_TAG) and $(MIGRATE_IMAGE):latest (amd64, arm64)"
 
 db-up: ## [DEV DB] Start development database (port 5432)
 	@echo "Starting PostgreSQL database..."

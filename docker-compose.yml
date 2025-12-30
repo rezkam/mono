@@ -3,9 +3,9 @@ services:
     image: postgres:18-alpine
     container_name: mono-postgres
     environment:
-      POSTGRES_USER: mono
-      POSTGRES_PASSWORD: mono_password
-      POSTGRES_DB: mono_db
+      POSTGRES_USER: ${POSTGRES_USER:-mono}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mono_password}
+      POSTGRES_DB: ${POSTGRES_DB:-mono_db}
     ports:
       - "5432:5432"
     volumes:
@@ -19,14 +19,14 @@ services:
       - mono-network
 
   migrate:
-    image: golang:1.25-alpine
+    image: ghcr.io/rezkam/goose-migrate:v3.26.0
     container_name: mono-migrate
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./internal/infrastructure/persistence/postgres/migrations:/migrations:ro
-    command: ["sh", "-c", "go install github.com/pressly/goose/v3/cmd/goose@latest && goose -dir /migrations postgres 'postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable' up"]
+    command: ["-dir", "/migrations", "postgres", "postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD:-mono_password}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable", "up"]
     networks:
       - mono-network
 
@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile
     container_name: mono-server
     environment:
-      MONO_DB_DSN: postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable
+      MONO_DB_DSN: postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD:-mono_password}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable
       MONO_HTTP_HOST: "0.0.0.0"
       MONO_HTTP_PORT: "8080"
       # TLS/HTTPS configuration for local development
@@ -69,7 +69,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: mono-worker
     environment:
-      MONO_DB_DSN: postgres://mono:mono_password@postgres:5432/mono_db?sslmode=disable
+      MONO_DB_DSN: postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD:-mono_password}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy

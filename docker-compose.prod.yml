@@ -19,14 +19,14 @@ services:
       - mono-network
 
   migrate:
-    image: golang:1.25-alpine
+    image: ghcr.io/rezkam/goose-migrate:v3.26.0
     container_name: mono-migrate
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./internal/infrastructure/persistence/postgres/migrations:/migrations:ro
-    command: ["sh", "-c", "go install github.com/pressly/goose/v3/cmd/goose@latest && goose -dir /migrations postgres 'postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable' up"]
+    command: ["-dir", "/migrations", "postgres", "postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable", "up"]
     networks:
       - mono-network
 

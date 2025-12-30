@@ -1,0 +1,29 @@
+# Migration image with goose pre-installed
+FROM golang:1.25-alpine
+
+# Build arguments for versioning and metadata
+ARG GOOSE_VERSION=v3.26.0
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG GIT_REPO=https://github.com/rezkam/mono
+
+# Install specific version of goose migration tool
+RUN go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
+
+# OCI image metadata
+LABEL org.opencontainers.image.title="goose-migrate"
+LABEL org.opencontainers.image.description="Database migration tool with goose ${GOOSE_VERSION} pre-installed"
+LABEL org.opencontainers.image.version="${GOOSE_VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.source="${GIT_REPO}"
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.url="https://github.com/pressly/goose"
+LABEL org.opencontainers.image.documentation="https://github.com/pressly/goose"
+LABEL goose.version="${GOOSE_VERSION}"
+
+# Set working directory
+WORKDIR /migrations
+
+# Default entrypoint uses goose from GOPATH
+ENTRYPOINT ["/go/bin/goose"]
