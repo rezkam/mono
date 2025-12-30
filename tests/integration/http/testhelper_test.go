@@ -61,7 +61,12 @@ func SetupTestServer(t *testing.T) *TestServer {
 	serverConfig := httpServer.ServerConfig{
 		MaxBodyBytes: 1 << 20, // 1MB
 	}
-	server := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
+	server, err := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
+	if err != nil {
+		cancel()
+		_ = store.Close()
+		t.Fatalf("failed to create HTTP server: %v", err)
+	}
 	router := server.Handler()
 
 	// Generate test API key

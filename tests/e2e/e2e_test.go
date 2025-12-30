@@ -65,7 +65,10 @@ func TestMain(m *testing.M) {
 	}
 
 	// Create HTTP server
-	server := httpServer.NewAPIServer(apiHandler, authenticator, httpServer.ServerConfig{})
+	server, err := httpServer.NewAPIServer(apiHandler, authenticator, httpServer.ServerConfig{})
+	if err != nil {
+		panic(fmt.Errorf("failed to create HTTP server: %w", err))
+	}
 
 	// Start HTTP server
 	httpLis, err := net.Listen("tcp", "localhost:0") // Random port

@@ -66,7 +66,8 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	serverConfig := httpServer.ServerConfig{
 		MaxBodyBytes: 1 << 20, // 1MB
 	}
-	server := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
+	server, err := httpServer.NewAPIServer(apiHandler, authenticator, serverConfig)
+	require.NoError(t, err, "failed to create HTTP server")
 	router := server.Handler()
 
 	// Generate test API key for authenticated requests
