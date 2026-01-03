@@ -2,6 +2,28 @@
 -- +goose StatementBegin
 
 -- ============================================================================
+-- Enable Extensions
+-- ============================================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ============================================================================
+-- UUID v7 Function (RFC 9562)
+-- ============================================================================
+-- Generates time-ordered UUIDs with millisecond precision timestamp
+-- Format: xxxxxxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx
+--         |------| |--| ||
+--         timestamp  ver random
+CREATE OR REPLACE FUNCTION uuidv7() RETURNS uuid
+AS $$
+SELECT encode(
+  substring(int8send(floor(extract(epoch from clock_timestamp()) * 1000)::bigint) from 3) ||
+  gen_random_bytes(10),
+  'hex')::uuid
+$$
+LANGUAGE sql
+VOLATILE;
+
+-- ============================================================================
 -- Core Tables
 -- ============================================================================
 
@@ -9,13 +31,13 @@
 CREATE TABLE todo_lists (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     title TEXT NOT NULL,
-    create_time timestamptz NOT NULL DEFAULT now(),
+    created_at timestamptz NOT NULL DEFAULT now(),
 
     -- Optimistic locking version - incremented on each update to detect concurrent modifications
     version INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE INDEX idx_todo_lists_create_time ON todo_lists(create_time DESC);
+CREATE INDEX idx_todo_lists_created_at ON todo_lists(created_at DESC);
 
 -- Todo Items (Tasks)
 CREATE TABLE todo_items (
@@ -34,16 +56,28 @@ CREATE TABLE todo_items (
     actual_duration INTERVAL,
 
     -- Timestamps
-    create_time timestamptz NOT NULL DEFAULT now(),
+    created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    due_time timestamptz,
+    due_at timestamptz,
 
     -- Tags stored as JSONB array
     tags jsonb,
 
-    -- Link to recurring template (null if not a recurring instance)
+    -- Recurring task link
     recurring_template_id uuid,
-    instance_date DATE,  -- Anchor date for recurring instances
+
+    -- Scheduling fields
+    -- starts_at: when the task becomes active/visible
+    starts_at DATE,
+
+    -- occurs_at: exact timestamp this recurring instance represents
+    -- Uses full timestamp to support intra-day recurrence patterns
+    occurs_at TIMESTAMPTZ,
+
+    -- due_offset: Duration from starts_at to calculate due_at
+    -- If set: due_at = starts_at + due_offset
+    -- If nil: due_at is set directly
+    due_offset INTERVAL,
 
     -- Timezone for due_time interpretation
     -- NULL = floating time (9am stays 9am regardless of user's location)
@@ -65,8 +99,8 @@ CREATE INDEX idx_todo_items_status ON todo_items(status)
 CREATE INDEX idx_todo_items_priority ON todo_items(priority)
     WHERE priority IS NOT NULL;
 
-CREATE INDEX idx_todo_items_due_time ON todo_items(due_time)
-    WHERE due_time IS NOT NULL;
+CREATE INDEX idx_todo_items_due_at ON todo_items(due_at)
+    WHERE due_at IS NOT NULL;
 
 CREATE INDEX idx_todo_items_updated_at ON todo_items(updated_at DESC);
 
@@ -82,14 +116,25 @@ CREATE INDEX idx_todo_items_timezone ON todo_items(timezone)
     WHERE timezone IS NOT NULL;
 
 -- Composite index for common query: active tasks by due date
-CREATE INDEX idx_todo_items_active_due ON todo_items(status, due_time)
+CREATE INDEX idx_todo_items_active_due ON todo_items(status, due_at)
     WHERE status IN ('todo', 'in_progress', 'blocked');
 
 CREATE INDEX idx_todo_items_recurring_template ON todo_items(recurring_template_id)
     WHERE recurring_template_id IS NOT NULL;
 
-CREATE INDEX idx_todo_items_instance_date ON todo_items(instance_date)
-    WHERE instance_date IS NOT NULL;
+-- Ensure unique constraint for deduplication of recurring instances
+-- Uses TIMESTAMPTZ to support intra-day recurring tasks (e.g., every 8 hours)
+CREATE UNIQUE INDEX idx_items_unique_recurring_instance
+    ON todo_items(recurring_template_id, occurs_at)
+    WHERE recurring_template_id IS NOT NULL;
+
+-- Index for filtering by starts_at (common query pattern)
+CREATE INDEX idx_todo_items_starts_at ON todo_items(starts_at)
+    WHERE starts_at IS NOT NULL;
+
+-- Composite index for active items by start date
+CREATE INDEX idx_todo_items_active_starts ON todo_items(status, starts_at)
+    WHERE status IN ('todo', 'in_progress', 'blocked') AND starts_at IS NOT NULL;
 
 -- ============================================================================
 -- Time Tracking
@@ -131,19 +176,21 @@ CREATE TABLE recurring_task_templates (
     estimated_duration INTERVAL,
 
     -- Recurrence pattern (using TEXT with CHECK constraint)
+    -- 'interval' pattern uses recurrence_config.interval_hours for intra-day tasks (e.g., every 8 hours)
     recurrence_pattern TEXT NOT NULL
-        CHECK (recurrence_pattern IN ('daily', 'weekly', 'biweekly', 'monthly', 'yearly', 'quarterly', 'weekdays')),
+        CHECK (recurrence_pattern IN ('daily', 'weekly', 'biweekly', 'monthly', 'yearly', 'quarterly', 'weekdays', 'interval')),
 
     -- Pattern-specific configuration (JSONB for flexibility)
     recurrence_config jsonb NOT NULL,
     /* Examples:
-       DAILY: {"interval": 1}
-       WEEKLY: {"interval": 1, "days_of_week": [1,3,5]}  -- Mon, Wed, Fri
+       DAILY: {"time": "09:00"}
+       WEEKLY: {"day_of_week": 1, "time": "09:00"}  -- Monday at 9am
        BIWEEKLY: {"days_of_week": [1,3,5]}  -- Mon, Wed, Fri every 2 weeks
        MONTHLY: {"interval": 1, "day_of_month": 15} or {"day_of_month": "last"}
        YEARLY: {"month": 3, "day": 15}  -- March 15
        QUARTERLY: {"month_offset": 0, "day": 1}  -- First day of quarter
        WEEKDAYS: {}  -- Mon-Fri
+       INTERVAL: {"interval_hours": 8, "start_time": "06:00"}  -- Every 8h starting 6am
     */
 
     -- Relative due date offset from instance date
@@ -155,8 +202,12 @@ CREATE TABLE recurring_task_templates (
     updated_at timestamptz NOT NULL DEFAULT now(),
 
     -- Generation tracking
-    last_generated_until DATE NOT NULL DEFAULT CURRENT_DATE,
-    generation_window_days INTEGER NOT NULL DEFAULT 30,
+    -- generated_through: Last date we generated tasks through
+    generated_through DATE NOT NULL DEFAULT CURRENT_DATE,
+    -- Generation configuration (horizon = how far ahead to generate)
+    -- Values must be provided by application layer configuration
+    sync_horizon_days INTEGER NOT NULL,
+    generation_horizon_days INTEGER NOT NULL,
 
     -- Optimistic locking version - incremented on each update to detect concurrent modifications
     version INTEGER NOT NULL DEFAULT 1,
@@ -170,7 +221,7 @@ ALTER TABLE todo_items
     FOREIGN KEY (recurring_template_id) REFERENCES recurring_task_templates(id) ON DELETE SET NULL;
 
 -- Indexes
-CREATE INDEX idx_recurring_templates_active ON recurring_task_templates(is_active, last_generated_until)
+CREATE INDEX idx_recurring_templates_active ON recurring_task_templates(is_active, generated_through)
     WHERE is_active = true;
 
 CREATE INDEX idx_recurring_templates_list ON recurring_task_templates(list_id)
@@ -186,39 +237,135 @@ CREATE TABLE recurring_generation_jobs (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     template_id uuid NOT NULL,
 
-    -- Job scheduling
-    -- DEFAULT now(): Prevents clock skew race condition between application and database.
-    -- When a job should be immediately available, the application passes NULL which triggers
-    -- this DEFAULT, ensuring the database's transaction timestamp is used as the single source
-    -- of truth. This eliminates the race condition where time.Now() in Go might be slightly
-    -- ahead of PostgreSQL's now(), causing jobs to be temporarily unclaimable despite being
-    -- intended for immediate processing. For future-scheduled jobs, an explicit timestamp
-    -- overrides this default.
-    scheduled_for timestamptz NOT NULL DEFAULT now(),
-    started_at timestamptz,
-    completed_at timestamptz,
-    failed_at timestamptz,
-
-    -- Job state (using TEXT with CHECK constraint)
+    -- Job status
     status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+        CHECK (status IN ('pending', 'scheduled', 'running', 'completed', 'failed', 'discarded', 'cancelling', 'cancelled')),
 
-    error_message TEXT,
-    retry_count INTEGER NOT NULL DEFAULT 0,
+    -- Availability timeout for stuck job recovery (Kubernetes-inspired coordination)
+    available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    claimed_by TEXT,
+    claimed_at TIMESTAMPTZ,
 
     -- Generation range
-    generate_from DATE NOT NULL,
-    generate_until DATE NOT NULL,
+    generate_from TIMESTAMPTZ NOT NULL,
+    generate_until TIMESTAMPTZ NOT NULL,
+    scheduled_for TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    created_at timestamptz NOT NULL DEFAULT now(),
+    -- Timestamps
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+
+    -- Retry tracking
+    error_message TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
 
     FOREIGN KEY (template_id) REFERENCES recurring_task_templates(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_generation_jobs_pending ON recurring_generation_jobs(scheduled_for, status)
-    WHERE status = 'pending';
+-- Index for job claiming with stuck job recovery
+-- Covers: pending jobs ready to run, OR stuck running jobs past availability timeout
+CREATE INDEX idx_generation_jobs_claimable ON recurring_generation_jobs(scheduled_for, status, available_at)
+    WHERE status IN ('pending', 'running');
 
-CREATE INDEX idx_generation_jobs_template ON recurring_generation_jobs(template_id, created_at DESC);
+-- Index for finding jobs by template
+CREATE INDEX idx_generation_jobs_template ON recurring_generation_jobs(template_id, status)
+    WHERE status IN ('pending', 'running');
+
+-- Index for cleanup of old completed jobs
+CREATE INDEX idx_generation_jobs_completed ON recurring_generation_jobs(completed_at)
+    WHERE status = 'completed';
+
+-- ============================================================================
+-- Cron Job Leases (Lease-Based Exclusive Execution)
+-- ============================================================================
+
+-- Provides crash and deadlock recovery for single-instance workers
+CREATE TABLE cron_job_leases (
+    run_type TEXT PRIMARY KEY,
+    holder_id TEXT NOT NULL,
+    acquired_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    renewed_at TIMESTAMPTZ NOT NULL,
+    run_count BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_cron_leases_expired ON cron_job_leases(expires_at);
+
+-- ============================================================================
+-- Recurring Template Exceptions
+-- ============================================================================
+
+-- Tracks deleted or rescheduled instances of recurring templates
+-- Prevents regeneration of user-deleted instances
+CREATE TABLE recurring_template_exceptions (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    template_id UUID NOT NULL REFERENCES recurring_task_templates(id) ON DELETE CASCADE,
+
+    -- Exact timestamp this exception applies to
+    occurs_at TIMESTAMPTZ NOT NULL,
+
+    -- Why this exception exists ('deleted', 'rescheduled', or 'edited')
+    exception_type TEXT NOT NULL CHECK (exception_type IN ('deleted', 'rescheduled', 'edited')),
+
+    -- For rescheduled: reference to the detached item
+    item_id UUID REFERENCES todo_items(id) ON DELETE SET NULL,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (template_id, occurs_at)
+);
+
+CREATE INDEX idx_template_exceptions_lookup ON recurring_template_exceptions(template_id, occurs_at);
+
+-- ============================================================================
+-- Dead Letter Queue
+-- ============================================================================
+
+-- Jobs that fail permanently or exhaust retries
+-- Preserves full context for debugging and manual intervention
+CREATE TABLE dead_letter_jobs (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+
+    -- Original job details (UUID to match recurring_generation_jobs.id)
+    -- Nullable: job may be cleaned up before DLQ review, but we keep the DLQ entry for audit
+    original_job_id UUID,
+    template_id UUID NOT NULL,
+    generate_from TIMESTAMPTZ NOT NULL,
+    generate_until TIMESTAMPTZ NOT NULL,
+
+    -- Failure classification
+    error_type TEXT NOT NULL CHECK (error_type IN ('permanent', 'exhausted', 'panic')),
+    error_message TEXT,
+    stack_trace TEXT,
+
+    -- Timeline
+    failed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ,
+
+    -- Admin resolution
+    resolution TEXT CHECK (resolution IN ('retried', 'discarded')),
+    reviewed_by TEXT,
+    reviewer_note TEXT,
+
+    -- Full job context for reproduction
+    retry_count INTEGER NOT NULL,
+    last_worker_id TEXT,
+    original_scheduled_for TIMESTAMPTZ NOT NULL,
+    original_created_at TIMESTAMPTZ NOT NULL,
+
+    -- FK to original job - SET NULL on delete to preserve DLQ for audit
+    FOREIGN KEY (original_job_id) REFERENCES recurring_generation_jobs(id) ON DELETE SET NULL
+);
+
+-- Admin review (pending items first, then by failure time)
+CREATE INDEX idx_dead_letter_pending ON dead_letter_jobs(resolution, failed_at DESC)
+    WHERE resolution IS NULL;
+
+-- Cleanup old resolved items
+CREATE INDEX idx_dead_letter_cleanup ON dead_letter_jobs(reviewed_at)
+    WHERE resolution IS NOT NULL;
 
 -- ============================================================================
 -- Authentication
@@ -355,31 +502,6 @@ CREATE TRIGGER track_initial_status_on_insert
     FOR EACH ROW
     EXECUTE FUNCTION track_initial_status();
 
--- Function to claim next generation job (using SKIP LOCKED for concurrent workers)
-CREATE OR REPLACE FUNCTION claim_next_generation_job()
-RETURNS uuid AS $$
-DECLARE
-    v_job_id uuid;
-BEGIN
-    SELECT id INTO v_job_id
-    FROM recurring_generation_jobs
-    WHERE status = 'pending'
-        AND scheduled_for <= now()
-    ORDER BY scheduled_for
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED;
-
-    IF v_job_id IS NOT NULL THEN
-        UPDATE recurring_generation_jobs
-        SET status = 'running',
-            started_at = now()
-        WHERE id = v_job_id;
-    END IF;
-
-    RETURN v_job_id;
-END;
-$$ LANGUAGE plpgsql;
-
 -- +goose StatementEnd
 
 -- +goose Down
@@ -391,13 +513,14 @@ DROP TRIGGER IF EXISTS track_status_changes ON todo_items;
 DROP TRIGGER IF EXISTS update_recurring_templates_updated_at ON recurring_task_templates;
 DROP TRIGGER IF EXISTS update_todo_items_updated_at ON todo_items;
 
-DROP FUNCTION IF EXISTS claim_next_generation_job();
 DROP FUNCTION IF EXISTS track_initial_status();
 DROP FUNCTION IF EXISTS update_actual_duration_on_status_change();
 DROP FUNCTION IF EXISTS calculate_actual_duration(uuid);
 DROP FUNCTION IF EXISTS update_updated_at_column();
 
 DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS recurring_template_exceptions;
+DROP TABLE IF EXISTS cron_job_leases;
 DROP TABLE IF EXISTS recurring_generation_jobs;
 DROP TABLE IF EXISTS recurring_task_templates CASCADE;
 DROP TABLE IF EXISTS task_status_history;
