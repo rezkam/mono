@@ -135,10 +135,14 @@ func TestWorker_Lifecycle_HeartbeatExtension(t *testing.T) {
 
 	assert.True(t, newAvailableAt.After(initialAvailableAt), "AvailableAt should be extended forward")
 
-	// The difference should be roughly equal to the extension (allowing for some execution time drift)
-	// Note: ExtendJobLock usually sets available_at = NOW() + extension
-	// So we check if it is approximately NOW + 5s
-	assert.WithinDuration(t, time.Now().UTC().Add(extension), newAvailableAt, 2*time.Second)
+	// CRITICAL: Compare DB timestamps only to avoid clock skew
+	// Calculate actual extension: newAvailableAt (DB) - initialAvailableAt (DB)
+	actualExtension := newAvailableAt.Sub(initialAvailableAt)
+
+	// Verify extension is approximately the requested duration (allow 2s tolerance for execution time)
+	// This avoids comparing Go's time.Now() with PostgreSQL's NOW()
+	assert.InDelta(t, extension.Seconds(), actualExtension.Seconds(), 2.0,
+		"Extension should be approximately %v (got %v)", extension, actualExtension)
 }
 
 // TestWorker_Lifecycle_CrashRecovery verifies that if a worker "crashes"
