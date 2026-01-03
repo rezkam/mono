@@ -6,7 +6,7 @@ import "time"
 // Uses ItemsFilter value object for validated filtering and sorting.
 //
 // Common use cases:
-//   - "My overdue tasks": DueBefore=now(), Filter with OrderBy="due_time"
+//   - "My overdue tasks": DueBefore=now(), Filter with OrderBy="due_at"
 //   - "Tasks in list X": ListID=X, default ordering
 //   - "High priority TODO items": Filter with Priorities=[high], Statuses=[todo]
 //   - "Active work": Filter with Statuses=[todo, in_progress]
@@ -39,14 +39,14 @@ type PagedResult struct {
 // ListListsParams contains parameters for listing todo lists with filtering, sorting, and pagination.
 //
 // Common use cases:
-//   - "Recent lists": Sorting with OrderBy="create_time", OrderDir="desc"
-//   - "Lists created after date": CreateTimeAfter=time
+//   - "Recent lists": Sorting with OrderBy="created_at", OrderDir="desc"
+//   - "Lists created after date": CreatedAtAfter=time
 //   - "Lists with title matching": TitleContains="project"
 type ListListsParams struct {
 	// Optional filters (nil = no filter applied)
-	TitleContains    *string    // Filter by title substring (case-insensitive)
-	CreateTimeAfter  *time.Time // Filter lists created after this time
-	CreateTimeBefore *time.Time // Filter lists created before this time
+	TitleContains   *string    // Filter by title substring (case-insensitive)
+	CreatedAtAfter  *time.Time // Filter lists created after this time
+	CreatedAtBefore *time.Time // Filter lists created before this time
 
 	// Validated sorting configuration (created via NewListsSorting)
 	Sorting ListsSorting

@@ -119,12 +119,13 @@ func TestAPIResponseValidation_ArraysNeverNull(t *testing.T) {
 
 		// Create template without tags via service (storage layer)
 		_, err = ts.TodoService.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
-			ListID:               list.ID,
-			Title:                "Template without tags",
-			RecurrencePattern:    domain.RecurrenceDaily,
-			RecurrenceConfig:     map[string]any{},
-			IsActive:             true,
-			GenerationWindowDays: 30,
+			ListID:                list.ID,
+			Title:                 "Template without tags",
+			RecurrencePattern:     domain.RecurrenceDaily,
+			RecurrenceConfig:      map[string]any{},
+			IsActive:              true,
+			SyncHorizonDays:       14,
+			GenerationHorizonDays: 30,
 			// Tags not set - will be nil in domain
 		})
 		require.NoError(t, err)

@@ -17,7 +17,7 @@ import (
 // actually honors the direction (asc/desc) keyword, not just the field name.
 //
 // BUG: The current implementation accepts direction keywords but silently ignores them.
-// The SQL has hardcoded directions (due_time ASC, created_at DESC, etc.) regardless
+// The SQL has hardcoded directions (due_at ASC, created_at DESC, etc.) regardless
 // of what the client requests.
 //
 // This test ensures:
@@ -47,9 +47,9 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Order By Direction Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Order By Direction Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	itemIDs := make([]string, 5)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 		itemIDs[i] = itemUUID.String()
@@ -68,11 +68,11 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 		createTime := baseTime.Add(time.Duration(i) * time.Hour)
 
 		item := &domain.TodoItem{
-			ID:         itemIDs[i],
-			Title:      "Task " + string(rune('A'+i)), // Task A, B, C, D, E
-			Status:     domain.TaskStatusTodo,
-			CreateTime: createTime,
-			UpdatedAt:  createTime,
+			ID:        itemIDs[i],
+			Title:     "Task " + string(rune('A'+i)), // Task A, B, C, D, E
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: createTime,
+			UpdatedAt: createTime,
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
@@ -102,9 +102,9 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 
 		// Verify monotonically increasing create times
 		for i := 1; i < len(result.Items); i++ {
-			assert.True(t, result.Items[i].CreateTime.After(result.Items[i-1].CreateTime) ||
-				result.Items[i].CreateTime.Equal(result.Items[i-1].CreateTime),
-				"ASC order: item %d should have create_time >= item %d", i, i-1)
+			assert.True(t, result.Items[i].CreatedAt.After(result.Items[i-1].CreatedAt) ||
+				result.Items[i].CreatedAt.Equal(result.Items[i-1].CreatedAt),
+				"ASC order: item %d should have created_at >= item %d", i, i-1)
 		}
 	})
 
@@ -132,9 +132,9 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 
 		// Verify monotonically decreasing create times
 		for i := 1; i < len(result.Items); i++ {
-			assert.True(t, result.Items[i].CreateTime.Before(result.Items[i-1].CreateTime) ||
-				result.Items[i].CreateTime.Equal(result.Items[i-1].CreateTime),
-				"DESC order: item %d should have create_time <= item %d", i, i-1)
+			assert.True(t, result.Items[i].CreatedAt.Before(result.Items[i-1].CreatedAt) ||
+				result.Items[i].CreatedAt.Equal(result.Items[i-1].CreatedAt),
+				"DESC order: item %d should have created_at <= item %d", i, i-1)
 		}
 	})
 
@@ -177,15 +177,15 @@ func TestOrderByDirection_HonorsAscDescKeywords(t *testing.T) {
 			"Last item in ASC should be first item in DESC - proves direction is honored")
 
 		// The orders should be exactly reversed
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			assert.Equal(t, ascResult.Items[i].ID, descResult.Items[4-i].ID,
 				"ASC[%d] should equal DESC[%d]", i, 4-i)
 		}
 	})
 }
 
-// TestOrderByDirection_DueTime verifies due_time sorting honors direction.
-func TestOrderByDirection_DueTime(t *testing.T) {
+// TestOrderByDirection_DueAt verifies due_at sorting honors direction.
+func TestOrderByDirection_DueAt(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
 
 	ctx := context.Background()
@@ -208,9 +208,9 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Due Time Order Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Due Time Order Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -219,19 +219,19 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 	baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	now := time.Now().UTC()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		dueTime := baseTime.Add(time.Duration(i) * 24 * time.Hour) // 1 day apart
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Due Task " + string(rune('A'+i)),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: now,
-			UpdatedAt:  now,
-			DueTime:    &dueTime,
+			ID:        itemUUID.String(),
+			Title:     "Due Task " + string(rune('A'+i)),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: now,
+			UpdatedAt: now,
+			DueAt:     &dueTime,
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
@@ -239,7 +239,7 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 
 	t.Run("due_time_asc_returns_earliest_due_first", func(t *testing.T) {
 		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
-			OrderBy:  ptrString("due_time"),
+			OrderBy:  ptrString("due_at"),
 			OrderDir: ptrString("asc"),
 		})
 		require.NoError(t, err)
@@ -255,14 +255,14 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 
 		// ASC: earliest due (Task A) first
 		assert.Equal(t, "Due Task A", result.Items[0].Title,
-			"due_time ASC should return earliest due first")
+			"due_at ASC should return earliest due first")
 		assert.Equal(t, "Due Task C", result.Items[2].Title,
-			"due_time ASC should return latest due last")
+			"due_at ASC should return latest due last")
 	})
 
 	t.Run("due_time_desc_returns_latest_due_first", func(t *testing.T) {
 		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
-			OrderBy:  ptrString("due_time"),
+			OrderBy:  ptrString("due_at"),
 			OrderDir: ptrString("desc"),
 		})
 		require.NoError(t, err)
@@ -278,9 +278,9 @@ func TestOrderByDirection_DueTime(t *testing.T) {
 
 		// DESC: latest due (Task C) first
 		assert.Equal(t, "Due Task C", result.Items[0].Title,
-			"due_time DESC should return latest due first")
+			"due_at DESC should return latest due first")
 		assert.Equal(t, "Due Task A", result.Items[2].Title,
-			"due_time DESC should return earliest due last")
+			"due_at DESC should return earliest due last")
 	})
 }
 
@@ -308,9 +308,9 @@ func TestOrderByDirection_Priority(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Priority Order Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Priority Order Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -326,12 +326,12 @@ func TestOrderByDirection_Priority(t *testing.T) {
 
 		p := priority
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Priority " + string(priority),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: now.Add(time.Duration(i) * time.Second), // Slight offset to avoid ties
-			UpdatedAt:  now,
-			Priority:   &p,
+			ID:        itemUUID.String(),
+			Title:     "Priority " + string(priority),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: now.Add(time.Duration(i) * time.Second), // Slight offset to avoid ties
+			UpdatedAt: now,
+			Priority:  &p,
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)

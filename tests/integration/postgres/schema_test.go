@@ -46,7 +46,7 @@ func TestSchema_CriticalIndexesExist(t *testing.T) {
 		"idx_todo_items_list_id",
 		"idx_todo_items_status",
 		"idx_todo_items_priority",
-		"idx_todo_items_due_time",
+		"idx_todo_items_due_at",
 		"idx_todo_items_updated_at",
 		"idx_todo_items_tags_gin",
 		"idx_todo_items_active_due",
@@ -74,7 +74,6 @@ func TestSchema_FunctionsExist(t *testing.T) {
 		"update_updated_at_column",
 		"calculate_actual_duration",
 		"update_actual_duration_on_status_change",
-		"claim_next_generation_job",
 	}
 
 	for _, fn := range functions {
@@ -96,7 +95,7 @@ func TestCRUD_TodoLists(t *testing.T) {
 	// Create
 	listID := "550e8400-e29b-41d4-a716-446655440000"
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time)
+		INSERT INTO todo_lists (id, title, created_at)
 		VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
@@ -140,7 +139,7 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 	// Create list
 	listID := "550e8400-e29b-41d4-a716-446655440001"
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
@@ -152,7 +151,7 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (
 			id, list_id, title, status, priority,
-			estimated_duration, create_time, updated_at, due_time, tags
+			estimated_duration, created_at, updated_at, due_at, tags
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`, itemID, listID, "Fix Auth Bug", "todo", "urgent",
 		"3 hours", time.Now().UTC(), time.Now().UTC(), dueTime, tags)
@@ -166,13 +165,13 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 		estimatedDuration sql.NullString
 		actualDuration    sql.NullString
 		tagsJSON          []byte
-		retrievedDueTime  sql.NullTime
+		retrievedDueAt    sql.NullTime
 	)
 
 	err = db.QueryRowContext(ctx, `
-		SELECT title, status, priority, estimated_duration, actual_duration, tags, due_time
+		SELECT title, status, priority, estimated_duration, actual_duration, tags, due_at
 		FROM todo_items WHERE id = $1
-	`, itemID).Scan(&title, &status, &priority, &estimatedDuration, &actualDuration, &tagsJSON, &retrievedDueTime)
+	`, itemID).Scan(&title, &status, &priority, &estimatedDuration, &actualDuration, &tagsJSON, &retrievedDueAt)
 	require.NoError(t, err)
 
 	assert.Equal(t, "Fix Auth Bug", title)
@@ -199,13 +198,13 @@ func TestTrigger_AutoUpdateTimestamp(t *testing.T) {
 	itemID := "550e8400-e29b-41d4-a716-446655440004"
 
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
+		INSERT INTO todo_items (id, list_id, title, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, itemID, listID, "Test", "todo", now, now)
 	require.NoError(t, err)
@@ -238,12 +237,12 @@ func TestTrigger_StatusHistory(t *testing.T) {
 	itemID := "550e8400-e29b-41d4-a716-446655440006"
 
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
+		INSERT INTO todo_items (id, list_id, title, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, itemID, listID, "Test", "todo", time.Now().UTC(), time.Now().UTC())
 	require.NoError(t, err)
@@ -308,7 +307,7 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 	// Setup
 	listID := "550e8400-e29b-41d4-a716-446655440007"
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
@@ -327,7 +326,7 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 
 	for _, item := range testItems {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO todo_items (id, list_id, title, status, priority, create_time, updated_at)
+			INSERT INTO todo_items (id, list_id, title, status, priority, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, item.id, listID, "Task", item.status, item.priority, time.Now().UTC(), time.Now().UTC())
 		require.NoError(t, err)
@@ -363,7 +362,7 @@ func TestQuery_TagsWithJSONB(t *testing.T) {
 
 	listID := "550e8400-e29b-41d4-a716-446655440008"
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
@@ -380,7 +379,7 @@ func TestQuery_TagsWithJSONB(t *testing.T) {
 
 	for _, tc := range testCases {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at, tags)
+			INSERT INTO todo_items (id, list_id, title, status, created_at, updated_at, tags)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, tc.id, listID, "Task", "todo", time.Now().UTC(), time.Now().UTC(), tc.tags)
 		require.NoError(t, err)
@@ -411,7 +410,7 @@ func TestRecurringTemplate_Create(t *testing.T) {
 
 	listID := "550e8400-e29b-41d4-a716-446655440009"
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
@@ -422,10 +421,10 @@ func TestRecurringTemplate_Create(t *testing.T) {
 		INSERT INTO recurring_task_templates (
 			id, list_id, title, recurrence_pattern, recurrence_config,
 			due_offset, is_active, created_at, updated_at,
-			last_generated_until, generation_window_days
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			generated_through, sync_horizon_days, generation_horizon_days
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`, templateID, listID, "Daily Standup", "weekly", config,
-		"2 hours", true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 30)
+		"2 hours", true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 14, 365)
 	require.NoError(t, err)
 
 	// Verify
@@ -445,57 +444,6 @@ func TestRecurringTemplate_Create(t *testing.T) {
 	assert.Equal(t, float64(1), parsedConfig["interval"])
 }
 
-func TestFunction_ClaimGenerationJob(t *testing.T) {
-	db, cleanup := SetupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Setup
-	listID := "550e8400-e29b-41d4-a716-446655440011"
-	templateID := "550e8400-e29b-41d4-a716-446655440012"
-
-	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
-	`, listID, "Test List", time.Now().UTC())
-	require.NoError(t, err)
-
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO recurring_task_templates (
-			id, list_id, title, recurrence_pattern, recurrence_config,
-			is_active, created_at, updated_at, last_generated_until, generation_window_days
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, templateID, listID, "Template", "daily", `{}`,
-		true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 30)
-	require.NoError(t, err)
-
-	// Create pending job
-	jobID := "550e8400-e29b-41d4-a716-446655440013"
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO recurring_generation_jobs (
-			id, template_id, scheduled_for, status,
-			generate_from, generate_until, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, jobID, templateID, time.Now().UTC().Add(-1*time.Hour), "pending",
-		time.Now().UTC(), time.Now().UTC().Add(30*24*time.Hour), time.Now().UTC())
-	require.NoError(t, err)
-
-	// Claim job using function
-	var claimedID sql.NullString
-	err = db.QueryRowContext(ctx, "SELECT claim_next_generation_job()").Scan(&claimedID)
-	require.NoError(t, err)
-	assert.True(t, claimedID.Valid)
-	assert.Equal(t, jobID, claimedID.String)
-
-	// Verify status changed
-	var status string
-	err = db.QueryRowContext(ctx, `
-		SELECT status FROM recurring_generation_jobs WHERE id = $1
-	`, jobID).Scan(&status)
-	require.NoError(t, err)
-	assert.Equal(t, "running", status)
-}
-
 // TestQuery_AllTaskStatusValues verifies that queries work correctly with ALL status values.
 // This test catches case sensitivity bugs: if any query uses uppercase status values
 // (e.g., 'CANCELLED' instead of 'cancelled'), it will fail because the data uses lowercase.
@@ -508,7 +456,7 @@ func TestQuery_AllTaskStatusValues(t *testing.T) {
 	// Setup
 	listID := "550e8400-e29b-41d4-a716-446655440050"
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Status Test List", time.Now().UTC())
 	require.NoError(t, err)
 
@@ -529,7 +477,7 @@ func TestQuery_AllTaskStatusValues(t *testing.T) {
 
 	for _, item := range allStatuses {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO todo_items (id, list_id, title, status, priority, create_time, updated_at)
+			INSERT INTO todo_items (id, list_id, title, status, priority, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, item.id, listID, "Task with "+item.status, item.status, item.priority, time.Now().UTC(), time.Now().UTC())
 		require.NoError(t, err, "inserting item with status %q should succeed", item.status)
@@ -598,17 +546,17 @@ func TestQuery_AllJobStatusValues(t *testing.T) {
 	templateID := "550e8400-e29b-41d4-a716-446655440061"
 
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Job Status Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO recurring_task_templates (
 			id, list_id, title, recurrence_pattern, recurrence_config,
-			is_active, created_at, updated_at, last_generated_until, generation_window_days
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`, templateID, listID, "Test Template", "daily", `{}`,
-		true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 30)
+		true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 14, 365)
 	require.NoError(t, err)
 
 	// Create one job for EACH possible status value
@@ -690,12 +638,12 @@ func TestCascadeDelete(t *testing.T) {
 	itemID := "550e8400-e29b-41d4-a716-446655440015"
 
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO todo_lists (id, title, create_time) VALUES ($1, $2, $3)
+		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO todo_items (id, list_id, title, status, create_time, updated_at)
+		INSERT INTO todo_items (id, list_id, title, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, itemID, listID, "Test", "todo", time.Now().UTC(), time.Now().UTC())
 	require.NoError(t, err)

@@ -165,7 +165,7 @@ func TestAuthenticator_Shutdown_WithPendingUpdates(t *testing.T) {
 
 		// Queue some updates
 		numUpdates := 5
-		for i := 0; i < numUpdates; i++ {
+		for i := range numUpdates {
 			auth.lastUsedUpdates <- lastUsedUpdate{
 				keyID:     "key-" + string(rune('0'+i)),
 				timestamp: time.Now().UTC().UTC(),
@@ -206,7 +206,7 @@ func TestAuthenticator_Shutdown_DrainsQueueBeforeReturning(t *testing.T) {
 
 	// Queue updates
 	numUpdates := 10
-	for i := 0; i < numUpdates; i++ {
+	for i := range numUpdates {
 		auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "key-drain-" + string(rune('a'+i%26)),
 			timestamp: time.Now().UTC().UTC(),
@@ -245,7 +245,7 @@ func TestAuthenticator_Shutdown_Timeout_CancelsOperations(t *testing.T) {
 	})
 
 	// Queue many updates that will take a long time
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "slow-key-" + string(rune('0'+i%10)),
 			timestamp: time.Now().UTC().UTC(),
@@ -477,7 +477,7 @@ func TestAuthenticator_ConcurrentValidationAndShutdown(t *testing.T) {
 			<-shutdownStarted // Wait for shutdown to start
 
 			// Keep validating during shutdown
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				ctx, cancel := context.WithTimeout(context.Background(), realisticOperationTimeout)
 				_, _ = auth.ValidateAPIKey(ctx, "test_mono_v1_abc123.secret456")
 				cancel()
@@ -526,7 +526,7 @@ func TestAuthenticator_HighConcurrencyUpdates(t *testing.T) {
 	// Many concurrent updates
 	for id := range numGoroutines {
 		wg.Go(func() {
-			for j := 0; j < updatesPerGoroutine; j++ {
+			for range updatesPerGoroutine {
 				select {
 				case auth.lastUsedUpdates <- lastUsedUpdate{
 					keyID:     "concurrent-key",
@@ -821,7 +821,7 @@ func TestAuthenticator_QueueFull_DropsUpdate(t *testing.T) {
 
 	// Fill the queue (worker is slow, so queue fills up)
 	droppedCount := 0
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		select {
 		case auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "fill-queue",
@@ -886,14 +886,14 @@ func TestAuthenticator_StressTest_ManyShutdownsAndRecreations(t *testing.T) {
 	// Fast operations for stress test
 	repo.updateLastUsedDelay = 10 * time.Millisecond
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		auth := NewAuthenticator(repo, Config{
 			UpdateQueueSize:  100,
 			OperationTimeout: realisticOperationTimeout,
 		})
 
 		// Queue some updates
-		for j := 0; j < 5; j++ {
+		for range 5 {
 			auth.lastUsedUpdates <- lastUsedUpdate{
 				keyID:     "stress-key",
 				timestamp: time.Now().UTC().UTC(),
@@ -931,7 +931,7 @@ func TestAuthenticator_StressTest_RapidFireUpdates(t *testing.T) {
 
 	// Rapid fire updates
 	queued := 0
-	for i := 0; i < numUpdates; i++ {
+	for range numUpdates {
 		select {
 		case auth.lastUsedUpdates <- lastUsedUpdate{
 			keyID:     "rapid-fire",
@@ -989,7 +989,7 @@ func BenchmarkAuthenticator_Shutdown_WithUpdates(b *testing.B) {
 		})
 
 		// Queue 5 updates
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			auth.lastUsedUpdates <- lastUsedUpdate{
 				keyID:     "bench-key",
 				timestamp: time.Now().UTC().UTC(),

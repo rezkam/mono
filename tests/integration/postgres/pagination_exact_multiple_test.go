@@ -39,24 +39,24 @@ func TestListTasksPaginationExactMultiple(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Pagination Test List",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Pagination Test List",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create exactly 10 items (same as our test page size)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Task " + string(rune('A'+i)),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:        itemUUID.String(),
+			Title:     "Task " + string(rune('A'+i)),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)

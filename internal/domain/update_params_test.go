@@ -70,7 +70,7 @@ func TestUpdateItemParams_Validate_UnknownField(t *testing.T) {
 		},
 		{
 			name:    "valid multiple fields",
-			mask:    []string{"title", "status", "priority", "due_time", "tags", "timezone", "estimated_duration", "actual_duration"},
+			mask:    []string{"title", "status", "priority", "due_at", "tags", "timezone", "estimated_duration", "actual_duration"},
 			wantErr: false,
 		},
 		{
@@ -296,7 +296,7 @@ func TestUpdateRecurringTemplateParams_Validate_UnknownField(t *testing.T) {
 		},
 		{
 			name:    "valid multiple fields",
-			mask:    []string{"title", "tags", "priority", "estimated_duration", "recurrence_pattern", "recurrence_config", "due_offset", "is_active", "generation_window_days"},
+			mask:    []string{"title", "tags", "priority", "estimated_duration", "recurrence_pattern", "recurrence_config", "due_offset", "is_active", "sync_horizon_days", "generation_horizon_days"},
 			wantErr: false,
 		},
 		{

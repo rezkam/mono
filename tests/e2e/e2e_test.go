@@ -22,6 +22,7 @@ import (
 	httpServer "github.com/rezkam/mono/internal/infrastructure/http"
 	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +50,8 @@ func TestMain(m *testing.M) {
 	defer store.Close()
 
 	// Create services
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Generate API key using the standard apikey tool (tests the tool itself)
@@ -173,7 +175,7 @@ func TestE2E_CreateAndGetList(t *testing.T) {
 	dueTime := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
 	createItemWithTagsJSON := fmt.Sprintf(`{
 		"title": "Buy Milk",
-		"due_time": "%s",
+		"due_at": "%s",
 		"tags": ["shopping", "urgent"]
 	}`, dueTime)
 
@@ -599,7 +601,7 @@ func TestE2E_RecurringTemplateFieldMask(t *testing.T) {
 // TestE2E_ListsPagination tests pagination functionality
 func TestE2E_ListsPagination(t *testing.T) {
 	// Create multiple lists
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		createListJSON := fmt.Sprintf(`{"title": "Pagination Test List %d"}`, i)
 		resp, err := httpRequest(t, "POST", "/api/v1/lists", createListJSON)
 		require.NoError(t, err)

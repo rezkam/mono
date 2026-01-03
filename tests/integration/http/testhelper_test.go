@@ -13,6 +13,7 @@ import (
 	httpServer "github.com/rezkam/mono/internal/infrastructure/http"
 	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 )
 
 // TestServer holds the test HTTP server and its dependencies.
@@ -46,7 +47,8 @@ func SetupTestServer(t *testing.T) *TestServer {
 	}
 
 	// Create services
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Create API handler with OpenAPI validation (reuses production logic)

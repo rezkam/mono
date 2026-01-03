@@ -3,12 +3,26 @@ package todo
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockTaskGenerator is a minimal mock for TaskGenerator
+type mockTaskGenerator struct{}
+
+func (m *mockTaskGenerator) GenerateTasksForTemplate(ctx context.Context, template *domain.RecurringTemplate, start, end time.Time) ([]*domain.TodoItem, error) {
+	// For validation tests, we don't actually need to generate tasks
+	return nil, nil
+}
+
+func (m *mockTaskGenerator) GenerateTasksForTemplateWithExceptions(ctx context.Context, template *domain.RecurringTemplate, start, end time.Time, exceptions []*domain.RecurringTemplateException) ([]*domain.TodoItem, error) {
+	// For validation tests, we don't actually need to generate tasks
+	return nil, nil
+}
 
 // mockRecurringRepo is a minimal mock for testing validation logic
 type mockRecurringRepo struct {
@@ -82,17 +96,69 @@ func (m *mockRecurringRepo) FindRecurringTemplates(ctx context.Context, listID s
 	panic("not used in recurring template tests")
 }
 
+func (m *mockRecurringRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	// For validation tests, return the count of items
+	return len(items), nil
+}
+
+func (m *mockRecurringRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	// For validation tests, we don't need to actually update this
+	return nil
+}
+
+func (m *mockRecurringRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
+	// For validation tests, return 0 items deleted
+	return 0, nil
+}
+
+func (m *mockRecurringRepo) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
+	// For validation tests, return empty list
+	return nil, nil
+}
+
+func (m *mockRecurringRepo) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
+	// For validation tests, just accept the job
+	return nil
+}
+
+func (m *mockRecurringRepo) CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error) {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) DeleteException(ctx context.Context, templateID string, occursAt time.Time) error {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) Transaction(ctx context.Context, fn func(tx Repository) error) error {
+	// Execute the function with the same mock (no actual transaction needed for validation tests)
+	return fn(m)
+}
+
 // TestCreateRecurringTemplate_RejectsInvalidRecurrencePattern tests that
 // CreateRecurringTemplate validates recurrence_pattern against known values.
 func TestCreateRecurringTemplate_RejectsInvalidRecurrencePattern(t *testing.T) {
 	repo := &mockRecurringRepo{}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	template := &domain.RecurringTemplate{
-		ListID:               "list-123",
-		Title:                "Weekly Team Meeting",
-		RecurrencePattern:    "invalid-pattern", // Invalid pattern
-		GenerationWindowDays: 30,
+		ListID:                "list-123",
+		Title:                 "Weekly Team Meeting",
+		RecurrencePattern:     "invalid-pattern", // Invalid pattern
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
 	}
 
 	_, err := service.CreateRecurringTemplate(context.Background(), template)
@@ -117,13 +183,15 @@ func TestCreateRecurringTemplate_AcceptsValidRecurrencePatterns(t *testing.T) {
 	for _, pattern := range validPatterns {
 		t.Run(string(pattern), func(t *testing.T) {
 			repo := &mockRecurringRepo{}
-			service := NewService(repo, Config{})
+			generator := &mockTaskGenerator{}
+			service := NewService(repo, generator, Config{})
 
 			template := &domain.RecurringTemplate{
-				ListID:               "list-123",
-				Title:                "Test Template",
-				RecurrencePattern:    pattern,
-				GenerationWindowDays: 30,
+				ListID:                "list-123",
+				Title:                 "Test Template",
+				RecurrencePattern:     pattern,
+				SyncHorizonDays:       14,
+				GenerationHorizonDays: 365,
 			}
 
 			_, err := service.CreateRecurringTemplate(context.Background(), template)
@@ -144,7 +212,8 @@ func TestUpdateRecurringTemplate_RejectsInvalidRecurrencePattern(t *testing.T) {
 			}, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	invalidPattern := domain.RecurrencePattern("invalid-pattern")
 	params := domain.UpdateRecurringTemplateParams{
@@ -177,7 +246,8 @@ func TestUpdateList_RejectsEmptyTitle(t *testing.T) {
 			return nil, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateListParams{
 		ListID:     "list-123",
@@ -200,7 +270,8 @@ func TestUpdateList_RejectsWhitespaceOnlyTitle(t *testing.T) {
 			return nil, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateListParams{
 		ListID:     "list-123",
@@ -223,7 +294,8 @@ func TestUpdateList_AcceptsValidTitle(t *testing.T) {
 			return &domain.TodoList{ID: params.ListID, Title: capturedTitle}, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateListParams{
 		ListID:     "list-123",
@@ -247,7 +319,8 @@ func TestUpdateList_RejectsEmptyUpdateMask(t *testing.T) {
 			return nil, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateListParams{
 		ListID:     "list-123",
@@ -272,7 +345,8 @@ func TestUpdateRecurringTemplate_RejectsEmptyTitle(t *testing.T) {
 			return nil, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: "template-123",
@@ -299,7 +373,8 @@ func TestUpdateRecurringTemplate_RejectsWhitespaceOnlyTitle(t *testing.T) {
 			return nil, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: "template-123",
@@ -329,7 +404,8 @@ func TestUpdateRecurringTemplate_AcceptsValidTitle(t *testing.T) {
 			}, nil
 		},
 	}
-	service := NewService(repo, Config{})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
 
 	params := domain.UpdateRecurringTemplateParams{
 		TemplateID: "template-123",
@@ -388,7 +464,8 @@ func TestUpdateRecurringTemplate_ValidatesMultipleFields(t *testing.T) {
 					return nil, nil
 				},
 			}
-			service := NewService(repo, Config{})
+			generator := &mockTaskGenerator{}
+			service := NewService(repo, generator, Config{})
 
 			_, err := service.UpdateRecurringTemplate(context.Background(), tt.params)
 

@@ -49,6 +49,18 @@ var (
 	ErrTemplateNotFound = errors.New("recurring template not found")
 	ErrUnauthorized     = errors.New("unauthorized")
 
+	// Exception errors
+	ErrInvalidExceptionType   = errors.New("invalid exception type")
+	ErrExceptionNotFound      = errors.New("exception not found")
+	ErrExceptionAlreadyExists = errors.New("exception already exists for this occurrence")
+
+	// Job coordination errors
+	ErrJobNotFound        = errors.New("generation job not found")
+	ErrJobAlreadyClaimed  = errors.New("job already claimed by another worker")
+	ErrJobNotCancellable  = errors.New("job is not in a cancellable state")
+	ErrDeadLetterNotFound = errors.New("dead letter job not found")
+	ErrJobOwnershipLost   = errors.New("job ownership lost to another worker")
+
 	// Concurrency errors
 	ErrVersionConflict = errors.New("resource was modified by another request")
 
@@ -68,4 +80,9 @@ var (
 	ErrDatabaseUnavailable = errors.New("database unavailable")
 	ErrFailedToCreateTask  = errors.New("failed to create task")
 	ErrCompletionFailed    = errors.New("completion failed")
+
+	// Generation configuration errors
+	ErrHardDeleteNotImplemented  = errors.New("hard delete for non-recurring items not implemented")
+	ErrSyncHorizonMustBePositive = errors.New("sync_horizon_days must be positive")
+	ErrUnsupportedJobStatus      = errors.New("unsupported job status")
 )

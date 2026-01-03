@@ -10,6 +10,7 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,8 @@ func TestUpdateItem_ValidatesListOwnership(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create two separate lists
 	list1, err := todoService.CreateList(ctx, "List 1")
@@ -143,17 +145,17 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 	list2ID := list2UUID.String()
 
 	list1 := &domain.TodoList{
-		ID:         list1ID,
-		Title:      "Repository Test List 1",
-		CreateTime: time.Now().UTC(),
+		ID:        list1ID,
+		Title:     "Repository Test List 1",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list1)
 	require.NoError(t, err)
 
 	list2 := &domain.TodoList{
-		ID:         list2ID,
-		Title:      "Repository Test List 2",
-		CreateTime: time.Now().UTC(),
+		ID:        list2ID,
+		Title:     "Repository Test List 2",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list2)
 	require.NoError(t, err)
@@ -164,11 +166,11 @@ func TestUpdateItem_RepositoryLayer_ValidatesListOwnership(t *testing.T) {
 	itemID := itemUUID.String()
 
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Repository Test Item",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:        itemID,
+		Title:     "Repository Test Item",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateItem(ctx, list1ID, item)
 	require.NoError(t, err)
@@ -227,7 +229,8 @@ func TestUpdateItem_EmptyListId_ReturnsInvalidArgument(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	updateItem := &domain.TodoItem{
 		ID:     "some-item-id",

@@ -19,17 +19,17 @@ func TestListTasks_LargePageSize(t *testing.T) {
 	listID := list.ID
 
 	// Seed 150 items so multiple pages are required.
-	for i := 0; i < 150; i++ {
+	for range 150 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		now := time.Now().UTC()
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Test Item",
-			Status:     domain.TaskStatusTodo,
-			CreateTime: now,
-			UpdatedAt:  now,
+			ID:        itemUUID.String(),
+			Title:     "Test Item",
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		_, err = env.Store().CreateItem(env.Context(), listID, item)
 		require.NoError(t, err)

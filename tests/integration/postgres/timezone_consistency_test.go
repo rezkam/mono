@@ -18,6 +18,7 @@ import (
 	httpServer "github.com/rezkam/mono/internal/infrastructure/http"
 	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,8 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 
-	service := todo.NewService(store, todo.Config{
+	generator := recurring.NewDomainGenerator()
+	service := todo.NewService(store, generator, todo.Config{
 		DefaultPageSize: 25,
 		MaxPageSize:     100,
 	})
@@ -81,9 +83,9 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		listID := listUUID.String()
 
 		list := &domain.TodoList{
-			ID:         listID,
-			Title:      "Timezone Test List",
-			CreateTime: time.Now().UTC(),
+			ID:        listID,
+			Title:     "Timezone Test List",
+			CreatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateList(ctx, list)
 		require.NoError(t, err)
@@ -98,7 +100,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.NoError(t, err)
 
 		var createTime time.Time
-		query := `SELECT create_time FROM todo_lists WHERE id = $1`
+		query := `SELECT created_at FROM todo_lists WHERE id = $1`
 		err = db.QueryRow(query, listID).Scan(&createTime)
 		require.NoError(t, err)
 
@@ -107,12 +109,12 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 
 		// CRITICAL: Verify the Location is UTC
 		assert.Equal(t, time.UTC, createTime.Location(),
-			"Storage layer: create_time should be stored in UTC location")
+			"Storage layer: created_at should be stored in UTC location")
 
 		// Verify the timezone offset is 0 (UTC)
 		_, offsetSeconds := createTime.Zone()
 		assert.Equal(t, 0, offsetSeconds,
-			"Storage layer: create_time timezone offset should be 0 (UTC)")
+			"Storage layer: created_at timezone offset should be 0 (UTC)")
 	})
 
 	t.Run("Layer2_BusinessLogic_AlwaysUTC", func(t *testing.T) {
@@ -125,18 +127,18 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		require.NoError(t, err)
 
 		// Business logic should return UTC times
-		assert.Equal(t, time.UTC, retrieved.CreateTime.Location(),
-			"Business logic: CreateTime should be in UTC location")
+		assert.Equal(t, time.UTC, retrieved.CreatedAt.Location(),
+			"Business logic: CreatedAt should be in UTC location")
 
 		// Create an item to test item timestamps
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Test Item",
-			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC(),
+			ID:        itemUUID.String(),
+			Title:     "Test Item",
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: time.Now().UTC(),
 		}
 		_, err = service.CreateItem(ctx, createdList.ID, item)
 		require.NoError(t, err)
@@ -145,8 +147,8 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		retrievedItem, err := service.GetItem(ctx, item.ID)
 		require.NoError(t, err)
 
-		assert.Equal(t, time.UTC, retrievedItem.CreateTime.Location(),
-			"Business logic: Item CreateTime should be in UTC location")
+		assert.Equal(t, time.UTC, retrievedItem.CreatedAt.Location(),
+			"Business logic: Item CreatedAt should be in UTC location")
 	})
 
 	t.Run("Layer3_Presentation_ISO8601_WithZ", func(t *testing.T) {
@@ -168,23 +170,23 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		err = json.NewDecoder(w.Body).Decode(&response)
 		require.NoError(t, err)
 
-		// Verify create_time is ISO 8601 with 'Z' suffix
+		// Verify created_at is ISO 8601 with 'Z' suffix
 		listMap, ok := response["list"].(map[string]any)
 		require.True(t, ok, "response should contain list object")
-		createTimeStr, ok := listMap["create_time"].(string)
-		require.True(t, ok, "create_time should be a string")
+		createTimeStr, ok := listMap["created_at"].(string)
+		require.True(t, ok, "created_at should be a string")
 
 		// CRITICAL: Must end with 'Z' indicating UTC
 		assert.True(t, strings.HasSuffix(createTimeStr, "Z"),
-			"Presentation layer: create_time must end with 'Z' indicating UTC, got: %s", createTimeStr)
+			"Presentation layer: created_at must end with 'Z' indicating UTC, got: %s", createTimeStr)
 
 		// Verify it parses as valid RFC3339
 		parsed, err := time.Parse(time.RFC3339, createTimeStr)
-		require.NoError(t, err, "create_time should be valid RFC3339 format")
+		require.NoError(t, err, "created_at should be valid RFC3339 format")
 
 		// Verify parsed time is in UTC
 		assert.Equal(t, time.UTC, parsed.Location(),
-			"Presentation layer: parsed create_time should be UTC location")
+			"Presentation layer: parsed created_at should be UTC location")
 	})
 
 	t.Run("Layer3_Presentation_AcceptsAnyTimezone", func(t *testing.T) {
@@ -216,11 +218,11 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				// Create item with timezone-aware due_time
+				// Create item with timezone-aware due_at
 				body := fmt.Sprintf(`{
 					"title": "Timezone test %s",
 					"status": "todo",
-					"due_time": "%s"
+					"due_at": "%s"
 				}`, tc.name, tc.dueTime)
 
 				req := httptest.NewRequest(http.MethodPost, "/api/v1/lists/"+createdList.ID+"/items",
@@ -249,21 +251,21 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 				require.NoError(t, err)
 
 				// CRITICAL: Business logic should have converted to UTC
-				require.NotNil(t, retrievedItem.DueTime, "DueTime should be set")
-				assert.Equal(t, time.UTC, retrievedItem.DueTime.Location(),
-					"Business logic: DueTime should be converted to UTC location")
+				require.NotNil(t, retrievedItem.DueAt, "DueAt should be set")
+				assert.Equal(t, time.UTC, retrievedItem.DueAt.Location(),
+					"Business logic: DueAt should be converted to UTC location")
 
 				// Verify the absolute time is correct
 				expectedTime, _ := time.Parse(time.RFC3339, tc.expectedUTC)
-				assert.True(t, retrievedItem.DueTime.Equal(expectedTime),
-					"DueTime should equal %s after timezone conversion, got %s",
-					tc.expectedUTC, retrievedItem.DueTime.Format(time.RFC3339))
+				assert.True(t, retrievedItem.DueAt.Equal(expectedTime),
+					"DueAt should equal %s after timezone conversion, got %s",
+					tc.expectedUTC, retrievedItem.DueAt.Format(time.RFC3339))
 
 				// Verify response also returns UTC with 'Z'
-				dueTimeStr, ok := itemMap["due_time"].(string)
-				require.True(t, ok, "due_time should be a string in response")
+				dueTimeStr, ok := itemMap["due_at"].(string)
+				require.True(t, ok, "due_at should be a string in response")
 				assert.True(t, strings.HasSuffix(dueTimeStr, "Z"),
-					"Response due_time must end with 'Z', got: %s", dueTimeStr)
+					"Response due_at must end with 'Z', got: %s", dueTimeStr)
 			})
 		}
 	})
@@ -275,9 +277,9 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		listID := listUUID.String()
 
 		list := &domain.TodoList{
-			ID:         listID,
-			Title:      "Trigger Test",
-			CreateTime: time.Now().UTC(),
+			ID:        listID,
+			Title:     "Trigger Test",
+			CreatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateList(ctx, list)
 		require.NoError(t, err)
@@ -288,10 +290,10 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		itemID := itemUUID.String()
 
 		item := &domain.TodoItem{
-			ID:         itemID,
-			Title:      "Test Item",
-			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC(),
+			ID:        itemID,
+			Title:     "Test Item",
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)

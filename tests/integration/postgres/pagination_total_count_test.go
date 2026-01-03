@@ -41,25 +41,25 @@ func TestFindItems_TotalCount_ReturnsActualTotal(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "TotalCount Test List",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "TotalCount Test List",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 50 items
 	const totalItems = 50
-	for i := 0; i < totalItems; i++ {
+	for i := range totalItems {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Task " + string(rune('A'+i%26)) + string(rune('0'+i/26)),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:        itemUUID.String(),
+			Title:     "Task " + string(rune('A'+i%26)) + string(rune('0'+i/26)),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
@@ -158,39 +158,39 @@ func TestFindItems_TotalCount_WithFilters(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Filter TotalCount Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Filter TotalCount Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 30 TODO items and 20 DONE items
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Todo Task " + string(rune('A'+i%26)),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:        itemUUID.String(),
+			Title:     "Todo Task " + string(rune('A'+i%26)),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Done Task " + string(rune('A'+i%26)),
-			Status:     domain.TaskStatusDone,
-			CreateTime: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:        itemUUID.String(),
+			Title:     "Done Task " + string(rune('A'+i%26)),
+			Status:    domain.TaskStatusDone,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)

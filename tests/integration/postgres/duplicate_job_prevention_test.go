@@ -42,9 +42,9 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	require.NoError(t, err)
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Duplicate Prevention Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Duplicate Prevention Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -54,15 +54,16 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	require.NoError(t, err)
 	templateID := templateUUID.String()
 	template := &domain.RecurringTemplate{
-		ID:                   templateID,
-		ListID:               listID,
-		Title:                "Daily Task",
-		RecurrencePattern:    domain.RecurrenceDaily,
-		RecurrenceConfig:     map[string]any{"interval": float64(1)},
-		GenerationWindowDays: 30,
-		IsActive:             true,
-		CreatedAt:            time.Now().UTC(),
-		UpdatedAt:            time.Now().UTC(),
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "Daily Task",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
 	}
 	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
@@ -113,10 +114,10 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 	})
 
 	t.Run("after_job_completion_can_create_new_job_if_needed", func(t *testing.T) {
-		// Process the pending job
-		processed, err := w.RunProcessOnce(ctx)
+		// Process the pending job using GenerationWorker
+		genWorker := setupGenerationWorkerTest(t, store)
+		err := genWorker.RunProcessOnce(ctx)
 		require.NoError(t, err)
-		assert.True(t, processed, "Should process the job")
 
 		// Verify job is completed
 		var completedCount int
@@ -127,13 +128,13 @@ func TestWorker_DuplicateJobPrevention(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, completedCount, "Job should be completed")
 
-		// Schedule again - template's last_generated_until is now updated
+		// Schedule again - template's generated_through is now updated
 		// So a new job may or may not be needed depending on the window
 		err = w.RunScheduleOnce(ctx)
 		require.NoError(t, err)
 
 		// At this point, no new pending job should be created because
-		// last_generated_until was updated to cover the window
+		// generated_through was updated to cover the window
 		var pendingCount int
 		err = store.Pool().QueryRow(ctx, `
 			SELECT COUNT(*) FROM recurring_generation_jobs
@@ -169,9 +170,9 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	require.NoError(t, err)
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Running Job Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Running Job Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -181,15 +182,16 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	require.NoError(t, err)
 	templateID := templateUUID.String()
 	template := &domain.RecurringTemplate{
-		ID:                   templateID,
-		ListID:               listID,
-		Title:                "Weekly Task",
-		RecurrencePattern:    domain.RecurrenceWeekly,
-		RecurrenceConfig:     map[string]any{"interval": float64(1)},
-		GenerationWindowDays: 60,
-		IsActive:             true,
-		CreatedAt:            time.Now().UTC(),
-		UpdatedAt:            time.Now().UTC(),
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "Weekly Task",
+		RecurrencePattern:     domain.RecurrenceWeekly,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
 	}
 	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
@@ -198,10 +200,12 @@ func TestWorker_DuplicateJobPrevention_RunningJob(t *testing.T) {
 	err = w.RunScheduleOnce(ctx)
 	require.NoError(t, err)
 
-	// Claim the job (changes status from pending to running)
-	jobID, err := store.ClaimNextGenerationJob(ctx)
+	// Claim the job using coordinator (changes status from pending to running)
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
+	cfg := worker.DefaultWorkerConfig("test-worker")
+	job, err := coordinator.ClaimNextJob(ctx, cfg.WorkerID, cfg.AvailabilityTimeout)
 	require.NoError(t, err)
-	require.NotEmpty(t, jobID, "Should have claimed a job")
+	require.NotNil(t, job, "Should have claimed a job")
 
 	// Verify job is running
 	var runningCount int
@@ -250,30 +254,31 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	require.NoError(t, err)
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Multi Template Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Multi Template Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create 3 templates
 	templateIDs := make([]string, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		templateUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 		templateIDs[i] = templateUUID.String()
 
 		template := &domain.RecurringTemplate{
-			ID:                   templateIDs[i],
-			ListID:               listID,
-			Title:                "Task " + string(rune('A'+i)),
-			RecurrencePattern:    domain.RecurrenceDaily,
-			RecurrenceConfig:     map[string]any{"interval": float64(1)},
-			GenerationWindowDays: 30,
-			IsActive:             true,
-			CreatedAt:            time.Now().UTC(),
-			UpdatedAt:            time.Now().UTC(),
+			ID:                    templateIDs[i],
+			ListID:                listID,
+			Title:                 "Task " + string(rune('A'+i)),
+			RecurrencePattern:     domain.RecurrenceDaily,
+			RecurrenceConfig:      map[string]any{"interval": float64(1)},
+			SyncHorizonDays:       14,
+			GenerationHorizonDays: 365,
+			IsActive:              true,
+			CreatedAt:             time.Now().UTC(),
+			UpdatedAt:             time.Now().UTC(),
 		}
 		_, err = store.CreateRecurringTemplate(ctx, template)
 		require.NoError(t, err)
@@ -304,10 +309,10 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, totalJobs, "Should still have exactly 3 jobs total (no duplicates)")
 
-	// Process one job
-	processed, err := w.RunProcessOnce(ctx)
+	// Process one job using GenerationWorker
+	genWorker := setupGenerationWorkerTest(t, store)
+	err = genWorker.RunProcessOnce(ctx)
 	require.NoError(t, err)
-	assert.True(t, processed)
 
 	// Third schedule - still no duplicates for the 2 pending templates
 	// (the completed one already has its window covered)

@@ -98,7 +98,7 @@ const (
 
 // Valid order by fields.
 var validOrderByFields = map[string]bool{
-	"due_time":   true,
+	"due_at":     true,
 	"priority":   true,
 	"created_at": true,
 	"updated_at": true,
@@ -172,7 +172,7 @@ func NewItemsFilter(input ItemsFilterInput) (ItemsFilter, error) {
 	// Validate and set orderBy if provided, otherwise keep default
 	if input.OrderBy != nil && *input.OrderBy != "" {
 		if !validOrderByFields[*input.OrderBy] {
-			return ItemsFilter{}, fmt.Errorf("%w: %s (supported: due_time, priority, created_at, updated_at)", ErrInvalidOrderByField, *input.OrderBy)
+			return ItemsFilter{}, fmt.Errorf("%w: %s (supported: due_at, priority, created_at, updated_at)", ErrInvalidOrderByField, *input.OrderBy)
 		}
 		filter.orderBy = *input.OrderBy
 	}
@@ -221,14 +221,14 @@ func (f ItemsFilter) HasStatusFilter() bool {
 
 // Lists sorting defaults and valid fields.
 const (
-	ListsDefaultOrderBy  = "create_time"
+	ListsDefaultOrderBy  = "created_at"
 	ListsDefaultOrderDir = "desc"
 )
 
 // Valid order by fields for lists.
 var validListsOrderByFields = map[string]bool{
-	"create_time": true,
-	"title":       true,
+	"created_at": true,
+	"title":      true,
 }
 
 // ListsSorting is a validated sorting configuration for listing lists.
@@ -247,7 +247,7 @@ type ListsSortingInput struct {
 
 // NewListsSorting creates a validated sorting configuration for listing lists.
 // Returns error if any field is invalid.
-// orderBy defaults to "create_time", orderDir defaults to "desc".
+// orderBy defaults to "created_at", orderDir defaults to "desc".
 func NewListsSorting(input ListsSortingInput) (ListsSorting, error) {
 	sorting := ListsSorting{
 		orderBy:  ListsDefaultOrderBy,
@@ -257,7 +257,7 @@ func NewListsSorting(input ListsSortingInput) (ListsSorting, error) {
 	// Validate and set orderBy if provided, otherwise keep default
 	if input.OrderBy != nil && *input.OrderBy != "" {
 		if !validListsOrderByFields[*input.OrderBy] {
-			return ListsSorting{}, fmt.Errorf("%w: %s (supported: create_time, title)", ErrInvalidListsOrderByField, *input.OrderBy)
+			return ListsSorting{}, fmt.Errorf("%w: %s (supported: created_at, title)", ErrInvalidListsOrderByField, *input.OrderBy)
 		}
 		sorting.orderBy = *input.OrderBy
 	}
@@ -274,7 +274,7 @@ func NewListsSorting(input ListsSortingInput) (ListsSorting, error) {
 	return sorting, nil
 }
 
-// OrderBy returns the order by field (defaults to "create_time").
+// OrderBy returns the order by field (defaults to "created_at").
 func (s ListsSorting) OrderBy() string {
 	return s.orderBy
 }

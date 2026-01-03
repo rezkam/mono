@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -55,9 +54,9 @@ func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) (*domain.
 	}
 
 	params := sqlcgen.CreateTodoListParams{
-		ID:         id,
-		Title:      title,
-		CreateTime: createTime,
+		ID:        id,
+		Title:     title,
+		CreatedAt: timeToTimestamptz(createTime),
 	}
 
 	row, err := s.queries.CreateTodoList(ctx, params)
@@ -68,7 +67,7 @@ func (s *Store) CreateList(ctx context.Context, list *domain.TodoList) (*domain.
 	return &domain.TodoList{
 		ID:          row.ID,
 		Title:       row.Title,
-		CreateTime:  row.CreateTime.UTC(),
+		CreatedAt:   timestamptzToTime(row.CreatedAt),
 		TotalItems:  0, // New list has no items
 		UndoneItems: 0,
 		Version:     int(row.Version),
@@ -96,7 +95,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 	return &domain.TodoList{
 		ID:          dbList.ID,
 		Title:       dbList.Title,
-		CreateTime:  dbList.CreateTime.UTC(),
+		CreatedAt:   timestamptzToTime(dbList.CreatedAt),
 		TotalItems:  int(dbList.TotalItems),
 		UndoneItems: int(dbList.UndoneItems),
 		Version:     int(dbList.Version),
@@ -116,11 +115,11 @@ func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*
 	if params.TitleContains != nil {
 		sqlcParams.TitleContains = *params.TitleContains
 	}
-	if params.CreateTimeAfter != nil {
-		sqlcParams.CreateTimeAfter = timePtrToQueryParam(params.CreateTimeAfter)
+	if params.CreatedAtAfter != nil {
+		sqlcParams.CreatedAtAfter = timePtrToQueryParam(params.CreatedAtAfter)
 	}
-	if params.CreateTimeBefore != nil {
-		sqlcParams.CreateTimeBefore = timePtrToQueryParam(params.CreateTimeBefore)
+	if params.CreatedAtBefore != nil {
+		sqlcParams.CreatedAtBefore = timePtrToQueryParam(params.CreatedAtBefore)
 	}
 
 	// Apply validated sorting (defaults already applied by value object)
@@ -139,7 +138,7 @@ func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*
 		list := &domain.TodoList{
 			ID:          row.ID,
 			Title:       row.Title,
-			CreateTime:  row.CreateTime.UTC(),
+			CreatedAt:   timestamptzToTime(row.CreatedAt),
 			TotalItems:  int(row.TotalItems),
 			UndoneItems: int(row.UndoneItems),
 			Version:     int(row.Version),
@@ -149,9 +148,9 @@ func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*
 
 	// Get total count for pagination
 	countParams := sqlcgen.CountTodoListsWithFiltersParams{
-		TitleContains:    sqlcParams.TitleContains,
-		CreateTimeAfter:  sqlcParams.CreateTimeAfter,
-		CreateTimeBefore: sqlcParams.CreateTimeBefore,
+		TitleContains:   sqlcParams.TitleContains,
+		CreatedAtAfter:  sqlcParams.CreatedAtAfter,
+		CreatedAtBefore: sqlcParams.CreatedAtBefore,
 	}
 	totalCount, err := s.queries.CountTodoListsWithFilters(ctx, countParams)
 	if err != nil {
@@ -233,7 +232,7 @@ func (s *Store) UpdateList(ctx context.Context, params domain.UpdateListParams) 
 	return &domain.TodoList{
 		ID:          uuid.UUID(row.ID.Bytes).String(),
 		Title:       row.Title,
-		CreateTime:  row.CreateTime.Time.UTC(),
+		CreatedAt:   row.CreatedAt.Time.UTC(),
 		TotalItems:  int(row.TotalItems),
 		UndoneItems: int(row.UndoneItems),
 		Version:     int(row.Version),
@@ -336,13 +335,9 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 			sqlcParams.Priority = sql.Null[string]{Valid: false}
 		}
 	}
-	if maskSet["due_time"] {
-		sqlcParams.SetDueTime = true
-		if params.DueTime != nil {
-			sqlcParams.DueTime = sql.Null[time.Time]{V: *params.DueTime, Valid: true}
-		} else {
-			sqlcParams.DueTime = sql.Null[time.Time]{Valid: false}
-		}
+	if maskSet["due_at"] {
+		sqlcParams.SetDueAt = true
+		sqlcParams.DueAt = timePtrToTimestamptz(params.DueAt)
 	}
 	if maskSet["tags"] {
 		sqlcParams.SetTags = true
@@ -372,6 +367,10 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 		sqlcParams.SetActualDuration = true
 		sqlcParams.ActualDuration = durationPtrToPgtypeInterval(params.ActualDuration)
 	}
+
+	// Handle detachment from recurring template
+	// Set by service layer when content/schedule fields are modified on recurring items
+	sqlcParams.DetachFromTemplate = params.DetachFromTemplate
 
 	// Handle optimistic locking with etag
 	if params.Etag != nil {
@@ -660,11 +659,18 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 		sqlcParams.SetIsActive = true
 		sqlcParams.IsActive = boolPtrToBool(params.IsActive)
 	}
-	if maskSet["generation_window_days"] {
-		sqlcParams.SetGenerationWindowDays = true
-		if params.GenerationWindowDays != nil {
-			days := int32(*params.GenerationWindowDays)
-			sqlcParams.GenerationWindowDays = int32PtrToInt4(&days)
+	if maskSet["sync_horizon_days"] {
+		sqlcParams.SetSyncHorizonDays = true
+		if params.SyncHorizonDays != nil {
+			days := int32(*params.SyncHorizonDays)
+			sqlcParams.SyncHorizonDays = int32PtrToInt4(&days)
+		}
+	}
+	if maskSet["generation_horizon_days"] {
+		sqlcParams.SetGenerationHorizonDays = true
+		if params.GenerationHorizonDays != nil {
+			days := int32(*params.GenerationHorizonDays)
+			sqlcParams.GenerationHorizonDays = int32PtrToInt4(&days)
 		}
 	}
 

@@ -11,6 +11,7 @@ import (
 	"github.com/rezkam/mono/internal/config"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 )
 
 // getBenchmarkStorage creates a real PostgreSQL storage connection for benchmarking.
@@ -66,7 +67,7 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	for i := 0; i < numLists; i++ {
+	for i := range numLists {
 		listUUID, err := uuid.NewV7()
 		if err != nil {
 			b.Fatalf("failed to generate list UUID: %v", err)
@@ -75,9 +76,9 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 
 		// Create list first (items are created separately)
 		list := &domain.TodoList{
-			ID:         listID,
-			Title:      fmt.Sprintf("Benchmark List %d", i),
-			CreateTime: now,
+			ID:        listID,
+			Title:     fmt.Sprintf("Benchmark List %d", i),
+			CreatedAt: now,
 		}
 
 		if _, err := storage.CreateList(ctx, list); err != nil {
@@ -85,7 +86,7 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 		}
 
 		// Create items for this list
-		for j := 0; j < itemsPerList; j++ {
+		for j := range itemsPerList {
 			due := now.Add(time.Duration(j+100) * time.Minute)
 			status := domain.TaskStatusTodo
 			if j%2 == 0 {
@@ -96,13 +97,13 @@ func setupBenchmarkData(b *testing.B, storage todo.Repository, numLists, itemsPe
 				b.Fatalf("failed to generate item UUID: %v", err)
 			}
 			item := &domain.TodoItem{
-				ID:         itemUUID.String(),
-				Title:      fmt.Sprintf("Large Payload Item %d-%d with description and metadata to simulate real object size", i, j),
-				Status:     status,
-				CreateTime: now.Add(time.Duration(j) * time.Minute),
-				UpdatedAt:  now.Add(time.Duration(j) * time.Minute),
-				DueTime:    &due,
-				Tags:       []string{"common", fmt.Sprintf("tag-%d", j%100)}, // 100 unique tags
+				ID:        itemUUID.String(),
+				Title:     fmt.Sprintf("Large Payload Item %d-%d with description and metadata to simulate real object size", i, j),
+				Status:    status,
+				CreatedAt: now.Add(time.Duration(j) * time.Minute),
+				UpdatedAt: now.Add(time.Duration(j) * time.Minute),
+				DueAt:     &due,
+				Tags:      []string{"common", fmt.Sprintf("tag-%d", j%100)}, // 100 unique tags
 			}
 
 			if _, err := storage.CreateItem(ctx, listID, item); err != nil {
@@ -147,7 +148,8 @@ func BenchmarkListTasks(b *testing.B) {
 			// Clean up after benchmark
 			defer cleanupBenchmarkData(b, storage)
 
-			todoService := todo.NewService(storage, todo.Config{})
+			generator := recurring.NewDomainGenerator()
+			todoService := todo.NewService(storage, generator, todo.Config{})
 			ctx := context.Background()
 
 			b.Run("NoFilter", func(b *testing.B) {
@@ -177,9 +179,9 @@ func BenchmarkListTasks(b *testing.B) {
 				}
 			})
 
-			b.Run("Sort_DueTime", func(b *testing.B) {
+			b.Run("Sort_DueAt", func(b *testing.B) {
 				filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{
-					OrderBy: ptrString("due_time"),
+					OrderBy: ptrString("due_at"),
 				})
 				params := domain.ListTasksParams{
 					Filter: filter,
@@ -195,7 +197,7 @@ func BenchmarkListTasks(b *testing.B) {
 			b.Run("Combined_FilterTag_SortTime", func(b *testing.B) {
 				filter, _ := domain.NewItemsFilter(domain.ItemsFilterInput{
 					Tags:    []string{"tag-1"},
-					OrderBy: ptrString("due_time"),
+					OrderBy: ptrString("due_at"),
 				})
 				params := domain.ListTasksParams{
 					Filter: filter,
@@ -217,7 +219,8 @@ func BenchmarkCreateList(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(storage, generator, todo.Config{})
 	ctx := context.Background()
 
 	for b.Loop() {
@@ -234,7 +237,8 @@ func BenchmarkCreateItem(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(storage, generator, todo.Config{})
 	ctx := context.Background()
 
 	// Create a list to add items to
@@ -260,7 +264,8 @@ func BenchmarkUpdateItem(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(storage, generator, todo.Config{})
 	ctx := context.Background()
 
 	// Create list and item
@@ -289,14 +294,15 @@ func BenchmarkGetList(b *testing.B) {
 	defer storage.Close()
 	defer cleanupBenchmarkData(b, storage)
 
-	todoService := todo.NewService(storage, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(storage, generator, todo.Config{})
 	ctx := context.Background()
 
 	// Create a list with items
 	list, _ := todoService.CreateList(ctx, "Benchmark List")
 
 	// Add some items
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		item := &domain.TodoItem{
 			Title: fmt.Sprintf("Item %d", i),
 		}
@@ -328,13 +334,14 @@ func BenchmarkListLists(b *testing.B) {
 			defer storage.Close()
 			defer cleanupBenchmarkData(b, storage)
 
-			todoService := todo.NewService(storage, todo.Config{})
+			generator := recurring.NewDomainGenerator()
+			todoService := todo.NewService(storage, generator, todo.Config{})
 			ctx := context.Background()
 
 			// Create N lists, each with 10 items
-			for i := 0; i < count; i++ {
+			for i := range count {
 				list, _ := todoService.CreateList(ctx, fmt.Sprintf("List %d", i))
-				for j := 0; j < 10; j++ {
+				for j := range 10 {
 					item := &domain.TodoItem{
 						Title: fmt.Sprintf("Item %d", j),
 					}

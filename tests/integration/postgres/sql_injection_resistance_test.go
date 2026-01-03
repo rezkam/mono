@@ -55,16 +55,16 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 	require.NoError(t, err, "failed to generate list UUID")
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "SQL Injection Test List",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "SQL Injection Test List",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create test tasks
 	taskIDs := make([]string, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		taskUUID, err := uuid.NewV7()
 		require.NoError(t, err, "failed to generate task UUID")
 		taskID := taskUUID.String()
@@ -125,7 +125,7 @@ func TestListTasks_DirectAssignment_SQLInjectionResistance(t *testing.T) {
 	// Test that valid queries still work after injection attempts
 	t.Run("valid_queries_still_work", func(t *testing.T) {
 		// Valid orderBy options
-		validOptions := []string{"due_time", "priority", "created_at", "updated_at"}
+		validOptions := []string{"due_at", "priority", "created_at", "updated_at"}
 
 		for _, validOrder := range validOptions {
 			filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{

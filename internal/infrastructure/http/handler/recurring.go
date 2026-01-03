@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/oapi-codegen/runtime/types"
 
@@ -68,8 +69,17 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 		template.DueOffset = &duration
 	}
 
-	if req.GenerationWindowDays != nil {
-		template.GenerationWindowDays = *req.GenerationWindowDays
+	// Map horizon fields with defaults
+	if req.SyncHorizonDays != nil {
+		template.SyncHorizonDays = *req.SyncHorizonDays
+	} else {
+		template.SyncHorizonDays = domain.DefaultSyncHorizonDays
+	}
+
+	if req.GenerationHorizonDays != nil {
+		template.GenerationHorizonDays = *req.GenerationHorizonDays
+	} else {
+		template.GenerationHorizonDays = domain.DefaultGenerationHorizonDays
 	}
 
 	// RecurrenceConfig is JSON string, parse it to map
@@ -201,8 +211,10 @@ func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Req
 			}
 		case "is_active":
 			params.IsActive = req.Template.IsActive
-		case "generation_window_days":
-			params.GenerationWindowDays = req.Template.GenerationWindowDays
+		case "sync_horizon_days":
+			params.SyncHorizonDays = req.Template.SyncHorizonDays
+		case "generation_horizon_days":
+			params.GenerationHorizonDays = req.Template.GenerationHorizonDays
 		}
 	}
 
@@ -260,5 +272,47 @@ func (h *TodoHandler) ListRecurringTemplates(w http.ResponseWriter, r *http.Requ
 	// Return success response
 	response.OK(w, openapi.ListRecurringTemplatesResponse{
 		Templates: &templateDTOs,
+	})
+}
+
+// ListRecurringTemplateExceptions implements ServerInterface.ListRecurringTemplateExceptions.
+// GET /v1/lists/{list_id}/recurring-templates/{template_id}/exceptions
+func (h *TodoHandler) ListRecurringTemplateExceptions(
+	w http.ResponseWriter,
+	r *http.Request,
+	listID types.UUID,
+	templateID types.UUID,
+	params openapi.ListRecurringTemplateExceptionsParams,
+) {
+	// Parse date range with defaults
+	var from, until time.Time
+	if params.FromDate != nil {
+		from = *params.FromDate
+	} else {
+		from = time.Now().UTC().AddDate(0, -1, 0) // Default: 1 month ago
+	}
+
+	if params.ToDate != nil {
+		until = *params.ToDate
+	} else {
+		until = time.Now().UTC().AddDate(0, 1, 0) // Default: 1 month ahead
+	}
+
+	// Call service layer (validates template ownership)
+	exceptions, err := h.todoService.ListExceptions(r.Context(), listID.String(), templateID.String(), from, until)
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
+
+	// Map domain models to DTOs
+	exceptionDTOs := make([]openapi.RecurringTemplateException, len(exceptions))
+	for i, exc := range exceptions {
+		exceptionDTOs[i] = MapExceptionToDTO(exc)
+	}
+
+	// Return success response
+	response.OK(w, openapi.ListRecurringTemplateExceptionsResponse{
+		Exceptions: &exceptionDTOs,
 	})
 }

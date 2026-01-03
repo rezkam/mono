@@ -7,7 +7,7 @@ var updateItemValidFields = map[string]struct{}{
 	"title":              {},
 	"status":             {},
 	"priority":           {},
-	"due_time":           {},
+	"due_at":             {},
 	"tags":               {},
 	"timezone":           {},
 	"estimated_duration": {},
@@ -74,15 +74,16 @@ func (p UpdateListParams) Validate() error {
 
 // Valid fields for UpdateRecurringTemplateParams.
 var updateRecurringTemplateValidFields = map[string]struct{}{
-	"title":                  {},
-	"tags":                   {},
-	"priority":               {},
-	"estimated_duration":     {},
-	"recurrence_pattern":     {},
-	"recurrence_config":      {},
-	"due_offset":             {},
-	"is_active":              {},
-	"generation_window_days": {},
+	"title":                   {},
+	"tags":                    {},
+	"priority":                {},
+	"estimated_duration":      {},
+	"recurrence_pattern":      {},
+	"recurrence_config":       {},
+	"due_offset":              {},
+	"is_active":               {},
+	"sync_horizon_days":       {},
+	"generation_horizon_days": {},
 }
 
 // Validate checks that UpdateMask contains only known fields and that

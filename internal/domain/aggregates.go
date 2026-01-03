@@ -11,9 +11,9 @@ import (
 // via FindItems (with pagination) to prevent unbounded data loading.
 // Use GET /v1/lists/{list_id}/items to fetch items with filtering and pagination.
 type TodoList struct {
-	ID         string
-	Title      string
-	CreateTime time.Time
+	ID        string
+	Title     string
+	CreatedAt time.Time
 
 	// Count fields are always populated from database aggregation.
 	TotalItems  int // Total number of items in the list
@@ -47,18 +47,22 @@ type TodoItem struct {
 	ActualDuration    *time.Duration
 
 	// Timestamps
-	CreateTime time.Time
-	UpdatedAt  time.Time
-	DueTime    *time.Time // Optional
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DueAt     *time.Time // Optional
 
 	// Tags stored as array
 	Tags []string
 
-	// Recurring task link (if this is an instance of a recurring task)
-	RecurringTemplateID *string    // Optional link to RecurringTemplate
-	InstanceDate        *time.Time // Optional date this instance represents
+	// Recurring task link
+	RecurringTemplateID *string // Optional link to RecurringTemplate
 
-	// Timezone for due_time interpretation
+	// Scheduling fields
+	StartsAt  *time.Time     // When task becomes active/visible
+	OccursAt  *time.Time     // Exact timestamp for recurring instances (supports intra-day patterns)
+	DueOffset *time.Duration // Duration from StartsAt to calculate DueAt
+
+	// Timezone for due_at interpretation
 	// nil = floating time (9am stays 9am in user's current timezone)
 	// non-nil = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
 	Timezone *string
@@ -72,6 +76,14 @@ type TodoItem struct {
 // Returns the version as a string: "1", "2", "42", etc.
 func (item *TodoItem) Etag() string {
 	return fmt.Sprintf("%d", item.Version)
+}
+
+// SetDueFromOffset calculates DueAt from StartsAt + DueOffset if both are set.
+func (item *TodoItem) SetDueFromOffset() {
+	if item.StartsAt != nil && item.DueOffset != nil {
+		due := item.StartsAt.Add(*item.DueOffset)
+		item.DueAt = &due
+	}
 }
 
 // UpdateItemParams contains parameters for updating a todo item with field mask support.
@@ -93,11 +105,16 @@ type UpdateItemParams struct {
 	Title             *string
 	Status            *TaskStatus
 	Priority          *TaskPriority
-	DueTime           *time.Time
+	DueAt             *time.Time
 	Tags              *[]string
 	Timezone          *string
 	EstimatedDuration *time.Duration
 	ActualDuration    *time.Duration
+
+	// DetachFromTemplate indicates whether to detach this item from its recurring template.
+	// Set by the service layer when content/schedule fields are modified on a recurring item.
+	// Computed internally - not set by API clients.
+	DetachFromTemplate bool
 }
 
 // UpdateListParams contains parameters for updating a todo list with field mask support.
@@ -118,6 +135,42 @@ type UpdateListParams struct {
 	Title *string
 }
 
+// Field names for RecurringTemplate update masks.
+// These constants ensure type safety and prevent typos in field mask handling.
+const (
+	FieldTitle                 = "title"
+	FieldTags                  = "tags"
+	FieldPriority              = "priority"
+	FieldEstimatedDuration     = "estimated_duration"
+	FieldRecurrencePattern     = "recurrence_pattern"
+	FieldRecurrenceConfig      = "recurrence_config"
+	FieldDueOffset             = "due_offset"
+	FieldIsActive              = "is_active"
+	FieldSyncHorizonDays       = "sync_horizon_days"
+	FieldGenerationHorizonDays = "generation_horizon_days"
+)
+
+// Field names for TodoItem update masks.
+// These constants are used to identify which fields trigger detachment from recurring templates.
+// Updating status does NOT trigger detachment (completing a recurring task is normal workflow).
+const (
+	// Content fields - trigger detachment
+	FieldItemTitle             = "title" // Shares name with template
+	FieldItemTags              = "tags"  // Shares name with template
+	FieldItemPriority          = "priority"
+	FieldItemEstimatedDuration = "estimated_duration"
+
+	// Schedule fields - trigger detachment
+	FieldDueAt    = "due_at"
+	FieldStartsAt = "starts_at"
+	FieldOccursAt = "occurs_at"
+
+	// Status fields - do NOT trigger detachment
+	FieldStatus         = "status"
+	FieldActualDuration = "actual_duration"
+	FieldTimezone       = "timezone"
+)
+
 // UpdateRecurringTemplateParams contains parameters for updating a recurring template with field mask support.
 // Uses client-side optimistic concurrency control via etag (AIP-154).
 type UpdateRecurringTemplateParams struct {
@@ -134,15 +187,16 @@ type UpdateRecurringTemplateParams struct {
 	UpdateMask []string
 
 	// Field values (only applied if field is in UpdateMask)
-	Title                *string
-	Tags                 *[]string
-	Priority             *TaskPriority
-	EstimatedDuration    *time.Duration
-	RecurrencePattern    *RecurrencePattern
-	RecurrenceConfig     map[string]any
-	DueOffset            *time.Duration
-	IsActive             *bool
-	GenerationWindowDays *int
+	Title                 *string
+	Tags                  *[]string
+	Priority              *TaskPriority
+	EstimatedDuration     *time.Duration
+	RecurrencePattern     *RecurrencePattern
+	RecurrenceConfig      map[string]any
+	DueOffset             *time.Duration
+	IsActive              *bool
+	SyncHorizonDays       *int
+	GenerationHorizonDays *int
 }
 
 // RecurringTemplate is an aggregate root representing a template for generating recurring task instances.
@@ -172,15 +226,24 @@ type RecurringTemplate struct {
 	DueOffset         *time.Duration // Optional offset for due time
 
 	// Template state
-	IsActive             bool
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-	LastGeneratedUntil   time.Time // Last date we generated tasks up to
-	GenerationWindowDays int       // How many days ahead to generate
+	IsActive  bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	// Generation tracking
+	GeneratedThrough      time.Time // Last date we generated tasks through
+	SyncHorizonDays       int       // Days to generate synchronously (default: 14)
+	GenerationHorizonDays int       // Total async generation horizon (default: 365)
 
 	// Optimistic locking version for concurrent update protection
 	Version int
 }
+
+// Default generation horizons
+const (
+	DefaultSyncHorizonDays       = 14
+	DefaultGenerationHorizonDays = 365
+)
 
 // Etag returns the entity tag for this template.
 // The etag is based on the version number and is used for optimistic concurrency control.
@@ -188,28 +251,85 @@ func (t *RecurringTemplate) Etag() string {
 	return fmt.Sprintf("%d", t.Version)
 }
 
+// RecurringTemplateException marks specific occurrences that should not be generated
+// or should be treated differently from the template's standard pattern.
+type RecurringTemplateException struct {
+	ID            string
+	TemplateID    string
+	OccursAt      time.Time
+	ExceptionType ExceptionType
+	ItemID        *string // Reference to customized/detached item
+	CreatedAt     time.Time
+}
+
+// ExceptionType indicates why this exception exists.
+type ExceptionType string
+
+const (
+	// ExceptionTypeDeleted indicates user deleted this instance (soft delete).
+	ExceptionTypeDeleted ExceptionType = "deleted"
+
+	// ExceptionTypeRescheduled indicates user rescheduled this instance (detached).
+	ExceptionTypeRescheduled ExceptionType = "rescheduled"
+
+	// ExceptionTypeEdited indicates user customized this instance (keeps template link).
+	ExceptionTypeEdited ExceptionType = "edited"
+)
+
+// Validate checks if the exception type is valid.
+func (e ExceptionType) Validate() error {
+	switch e {
+	case ExceptionTypeDeleted, ExceptionTypeRescheduled, ExceptionTypeEdited:
+		return nil
+	default:
+		return ErrInvalidExceptionType
+	}
+}
+
 // GenerationJob is an entity representing a background job for generating recurring task instances.
 //
 // The worker uses these jobs to:
 //  1. Schedule when to generate tasks
-//  2. Track job status (pending, running, completed, failed)
+//  2. Track job status (pending, running, completed, failed, discarded)
 //  3. Record errors and retry attempts
+//  4. Handle stuck job recovery via availability timeout
 type GenerationJob struct {
 	ID           string
 	TemplateID   string
 	ScheduledFor time.Time
-	Status       string // pending, running, completed, failed
+	Status       string // Use JobStatus* constants
 
+	// Availability timeout for stuck job recovery
+	AvailableAt time.Time  // When job becomes re-claimable if stuck
+	ClaimedBy   *string    // Worker ID that claimed this job (nil if unclaimed)
+	ClaimedAt   *time.Time // When job was claimed
+
+	// Generation range
 	GenerateFrom  time.Time
 	GenerateUntil time.Time
-	CreatedAt     time.Time
-	StartedAt     *time.Time
-	CompletedAt   *time.Time
-	FailedAt      *time.Time
 
+	// Timestamps
+	CreatedAt   time.Time
+	StartedAt   *time.Time
+	CompletedAt *time.Time
+	FailedAt    *time.Time
+
+	// Retry tracking
 	ErrorMessage *string
-	RetryCount   int
+	RetryCount   int // Current attempt count (starts at 0)
 }
+
+// Job status constants
+const (
+	JobStatusPending    = "pending"
+	JobStatusScheduled  = "scheduled" // For future execution
+	JobStatusRunning    = "running"
+	JobStatusCompleted  = "completed"
+	JobStatusFailed     = "failed"     // Transient, will retry
+	JobStatusDiscarded  = "discarded"  // Permanently failed (max retries exceeded or permanent error)
+	JobStatusCancelling = "cancelling" // Cancellation requested, waiting for worker
+	JobStatusCancelled  = "cancelled"  // Successfully cancelled
+)
 
 // APIKey is an aggregate root representing an API key for authentication.
 //
@@ -233,4 +353,39 @@ type APIKey struct {
 	CreatedAt      time.Time
 	LastUsedAt     *time.Time
 	ExpiresAt      *time.Time
+}
+
+// DeadLetterJob represents a permanently failed job that requires manual intervention.
+//
+// Dead letter jobs are created when:
+//  1. Job exhausts all retry attempts (transient errors)
+//  2. Job fails with permanent error (business logic error)
+//  3. Job panics during execution (programming error)
+//
+// Admins can review dead letter jobs and either:
+// - Retry: Create a new job from the dead letter entry
+// - Discard: Mark as resolved without retrying
+type DeadLetterJob struct {
+	ID         string
+	TemplateID string
+
+	// Original job details
+	GenerateFrom  time.Time
+	GenerateUntil time.Time
+
+	// Failure information
+	ErrorType     string  // "permanent", "exhausted", or "panic"
+	ErrorMessage  string  // Error message from the job
+	StackTrace    *string // Stack trace for panics
+	FailedAt      time.Time
+	RetryCount    int    // Number of retries attempted before failure
+	LastWorkerID  string // Worker that last processed the job
+	OriginalJobID string // ID of the original job that failed
+
+	// Resolution tracking
+	ResolvedAt  *time.Time // When the dead letter was resolved
+	ResolvedBy  *string    // Admin who resolved it
+	Resolution  *string    // "retried" or "discarded"
+	ReviewNotes *string    // Admin notes about resolution
+	CreatedAt   time.Time
 }

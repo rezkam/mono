@@ -92,10 +92,10 @@ func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params o
 		filterParams.TitleContains = params.TitleContains
 	}
 	if params.CreatedAfter != nil {
-		filterParams.CreateTimeAfter = params.CreatedAfter
+		filterParams.CreatedAtAfter = params.CreatedAfter
 	}
 	if params.CreatedBefore != nil {
-		filterParams.CreateTimeBefore = params.CreatedBefore
+		filterParams.CreatedAtBefore = params.CreatedBefore
 	}
 
 	// Call service layer with filters and sorting

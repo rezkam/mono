@@ -175,7 +175,7 @@ func TestListLists_Pagination(t *testing.T) {
 
 	// Create many lists to test pagination
 	ctx := context.Background()
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		_, err := ts.TodoService.CreateList(ctx, fmt.Sprintf("List %d", i))
 		require.NoError(t, err)
 	}

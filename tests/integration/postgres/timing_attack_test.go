@@ -164,14 +164,14 @@ func TestTimingAttack_Statistical(t *testing.T) {
 	t.Logf("Running %d iterations for each scenario", iterations)
 
 	// Measure fast path (non-existent key)
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		start := time.Now().UTC()
 		authenticator.ValidateAPIKey(ctx, nonExistentKey)
 		fastPathTimes[i] = time.Since(start)
 	}
 
 	// Measure slow path (existing key, wrong secret)
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		start := time.Now().UTC()
 		authenticator.ValidateAPIKey(ctx, wrongSecretKey)
 		slowPathTimes[i] = time.Since(start)

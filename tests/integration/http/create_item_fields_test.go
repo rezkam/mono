@@ -58,11 +58,11 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		assert.Equal(t, "Test Title Mapping", *resp.Item.Title)
 	})
 
-	t.Run("due_time is mapped", func(t *testing.T) {
+	t.Run("due_at is mapped", func(t *testing.T) {
 		dueTime := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Second)
 		reqBody := map[string]any{
-			"title":    "Due Time Test",
-			"due_time": dueTime.Format(time.RFC3339),
+			"title":  "Due Time Test",
+			"due_at": dueTime.Format(time.RFC3339),
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -78,8 +78,8 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		var resp openapi.CreateItemResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		require.NotNil(t, resp.Item)
-		require.NotNil(t, resp.Item.DueTime)
-		assert.Equal(t, dueTime.UTC(), resp.Item.DueTime.UTC())
+		require.NotNil(t, resp.Item.DueAt)
+		assert.Equal(t, dueTime.UTC(), resp.Item.DueAt.UTC())
 	})
 
 	t.Run("tags is mapped", func(t *testing.T) {
@@ -205,7 +205,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 
 		reqBody := map[string]any{
 			"title":              "Complete Item Test",
-			"due_time":           dueTime.Format(time.RFC3339),
+			"due_at":             dueTime.Format(time.RFC3339),
 			"tags":               []string{"work", "important"},
 			"priority":           "urgent",
 			"estimated_duration": "PT2H45M", // ISO 8601 format
@@ -231,8 +231,8 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		require.NotNil(t, resp.Item.Title)
 		assert.Equal(t, "Complete Item Test", *resp.Item.Title)
 
-		require.NotNil(t, resp.Item.DueTime)
-		assert.Equal(t, dueTime.UTC(), resp.Item.DueTime.UTC())
+		require.NotNil(t, resp.Item.DueAt)
+		assert.Equal(t, dueTime.UTC(), resp.Item.DueAt.UTC())
 
 		require.NotNil(t, resp.Item.Tags)
 		assert.ElementsMatch(t, []string{"work", "important"}, *resp.Item.Tags)
@@ -255,7 +255,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		require.NotNil(t, resp.Item.Status)
 		todo := openapi.ItemStatus("todo")
 		assert.Equal(t, todo, *resp.Item.Status)
-		require.NotNil(t, resp.Item.CreateTime)
+		require.NotNil(t, resp.Item.CreatedAt)
 		require.NotNil(t, resp.Item.UpdatedAt)
 	})
 }

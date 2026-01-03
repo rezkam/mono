@@ -3,6 +3,7 @@ package todo
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/stretchr/testify/assert"
@@ -76,6 +77,51 @@ func (m *mockListListsRepo) FindRecurringTemplates(ctx context.Context, listID s
 	panic("not used in ListLists tests")
 }
 
+func (m *mockListListsRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) DeleteException(ctx context.Context, templateID string, occursAt time.Time) error {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) Transaction(ctx context.Context, fn func(tx Repository) error) error {
+	// Execute the function with the same mock (no actual transaction needed for validation tests)
+	return fn(m)
+}
+
 // mockUpdateItemRepo is a minimal mock for testing UpdateItem logic
 type mockUpdateItemRepo struct {
 	mockListListsRepo // embed for interface satisfaction
@@ -94,7 +140,8 @@ func (m *mockUpdateItemRepo) FindItemByID(ctx context.Context, id string) (*doma
 // for fmt.Sscanf("%d") which permissively parses "123abc" as 123.
 func TestUpdateItem_RejectsTrailingNonNumericEtag(t *testing.T) {
 	repo := &mockUpdateItemRepo{}
-	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
 
 	testCases := []struct {
 		name  string
@@ -141,7 +188,8 @@ func TestUpdateItem_RejectsTrailingNonNumericEtag(t *testing.T) {
 // offsets by clamping them to 0, preventing PostgreSQL errors.
 func TestListLists_ClampsNegativeOffset(t *testing.T) {
 	repo := &mockListListsRepo{}
-	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
 
 	params := domain.ListListsParams{
 		Offset: -5, // Negative offset should be clamped to 0
@@ -163,7 +211,8 @@ func TestListLists_UsesConfiguredDefaultPageSize(t *testing.T) {
 
 	// Use non-default values to prove config is used
 	customDefault := 50
-	service := NewService(repo, Config{DefaultPageSize: customDefault, MaxPageSize: 200})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: customDefault, MaxPageSize: 200})
 
 	params := domain.ListListsParams{
 		Limit: 0, // Zero means "use default"
@@ -184,7 +233,8 @@ func TestListLists_UsesConfiguredMaxPageSize(t *testing.T) {
 
 	// Use non-default values to prove config is used
 	customMax := 50
-	service := NewService(repo, Config{DefaultPageSize: 10, MaxPageSize: customMax})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 10, MaxPageSize: customMax})
 
 	params := domain.ListListsParams{
 		Limit: 1000, // Exceeds max
@@ -200,7 +250,8 @@ func TestListLists_UsesConfiguredMaxPageSize(t *testing.T) {
 // TestListLists_RespectsValidLimit verifies that valid limits within range are passed through.
 func TestListLists_RespectsValidLimit(t *testing.T) {
 	repo := &mockListListsRepo{}
-	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
 
 	params := domain.ListListsParams{
 		Limit: 42, // Within valid range
@@ -217,7 +268,8 @@ func TestListLists_RespectsValidLimit(t *testing.T) {
 // This prevents a nil-dereference panic in the repository layer.
 func TestUpdateItem_RejectsTitleInMaskWithNilValue(t *testing.T) {
 	repo := &mockUpdateItemRepo{}
-	service := NewService(repo, Config{DefaultPageSize: 25, MaxPageSize: 100})
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
 
 	params := domain.UpdateItemParams{
 		ListID:     "list-123",

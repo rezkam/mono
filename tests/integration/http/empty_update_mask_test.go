@@ -60,7 +60,12 @@ func TestUpdateItem_EmptyUpdateMask(t *testing.T) {
 	require.NotNil(t, resp.Error)
 	require.NotNil(t, resp.Error.Code)
 	assert.Equal(t, "VALIDATION_ERROR", *resp.Error.Code)
-	assert.Contains(t, *resp.Error.Message, "update_mask cannot be empty")
+	// The OpenAPI schema validates minItems: 1 before reaching the service layer
+	require.NotNil(t, resp.Error.Details, "expected validation error details")
+	details := *resp.Error.Details
+	require.NotEmpty(t, details, "expected at least one validation error detail")
+	assert.Equal(t, "update_mask", *details[0].Field)
+	assert.Contains(t, *details[0].Issue, "minimum number of items is 1")
 }
 
 // TestUpdateRecurringTemplate_EmptyUpdateMask verifies that UpdateRecurringTemplate
@@ -76,9 +81,13 @@ func TestUpdateRecurringTemplate_EmptyUpdateMask(t *testing.T) {
 	require.NoError(t, err)
 
 	template, err := ts.TodoService.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
-		ListID:            list.ID,
-		Title:             "Test Template",
-		RecurrencePattern: domain.RecurrenceDaily,
+		ListID:                list.ID,
+		Title:                 "Test Template",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		RecurrenceConfig:      map[string]any{},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 30,
+		IsActive:              true,
 	})
 	require.NoError(t, err)
 
@@ -110,5 +119,10 @@ func TestUpdateRecurringTemplate_EmptyUpdateMask(t *testing.T) {
 	require.NotNil(t, resp.Error)
 	require.NotNil(t, resp.Error.Code)
 	assert.Equal(t, "VALIDATION_ERROR", *resp.Error.Code)
-	assert.Contains(t, *resp.Error.Message, "update_mask cannot be empty")
+	// The OpenAPI schema validates minItems: 1 before reaching the service layer
+	require.NotNil(t, resp.Error.Details, "expected validation error details")
+	details := *resp.Error.Details
+	require.NotEmpty(t, details, "expected at least one validation error detail")
+	assert.Equal(t, "update_mask", *details[0].Field)
+	assert.Contains(t, *details[0].Issue, "minimum number of items is 1")
 }

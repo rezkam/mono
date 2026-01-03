@@ -54,10 +54,17 @@ const (
 	Yearly    RecurrencePattern = "yearly"
 )
 
+// Defines values for RecurringTemplateExceptionExceptionType.
+const (
+	Deleted     RecurringTemplateExceptionExceptionType = "deleted"
+	Edited      RecurringTemplateExceptionExceptionType = "edited"
+	Rescheduled RecurringTemplateExceptionExceptionType = "rescheduled"
+)
+
 // Defines values for UpdateItemRequestUpdateMask.
 const (
 	UpdateItemRequestUpdateMaskActualDuration    UpdateItemRequestUpdateMask = "actual_duration"
-	UpdateItemRequestUpdateMaskDueTime           UpdateItemRequestUpdateMask = "due_time"
+	UpdateItemRequestUpdateMaskDueAt             UpdateItemRequestUpdateMask = "due_at"
 	UpdateItemRequestUpdateMaskEstimatedDuration UpdateItemRequestUpdateMask = "estimated_duration"
 	UpdateItemRequestUpdateMaskPriority          UpdateItemRequestUpdateMask = "priority"
 	UpdateItemRequestUpdateMaskStatus            UpdateItemRequestUpdateMask = "status"
@@ -68,21 +75,22 @@ const (
 
 // Defines values for UpdateRecurringTemplateRequestUpdateMask.
 const (
-	UpdateRecurringTemplateRequestUpdateMaskDueOffset            UpdateRecurringTemplateRequestUpdateMask = "due_offset"
-	UpdateRecurringTemplateRequestUpdateMaskEstimatedDuration    UpdateRecurringTemplateRequestUpdateMask = "estimated_duration"
-	UpdateRecurringTemplateRequestUpdateMaskGenerationWindowDays UpdateRecurringTemplateRequestUpdateMask = "generation_window_days"
-	UpdateRecurringTemplateRequestUpdateMaskIsActive             UpdateRecurringTemplateRequestUpdateMask = "is_active"
-	UpdateRecurringTemplateRequestUpdateMaskPriority             UpdateRecurringTemplateRequestUpdateMask = "priority"
-	UpdateRecurringTemplateRequestUpdateMaskRecurrenceConfig     UpdateRecurringTemplateRequestUpdateMask = "recurrence_config"
-	UpdateRecurringTemplateRequestUpdateMaskRecurrencePattern    UpdateRecurringTemplateRequestUpdateMask = "recurrence_pattern"
-	UpdateRecurringTemplateRequestUpdateMaskTags                 UpdateRecurringTemplateRequestUpdateMask = "tags"
-	UpdateRecurringTemplateRequestUpdateMaskTitle                UpdateRecurringTemplateRequestUpdateMask = "title"
+	UpdateRecurringTemplateRequestUpdateMaskDueOffset             UpdateRecurringTemplateRequestUpdateMask = "due_offset"
+	UpdateRecurringTemplateRequestUpdateMaskEstimatedDuration     UpdateRecurringTemplateRequestUpdateMask = "estimated_duration"
+	UpdateRecurringTemplateRequestUpdateMaskGenerationHorizonDays UpdateRecurringTemplateRequestUpdateMask = "generation_horizon_days"
+	UpdateRecurringTemplateRequestUpdateMaskIsActive              UpdateRecurringTemplateRequestUpdateMask = "is_active"
+	UpdateRecurringTemplateRequestUpdateMaskPriority              UpdateRecurringTemplateRequestUpdateMask = "priority"
+	UpdateRecurringTemplateRequestUpdateMaskRecurrenceConfig      UpdateRecurringTemplateRequestUpdateMask = "recurrence_config"
+	UpdateRecurringTemplateRequestUpdateMaskRecurrencePattern     UpdateRecurringTemplateRequestUpdateMask = "recurrence_pattern"
+	UpdateRecurringTemplateRequestUpdateMaskSyncHorizonDays       UpdateRecurringTemplateRequestUpdateMask = "sync_horizon_days"
+	UpdateRecurringTemplateRequestUpdateMaskTags                  UpdateRecurringTemplateRequestUpdateMask = "tags"
+	UpdateRecurringTemplateRequestUpdateMaskTitle                 UpdateRecurringTemplateRequestUpdateMask = "title"
 )
 
 // Defines values for ListListsParamsSortBy.
 const (
-	CreateTime ListListsParamsSortBy = "create_time"
-	Title      ListListsParamsSortBy = "title"
+	ListListsParamsSortByCreatedAt ListListsParamsSortBy = "created_at"
+	ListListsParamsSortByTitle     ListListsParamsSortBy = "title"
 )
 
 // Defines values for ListListsParamsSortDir.
@@ -111,10 +119,10 @@ const (
 
 // Defines values for ListItemsParamsSortBy.
 const (
-	CreatedAt ListItemsParamsSortBy = "created_at"
-	DueTime   ListItemsParamsSortBy = "due_time"
-	Priority  ListItemsParamsSortBy = "priority"
-	UpdatedAt ListItemsParamsSortBy = "updated_at"
+	ListItemsParamsSortByCreatedAt ListItemsParamsSortBy = "created_at"
+	ListItemsParamsSortByDueAt     ListItemsParamsSortBy = "due_at"
+	ListItemsParamsSortByPriority  ListItemsParamsSortBy = "priority"
+	ListItemsParamsSortByUpdatedAt ListItemsParamsSortBy = "updated_at"
 )
 
 // Defines values for ListItemsParamsSortDir.
@@ -125,7 +133,7 @@ const (
 
 // CreateItemRequest defines model for CreateItemRequest.
 type CreateItemRequest struct {
-	DueTime *time.Time `json:"due_time,omitempty"`
+	DueAt *time.Time `json:"due_at,omitempty"`
 
 	// EstimatedDuration ISO 8601 duration
 	EstimatedDuration   *string             `json:"estimated_duration,omitempty"`
@@ -160,15 +168,20 @@ type CreateRecurringTemplateRequest struct {
 	DueOffset *string `json:"due_offset,omitempty"`
 
 	// EstimatedDuration ISO 8601 duration
-	EstimatedDuration    *string       `json:"estimated_duration,omitempty"`
-	GenerationWindowDays *int          `json:"generation_window_days,omitempty"`
-	Priority             *ItemPriority `json:"priority,omitempty"`
+	EstimatedDuration *string `json:"estimated_duration,omitempty"`
+
+	// GenerationHorizonDays Total generation horizon (ASYNC layer)
+	GenerationHorizonDays *int          `json:"generation_horizon_days,omitempty"`
+	Priority              *ItemPriority `json:"priority,omitempty"`
 
 	// RecurrenceConfig JSON config for pattern-specific settings
 	RecurrenceConfig  *string           `json:"recurrence_config,omitempty"`
 	RecurrencePattern RecurrencePattern `json:"recurrence_pattern"`
-	Tags              *[]string         `json:"tags,omitempty"`
-	Title             string            `json:"title"`
+
+	// SyncHorizonDays Days to generate immediately (SYNC layer)
+	SyncHorizonDays *int      `json:"sync_horizon_days,omitempty"`
+	Tags            *[]string `json:"tags,omitempty"`
+	Title           string    `json:"title"`
 }
 
 // CreateRecurringTemplateResponse defines model for CreateRecurringTemplateResponse.
@@ -216,6 +229,11 @@ type ListListsResponse struct {
 	NextPageToken *string     `json:"next_page_token,omitempty"`
 }
 
+// ListRecurringTemplateExceptionsResponse defines model for ListRecurringTemplateExceptionsResponse.
+type ListRecurringTemplateExceptionsResponse struct {
+	Exceptions *[]RecurringTemplateException `json:"exceptions,omitempty"`
+}
+
 // ListRecurringTemplatesResponse defines model for ListRecurringTemplatesResponse.
 type ListRecurringTemplatesResponse struct {
 	Templates *[]RecurringItemTemplate `json:"templates,omitempty"`
@@ -232,28 +250,60 @@ type RecurringItemTemplate struct {
 	DueOffset *string `json:"due_offset,omitempty"`
 
 	// EstimatedDuration ISO 8601 duration
-	EstimatedDuration    *string             `json:"estimated_duration,omitempty"`
-	GenerationWindowDays *int                `json:"generation_window_days,omitempty"`
-	Id                   *openapi_types.UUID `json:"id,omitempty"`
-	IsActive             *bool               `json:"is_active,omitempty"`
-	LastGeneratedUntil   *time.Time          `json:"last_generated_until,omitempty"`
-	ListId               *openapi_types.UUID `json:"list_id,omitempty"`
-	Priority             *ItemPriority       `json:"priority,omitempty"`
+	EstimatedDuration *string `json:"estimated_duration,omitempty"`
+
+	// GenerationHorizonDays Total generation horizon in days (ASYNC layer)
+	GenerationHorizonDays *int                `json:"generation_horizon_days,omitempty"`
+	Id                    *openapi_types.UUID `json:"id,omitempty"`
+	IsActive              *bool               `json:"is_active,omitempty"`
+	LastGeneratedUntil    *time.Time          `json:"last_generated_until,omitempty"`
+	ListId                *openapi_types.UUID `json:"list_id,omitempty"`
+	Priority              *ItemPriority       `json:"priority,omitempty"`
 
 	// RecurrenceConfig JSON configuration
 	RecurrenceConfig  *string            `json:"recurrence_config,omitempty"`
 	RecurrencePattern *RecurrencePattern `json:"recurrence_pattern,omitempty"`
-	Tags              *[]string          `json:"tags,omitempty"`
-	Title             *string            `json:"title,omitempty"`
-	UpdatedAt         *time.Time         `json:"updated_at,omitempty"`
+
+	// SyncHorizonDays Days to generate immediately on create/update (SYNC layer)
+	SyncHorizonDays *int       `json:"sync_horizon_days,omitempty"`
+	Tags            *[]string  `json:"tags,omitempty"`
+	Title           *string    `json:"title,omitempty"`
+	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
 }
+
+// RecurringTemplateException defines model for RecurringTemplateException.
+type RecurringTemplateException struct {
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// ExceptionType - deleted: Instance was soft-deleted
+	// - rescheduled: Instance was moved to different time (detached from template)
+	// - edited: Instance was customized (keeps template link but excluded from updates)
+	ExceptionType *RecurringTemplateExceptionExceptionType `json:"exception_type,omitempty"`
+	Id            *openapi_types.UUID                      `json:"id,omitempty"`
+
+	// ItemId ID of the affected item (for audit trail)
+	ItemId *openapi_types.UUID `json:"item_id"`
+
+	// OccursAt Exact timestamp when this instance would have occurred
+	OccursAt   *time.Time          `json:"occurs_at,omitempty"`
+	TemplateId *openapi_types.UUID `json:"template_id,omitempty"`
+}
+
+// RecurringTemplateExceptionExceptionType - deleted: Instance was soft-deleted
+// - rescheduled: Instance was moved to different time (detached from template)
+// - edited: Instance was customized (keeps template link but excluded from updates)
+type RecurringTemplateExceptionExceptionType string
 
 // TodoItem defines model for TodoItem.
 type TodoItem struct {
 	// ActualDuration ISO 8601 duration
 	ActualDuration *string    `json:"actual_duration,omitempty"`
-	CreateTime     *time.Time `json:"create_time,omitempty"`
-	DueTime        *time.Time `json:"due_time,omitempty"`
+	CreatedAt      *time.Time `json:"created_at,omitempty"`
+	DueAt          *time.Time `json:"due_at,omitempty"`
+
+	// DueOffset Duration from starts_at to due_at (ISO 8601 duration).
+	// If set with starts_at, due_at = starts_at + due_offset.
+	DueOffset *string `json:"due_offset,omitempty"`
 
 	// EstimatedDuration ISO 8601 duration
 	EstimatedDuration *string `json:"estimated_duration,omitempty"`
@@ -264,8 +314,13 @@ type TodoItem struct {
 	InstanceDate        *time.Time          `json:"instance_date,omitempty"`
 	Priority            *ItemPriority       `json:"priority,omitempty"`
 	RecurringTemplateId *openapi_types.UUID `json:"recurring_template_id,omitempty"`
-	Status              *ItemStatus         `json:"status,omitempty"`
-	Tags                *[]string           `json:"tags,omitempty"`
+
+	// StartsAt When the task becomes active/visible.
+	// For recurring items: set from the occurrence pattern.
+	// For direct items: explicitly set to schedule future tasks.
+	StartsAt *openapi_types.Date `json:"starts_at,omitempty"`
+	Status   *ItemStatus         `json:"status,omitempty"`
+	Tags     *[]string           `json:"tags,omitempty"`
 
 	// Timezone IANA timezone
 	Timezone  *string    `json:"timezone,omitempty"`
@@ -275,9 +330,9 @@ type TodoItem struct {
 
 // TodoList defines model for TodoList.
 type TodoList struct {
-	CreateTime *time.Time          `json:"create_time,omitempty"`
-	Id         *openapi_types.UUID `json:"id,omitempty"`
-	Title      *string             `json:"title,omitempty"`
+	CreatedAt *time.Time          `json:"created_at,omitempty"`
+	Id        *openapi_types.UUID `json:"id,omitempty"`
+	Title     *string             `json:"title,omitempty"`
 
 	// TotalItems Total items in this list
 	TotalItems *int `json:"total_items,omitempty"`
@@ -400,6 +455,15 @@ type ListRecurringTemplatesParams struct {
 	ActiveOnly *bool `form:"active_only,omitempty" json:"active_only,omitempty"`
 }
 
+// ListRecurringTemplateExceptionsParams defines parameters for ListRecurringTemplateExceptions.
+type ListRecurringTemplateExceptionsParams struct {
+	// FromDate Start of date range (defaults to 1 month ago)
+	FromDate *time.Time `form:"from_date,omitempty" json:"from_date,omitempty"`
+
+	// ToDate End of date range (defaults to 1 month ahead)
+	ToDate *time.Time `form:"to_date,omitempty" json:"to_date,omitempty"`
+}
+
 // CreateListJSONRequestBody defines body for CreateList for application/json ContentType.
 type CreateListJSONRequestBody = CreateListRequest
 
@@ -432,6 +496,9 @@ type ServerInterface interface {
 	// Create a new item in a list
 	// (POST /v1/lists/{list_id}/items)
 	CreateItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID)
+	// Delete a todo item
+	// (DELETE /v1/lists/{list_id}/items/{item_id})
+	DeleteItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, itemId openapi_types.UUID)
 	// Update an existing item
 	// (PATCH /v1/lists/{list_id}/items/{item_id})
 	UpdateItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, itemId openapi_types.UUID)
@@ -450,6 +517,9 @@ type ServerInterface interface {
 	// Update a recurring template
 	// (PATCH /v1/lists/{list_id}/recurring-templates/{template_id})
 	UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID)
+	// List exceptions for a recurring template
+	// (GET /v1/lists/{list_id}/recurring-templates/{template_id}/exceptions)
+	ListRecurringTemplateExceptions(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID, params ListRecurringTemplateExceptionsParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -486,6 +556,12 @@ func (_ Unimplemented) CreateItem(w http.ResponseWriter, r *http.Request, listId
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Delete a todo item
+// (DELETE /v1/lists/{list_id}/items/{item_id})
+func (_ Unimplemented) DeleteItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, itemId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Update an existing item
 // (PATCH /v1/lists/{list_id}/items/{item_id})
 func (_ Unimplemented) UpdateItem(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, itemId openapi_types.UUID) {
@@ -519,6 +595,12 @@ func (_ Unimplemented) GetRecurringTemplate(w http.ResponseWriter, r *http.Reque
 // Update a recurring template
 // (PATCH /v1/lists/{list_id}/recurring-templates/{template_id})
 func (_ Unimplemented) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List exceptions for a recurring template
+// (GET /v1/lists/{list_id}/recurring-templates/{template_id}/exceptions)
+func (_ Unimplemented) ListRecurringTemplateExceptions(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID, params ListRecurringTemplateExceptionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -784,6 +866,46 @@ func (siw *ServerInterfaceWrapper) CreateItem(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteItem operation middleware
+func (siw *ServerInterfaceWrapper) DeleteItem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "list_id" -------------
+	var listId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item_id" -------------
+	var itemId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item_id", chi.URLParam(r, "item_id"), &itemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteItem(w, r, listId, itemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UpdateItem operation middleware
 func (siw *ServerInterfaceWrapper) UpdateItem(w http.ResponseWriter, r *http.Request) {
 
@@ -1017,6 +1139,65 @@ func (siw *ServerInterfaceWrapper) UpdateRecurringTemplate(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// ListRecurringTemplateExceptions operation middleware
+func (siw *ServerInterfaceWrapper) ListRecurringTemplateExceptions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "list_id" -------------
+	var listId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "template_id" -------------
+	var templateId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "template_id", chi.URLParam(r, "template_id"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "template_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRecurringTemplateExceptionsParams
+
+	// ------------- Optional query parameter "from_date" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "from_date", r.URL.Query(), &params.FromDate)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from_date", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "to_date" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "to_date", r.URL.Query(), &params.ToDate)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to_date", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRecurringTemplateExceptions(w, r, listId, templateId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1146,6 +1327,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/v1/lists/{list_id}/items", wrapper.CreateItem)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/v1/lists/{list_id}/items/{item_id}", wrapper.DeleteItem)
+	})
+	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/v1/lists/{list_id}/items/{item_id}", wrapper.UpdateItem)
 	})
 	r.Group(func(r chi.Router) {
@@ -1163,6 +1347,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}", wrapper.UpdateRecurringTemplate)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}/exceptions", wrapper.ListRecurringTemplateExceptions)
+	})
 
 	return r
 }
@@ -1170,51 +1357,61 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"nM7P5v8LAAD//1sSnTakQgAA",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

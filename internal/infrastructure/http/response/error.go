@@ -119,6 +119,11 @@ func Error(w http.ResponseWriter, code, message string, statusCode int) {
 func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	// Validation errors (400)
+	case errors.Is(err, domain.ErrEmptyUpdateMask):
+		ValidationError(w, "update_mask", "update_mask cannot be empty")
+	case errors.Is(err, domain.ErrUnknownField):
+		// Extract the field name from the error message if available
+		ValidationError(w, "update_mask", err.Error())
 	case errors.Is(err, domain.ErrTitleRequired):
 		ValidationError(w, "title", "required field missing")
 	case errors.Is(err, domain.ErrTitleTooLong):

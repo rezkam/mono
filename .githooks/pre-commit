@@ -38,8 +38,8 @@ if [ -n "$STAGED_GO_FILES" ]; then
         make build-timeutc-linter
     fi
     # Run on packages instead of individual files, excluding testdata and generated code
-    LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | grep -v sqlcgen | tr '\n' ' ')
-    if [ -n "$LINT_PACKAGES" ]; then
+    LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | grep -v sqlcgen | grep -v '^ *$' | tr '\n' ' ')
+    if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
         ./timeutc $LINT_PACKAGES
     fi
 
@@ -49,7 +49,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
         make build-nointerface-linter
     fi
     # Run on packages instead of individual files, excluding testdata and generated code
-    if [ -n "$LINT_PACKAGES" ]; then
+    if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
         ./nointerface $LINT_PACKAGES
     fi
 

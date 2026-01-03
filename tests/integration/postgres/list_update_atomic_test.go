@@ -7,6 +7,7 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,8 @@ func TestUpdateList_ReturnsVersionAndCountsAtomically(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list (starts with version = 1)
 	list, err := todoService.CreateList(ctx, "Atomic Test List")
@@ -39,7 +41,7 @@ func TestUpdateList_ReturnsVersionAndCountsAtomically(t *testing.T) {
 	assert.Equal(t, 1, list.Version, "New list should have version 1")
 
 	// Add 3 items to the list
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		item := &domain.TodoItem{
 			Title: "Task",
 		}
@@ -80,7 +82,8 @@ func TestUpdateList_VersionConflictDetection(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	list, err := todoService.CreateList(ctx, "Conflict Test List")
@@ -125,7 +128,8 @@ func TestUpdateList_VersionIncrementsProperly(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	list, err := todoService.CreateList(ctx, "Version Test List")

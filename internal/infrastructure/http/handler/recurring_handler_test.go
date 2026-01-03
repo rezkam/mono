@@ -21,6 +21,13 @@ import (
 // stubRepository implements todo.Repository and panics on calls we don't expect.
 type stubRepository struct{}
 
+// stubGenerator implements todo.TaskGenerator and panics on calls we don't expect.
+type stubGenerator struct{}
+
+func (g *stubGenerator) GenerateTasksForTemplateWithExceptions(ctx context.Context, template *domain.RecurringTemplate, from, until time.Time, exceptions []*domain.RecurringTemplateException) ([]*domain.TodoItem, error) {
+	return nil, nil // Return empty slice for tests that need generator support
+}
+
 func (s *stubRepository) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
 	panic("not implemented")
 }
@@ -60,6 +67,39 @@ func (s *stubRepository) DeleteRecurringTemplate(ctx context.Context, id string)
 func (s *stubRepository) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
 	panic("not implemented")
 }
+func (s *stubRepository) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	panic("not implemented")
+}
+func (s *stubRepository) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
+	panic("not implemented")
+}
+func (s *stubRepository) Transaction(ctx context.Context, fn func(todo.Repository) error) error {
+	panic("not implemented")
+}
+func (s *stubRepository) CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) DeleteException(ctx context.Context, templateID string, occursAt time.Time) error {
+	panic("not implemented")
+}
+func (s *stubRepository) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
+	panic("not implemented")
+}
 
 // spyRepository captures what was passed to UpdateRecurringTemplate
 type spyRepository struct {
@@ -79,10 +119,36 @@ func (s *spyRepository) UpdateRecurringTemplate(ctx context.Context, params doma
 	s.capturedParams = &params
 	// Return the existing template with updated fields for the test
 	result := *s.existingTemplate
-	if params.GenerationWindowDays != nil {
-		result.GenerationWindowDays = *params.GenerationWindowDays
+	if params.GenerationHorizonDays != nil {
+		result.GenerationHorizonDays = *params.GenerationHorizonDays
 	}
 	return &result, nil
+}
+
+// Transaction executes the function and delegates calls back to the spyRepository
+func (s *spyRepository) Transaction(ctx context.Context, fn func(todo.Repository) error) error {
+	return fn(s)
+}
+
+// Methods required by updateTemplateWithRegeneration
+func (s *spyRepository) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (s *spyRepository) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+	return nil, nil
+}
+
+func (s *spyRepository) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	return 0, nil
+}
+
+func (s *spyRepository) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	return nil
+}
+
+func (s *spyRepository) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
+	return nil
 }
 
 // TestUpdateRecurringTemplate_UpdatesGenerationWindowDays tests that
@@ -93,21 +159,24 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	listID := uuid.New().String()
 
 	existingTemplate := &domain.RecurringTemplate{
-		ID:                   templateID,
-		ListID:               listID,
-		Title:                "Weekly Meeting",
-		RecurrencePattern:    domain.RecurrenceWeekly,
-		GenerationWindowDays: 30,
-		IsActive:             true,
-		CreatedAt:            now,
-		UpdatedAt:            now,
-		LastGeneratedUntil:   now,
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "Weekly Meeting",
+		RecurrencePattern:     domain.RecurrenceWeekly,
+		RecurrenceConfig:      map[string]any{},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 30,
+		IsActive:              true,
+		CreatedAt:             now,
+		UpdatedAt:             now,
+		GeneratedThrough:      now,
 	}
 
 	repo := &spyRepository{
 		existingTemplate: existingTemplate,
 	}
-	service := todo.NewService(repo, todo.Config{})
+	generator := &stubGenerator{}
+	service := todo.NewService(repo, generator, todo.Config{})
 	srv := NewTodoHandler(service)
 
 	listUUID := types.UUID(uuid.MustParse(listID))
@@ -116,10 +185,10 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 
 	reqBody := openapi.UpdateRecurringTemplateRequest{
 		Template: openapi.RecurringItemTemplate{
-			GenerationWindowDays: &newWindowDays,
+			GenerationHorizonDays: &newWindowDays,
 		},
 		UpdateMask: []openapi.UpdateRecurringTemplateRequestUpdateMask{
-			openapi.UpdateRecurringTemplateRequestUpdateMaskGenerationWindowDays,
+			openapi.UpdateRecurringTemplateRequestUpdateMaskGenerationHorizonDays,
 		},
 	}
 	body, _ := json.Marshal(reqBody)
@@ -132,8 +201,8 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, repo.capturedParams, "params should have been passed to repository")
-	require.NotNil(t, repo.capturedParams.GenerationWindowDays, "generation_window_days should be in params")
-	assert.Equal(t, 60, *repo.capturedParams.GenerationWindowDays, "generation_window_days should be updated to 60")
+	require.NotNil(t, repo.capturedParams.GenerationHorizonDays, "generation_horizon_days should be in params")
+	assert.Equal(t, 60, *repo.capturedParams.GenerationHorizonDays, "generation_horizon_days should be updated to 60")
 }
 
 // TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest tests that
@@ -141,7 +210,8 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 // instead of silently accepting 0.
 func TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest(t *testing.T) {
 	repo := &stubRepository{}
-	service := todo.NewService(repo, todo.Config{})
+	generator := &stubGenerator{}
+	service := todo.NewService(repo, generator, todo.Config{})
 	srv := NewTodoHandler(service)
 
 	listID := types.UUID(uuid.New())
@@ -212,11 +282,12 @@ func TestMapTemplateToDTO_IncludesRecurrenceConfig(t *testing.T) {
 			"hour":   9,
 			"minute": 30,
 		},
-		GenerationWindowDays: 30,
-		IsActive:             true,
-		CreatedAt:            time.Now().UTC(),
-		UpdatedAt:            time.Now().UTC(),
-		LastGeneratedUntil:   time.Now().UTC(),
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 30,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
+		GeneratedThrough:      time.Now().UTC(),
 	}
 
 	dto := MapTemplateToDTO(template)

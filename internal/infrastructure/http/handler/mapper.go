@@ -59,7 +59,7 @@ func MapListToDTO(list *domain.TodoList) openapi.TodoList {
 	return openapi.TodoList{
 		Id:          ptrUUID(list.ID),
 		Title:       ptrString(list.Title),
-		CreateTime:  ptrTime(list.CreateTime),
+		CreatedAt:   ptrTime(list.CreatedAt),
 		TotalItems:  ptrInt(list.TotalItems),
 		UndoneItems: ptrInt(list.UndoneItems),
 	}
@@ -71,9 +71,9 @@ func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 	dto := openapi.TodoItem{
 		Id:                ptrUUID(item.ID),
 		Title:             ptrString(item.Title),
-		CreateTime:        ptrTime(item.CreateTime),
+		CreatedAt:         ptrTime(item.CreatedAt),
 		UpdatedAt:         ptrTime(item.UpdatedAt),
-		DueTime:           item.DueTime,
+		DueAt:             item.DueAt,
 		Tags:              &item.Tags,
 		EstimatedDuration: ptrDuration(item.EstimatedDuration),
 		ActualDuration:    ptrDuration(item.ActualDuration),
@@ -83,7 +83,7 @@ func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 			}
 			return nil
 		}(),
-		InstanceDate: item.InstanceDate,
+		InstanceDate: item.OccursAt,
 		Timezone:     item.Timezone,
 		Etag:         &etag,
 	}
@@ -106,17 +106,18 @@ func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 // MapTemplateToDTO converts domain.RecurringTemplate to openapi.RecurringItemTemplate.
 func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringItemTemplate {
 	dto := openapi.RecurringItemTemplate{
-		Id:                   ptrUUID(template.ID),
-		ListId:               ptrUUID(template.ListID),
-		Title:                ptrString(template.Title),
-		Tags:                 &template.Tags,
-		EstimatedDuration:    ptrDuration(template.EstimatedDuration),
-		DueOffset:            ptrDuration(template.DueOffset),
-		IsActive:             &template.IsActive,
-		CreatedAt:            ptrTime(template.CreatedAt),
-		UpdatedAt:            ptrTime(template.UpdatedAt),
-		LastGeneratedUntil:   ptrTime(template.LastGeneratedUntil),
-		GenerationWindowDays: &template.GenerationWindowDays,
+		Id:                    ptrUUID(template.ID),
+		ListId:                ptrUUID(template.ListID),
+		Title:                 ptrString(template.Title),
+		Tags:                  &template.Tags,
+		EstimatedDuration:     ptrDuration(template.EstimatedDuration),
+		DueOffset:             ptrDuration(template.DueOffset),
+		IsActive:              &template.IsActive,
+		CreatedAt:             ptrTime(template.CreatedAt),
+		UpdatedAt:             ptrTime(template.UpdatedAt),
+		LastGeneratedUntil:    ptrTime(template.GeneratedThrough),
+		SyncHorizonDays:       &template.SyncHorizonDays,
+		GenerationHorizonDays: &template.GenerationHorizonDays,
 	}
 
 	// Map priority
@@ -136,6 +137,25 @@ func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringItemT
 			configStr := string(configJSON)
 			dto.RecurrenceConfig = &configStr
 		}
+	}
+
+	return dto
+}
+
+// MapExceptionToDTO converts domain.RecurringTemplateException to openapi.RecurringTemplateException.
+func MapExceptionToDTO(exc *domain.RecurringTemplateException) openapi.RecurringTemplateException {
+	excType := openapi.RecurringTemplateExceptionExceptionType(exc.ExceptionType)
+
+	dto := openapi.RecurringTemplateException{
+		Id:            ptrUUID(exc.ID),
+		TemplateId:    ptrUUID(exc.TemplateID),
+		OccursAt:      ptrTime(exc.OccursAt),
+		ExceptionType: &excType,
+		CreatedAt:     ptrTime(exc.CreatedAt),
+	}
+
+	if exc.ItemID != nil {
+		dto.ItemId = ptrUUID(*exc.ItemID)
 	}
 
 	return dto

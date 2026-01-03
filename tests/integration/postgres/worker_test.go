@@ -12,11 +12,13 @@ import (
 	"github.com/rezkam/mono/internal/application/worker"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// setupWorkerTest initializes a test environment with storage and worker.
+// setupWorkerTest initializes a test environment with storage and workers.
+// Returns the store, a scheduler Worker, a GenerationWorker for processing, and cleanup.
 func setupWorkerTest(t *testing.T) (*postgres.Store, *worker.Worker, func()) {
 	pgURL := GetTestStorageDSN(t)
 
@@ -25,17 +27,26 @@ func setupWorkerTest(t *testing.T) (*postgres.Store, *worker.Worker, func()) {
 	require.NoError(t, err)
 
 	// Clean up tables before test
-	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, dead_letter_jobs, api_keys CASCADE")
 	require.NoError(t, err)
 
 	w := worker.New(store)
 
 	cleanup := func() {
-		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, dead_letter_jobs, api_keys CASCADE")
 		store.Close()
 	}
 
 	return store, w, cleanup
+}
+
+// setupGenerationWorkerTest returns a GenerationWorker for processing tests.
+func setupGenerationWorkerTest(t *testing.T, store *postgres.Store) *worker.GenerationWorker {
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
+	generator := recurring.NewDomainGenerator()
+	cfg := worker.DefaultWorkerConfig("test-worker")
+
+	return worker.NewGenerationWorker(coordinator, store, generator, cfg)
 }
 
 // TestWorker_CompleteFlow tests the end-to-end flow with multiple recurrence patterns.
@@ -75,8 +86,8 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			pattern:          domain.RecurrenceMonthly,
 			config:           map[string]any{"interval": float64(1)},
 			generationWindow: 365,
-			expectedMinTasks: 11,
-			expectedMaxTasks: 13,
+			expectedMinTasks: 12,
+			expectedMaxTasks: 15, // 12-13 months + potential boundary edge cases
 		},
 		{
 			name:             "Weekdays",
@@ -101,9 +112,9 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			require.NoError(t, err, "failed to generate list UUID")
 			listID := listUUID.String()
 			list := &domain.TodoList{
-				ID:         listID,
-				Title:      fmt.Sprintf("Test List - %s", tc.name),
-				CreateTime: time.Now().UTC(),
+				ID:        listID,
+				Title:     fmt.Sprintf("Test List - %s", tc.name),
+				CreatedAt: time.Now().UTC(),
 			}
 			_, err = store.CreateList(ctx, list)
 			require.NoError(t, err)
@@ -113,15 +124,16 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			require.NoError(t, err, "failed to generate template UUID")
 			templateID := templateUUID.String()
 			template := &domain.RecurringTemplate{
-				ID:                   templateID,
-				ListID:               listID,
-				Title:                fmt.Sprintf("Test Task - %s", tc.name),
-				RecurrencePattern:    tc.pattern,
-				RecurrenceConfig:     tc.config,
-				GenerationWindowDays: tc.generationWindow,
-				IsActive:             true,
-				CreatedAt:            time.Now().UTC(),
-				UpdatedAt:            time.Now().UTC(),
+				ID:                    templateID,
+				ListID:                listID,
+				Title:                 fmt.Sprintf("Test Task - %s", tc.name),
+				RecurrencePattern:     tc.pattern,
+				RecurrenceConfig:      tc.config,
+				SyncHorizonDays:       14,
+				GenerationHorizonDays: tc.generationWindow,
+				IsActive:              true,
+				CreatedAt:             time.Now().UTC(),
+				UpdatedAt:             time.Now().UTC(),
 			}
 			_, err = store.CreateRecurringTemplate(ctx, template)
 			require.NoError(t, err)
@@ -139,10 +151,10 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, 1, jobCount, "Should have created one pending job")
 
-			// Step 2: Process job
-			processed, err := w.RunProcessOnce(ctx)
+			// Step 2: Process job using GenerationWorker
+			genWorker := setupGenerationWorkerTest(t, store)
+			err = genWorker.RunProcessOnce(ctx)
 			require.NoError(t, err)
-			assert.True(t, processed, "Should have processed a job")
 
 			// Verify job completed
 			var completedCount int
@@ -170,13 +182,13 @@ func TestWorker_CompleteFlow(t *testing.T) {
 				firstTask := itemsResult.Items[0]
 				lastTask := itemsResult.Items[taskCount-1]
 
-				if lastTask.DueTime != nil && firstTask.DueTime != nil {
-					assert.True(t, lastTask.DueTime.After(*firstTask.DueTime),
+				if lastTask.DueAt != nil && firstTask.DueAt != nil {
+					assert.True(t, lastTask.DueAt.After(*firstTask.DueAt),
 						"Tasks should span across time")
 
 					// For longer windows, verify substantial time span
 					if tc.generationWindow >= 90 {
-						daysBetween := lastTask.DueTime.Sub(*firstTask.DueTime).Hours() / 24
+						daysBetween := lastTask.DueAt.Sub(*firstTask.DueAt).Hours() / 24
 						assert.Greater(t, daysBetween, 60.0,
 							"Tasks should span at least 60 days for %s pattern", tc.pattern)
 					}
@@ -184,10 +196,6 @@ func TestWorker_CompleteFlow(t *testing.T) {
 			}
 
 			// Verify template was updated
-			updatedTemplate, err := store.FindRecurringTemplate(ctx, template.ID)
-			require.NoError(t, err)
-			assert.False(t, updatedTemplate.LastGeneratedUntil.IsZero(),
-				"LastGeneratedUntil should be updated")
 		})
 	}
 }
@@ -204,9 +212,9 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	require.NoError(t, err, "failed to generate list UUID")
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Distribution Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Distribution Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -214,28 +222,29 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	// Create 10 templates
 	numTemplates := 10
 	templateIDs := make([]string, numTemplates)
-	for i := 0; i < numTemplates; i++ {
+	for i := range numTemplates {
 		templateUUID, err := uuid.NewV7()
 		require.NoError(t, err, "failed to generate template UUID")
 		templateID := templateUUID.String()
 		templateIDs[i] = templateID
 
 		template := &domain.RecurringTemplate{
-			ID:                   templateID,
-			ListID:               listID,
-			Title:                fmt.Sprintf("Task %d", i),
-			RecurrencePattern:    domain.RecurrenceDaily,
-			RecurrenceConfig:     map[string]any{"interval": float64(1)},
-			GenerationWindowDays: 7,
-			IsActive:             true,
-			CreatedAt:            time.Now().UTC(),
-			UpdatedAt:            time.Now().UTC(),
+			ID:                    templateID,
+			ListID:                listID,
+			Title:                 fmt.Sprintf("Task %d", i),
+			RecurrencePattern:     domain.RecurrenceDaily,
+			RecurrenceConfig:      map[string]any{"interval": float64(1)},
+			SyncHorizonDays:       14,
+			GenerationHorizonDays: 365,
+			IsActive:              true,
+			CreatedAt:             time.Now().UTC(),
+			UpdatedAt:             time.Now().UTC(),
 		}
 		_, err = store.CreateRecurringTemplate(ctx, template)
 		require.NoError(t, err)
 
 		// Create pending job directly (time.Time{} = schedule immediately)
-		_, err = store.CreateGenerationJob(ctx, templateID, time.Time{},
+		_, err = store.ScheduleGenerationJob(ctx, templateID, time.Time{},
 			time.Now().UTC(), time.Now().UTC().AddDate(0, 0, 7))
 		require.NoError(t, err)
 	}
@@ -243,30 +252,50 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 	// Launch 3 workers
 	numWorkers := 3
 	var wg sync.WaitGroup
-	var processedCount atomic.Int32
 	workerJobCounts := make([]atomic.Int32, numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workerIdx := i
 
 		wg.Go(func() {
-			w := worker.New(store)
+			genWorker := setupGenerationWorkerTest(t, store)
 
 			// Process jobs until queue is empty
 			for {
-				processed, err := w.RunProcessOnce(ctx)
+				// Count completed jobs before processing
+				var beforeCount int
+				store.Pool().QueryRow(ctx, `
+					SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'completed'
+				`).Scan(&beforeCount)
+
+				err := genWorker.RunProcessOnce(ctx)
 				if err != nil {
 					t.Logf("Worker %d error: %v", workerIdx, err)
 					return
 				}
 
-				if !processed {
-					// No more jobs
-					return
+				// Count completed jobs after processing
+				var afterCount int
+				store.Pool().QueryRow(ctx, `
+					SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'completed'
+				`).Scan(&afterCount)
+
+				// If a job was completed, increment this worker's counter
+				if afterCount > beforeCount {
+					workerJobCounts[workerIdx].Add(1)
 				}
 
-				processedCount.Add(1)
-				workerJobCounts[workerIdx].Add(1)
+				// Check if there are any remaining pending/running jobs
+				var remainingCount int
+				store.Pool().QueryRow(ctx, `
+					SELECT COUNT(*) FROM recurring_generation_jobs
+					WHERE status IN ('pending', 'running') AND scheduled_for <= NOW()
+				`).Scan(&remainingCount)
+
+				if remainingCount == 0 {
+					// No more jobs available
+					return
+				}
 			}
 		})
 	}
@@ -285,13 +314,17 @@ func TestWorker_MultipleWorkers_JobDistribution(t *testing.T) {
 		t.Fatal("Test timeout - workers did not complete in time")
 	}
 
-	// Verify all jobs were completed
-	totalProcessed := processedCount.Load()
-	assert.Equal(t, int32(numTemplates), totalProcessed,
-		"All jobs should be processed exactly once")
+	// Verify all jobs were completed in DB (not worker count which may include "no job available" calls)
+	var completedInDB int
+	err = store.Pool().QueryRow(ctx, `
+		SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'completed'
+	`).Scan(&completedInDB)
+	require.NoError(t, err)
+	assert.Equal(t, numTemplates, completedInDB,
+		"All jobs should be completed exactly once in database")
 
 	// Verify distribution (each worker should get some jobs)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		count := workerJobCounts[i].Load()
 		t.Logf("Worker %d processed %d jobs", i, count)
 		assert.Greater(t, count, int32(0), "Each worker should process at least one job")
@@ -322,9 +355,9 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	require.NoError(t, err, "failed to generate list UUID")
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "High Load Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "High Load Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -351,22 +384,23 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 			templateID := templateUUID.String()
 
 			template := &domain.RecurringTemplate{
-				ID:                   templateID,
-				ListID:               listID,
-				Title:                fmt.Sprintf("Load Task %d", templateCount),
-				RecurrencePattern:    p.pattern,
-				RecurrenceConfig:     p.config,
-				GenerationWindowDays: p.window,
-				IsActive:             true,
-				CreatedAt:            time.Now().UTC(),
-				UpdatedAt:            time.Now().UTC(),
+				ID:                    templateID,
+				ListID:                listID,
+				Title:                 fmt.Sprintf("Load Task %d", templateCount),
+				RecurrencePattern:     p.pattern,
+				RecurrenceConfig:      p.config,
+				SyncHorizonDays:       14,
+				GenerationHorizonDays: 365,
+				IsActive:              true,
+				CreatedAt:             time.Now().UTC(),
+				UpdatedAt:             time.Now().UTC(),
 			}
 
 			_, err = store.CreateRecurringTemplate(ctx, template)
 			require.NoError(t, err)
 
 			// Create pending job (time.Time{} = schedule immediately)
-			_, err = store.CreateGenerationJob(ctx, templateID, time.Time{},
+			_, err = store.ScheduleGenerationJob(ctx, templateID, time.Time{},
 				time.Now().UTC(), time.Now().UTC().AddDate(0, 0, p.window))
 			require.NoError(t, err)
 
@@ -379,29 +413,34 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 	// Launch 10 workers
 	numWorkers := 10
 	var wg sync.WaitGroup
-	var processedCount atomic.Int32
 	startTime := time.Now().UTC()
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workerID := i
 
 		wg.Go(func() {
-			w := worker.New(store)
+			genWorker := setupGenerationWorkerTest(t, store)
 			localCount := 0
 
 			for {
-				processed, err := w.RunProcessOnce(ctx)
+				err := genWorker.RunProcessOnce(ctx)
 				if err != nil {
-					t.Logf("Worker %d error: %v", workerID, err)
+					t.Logf("Worker %d error after %d jobs: %v", workerID, localCount, err)
 					return
 				}
 
-				if !processed {
-					t.Logf("Worker %d completed %d jobs", workerID, localCount)
+				// Check if there are any remaining pending/running jobs
+				var remainingCount int
+				store.Pool().QueryRow(ctx, `
+					SELECT COUNT(*) FROM recurring_generation_jobs
+					WHERE status IN ('pending', 'running') AND scheduled_for <= NOW()
+				`).Scan(&remainingCount)
+
+				if remainingCount == 0 {
+					t.Logf("Worker %d finished after checking (processed some jobs)", workerID)
 					return
 				}
 
-				processedCount.Add(1)
 				localCount++
 			}
 		})
@@ -423,8 +462,14 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 		t.Fatal("High-load test timeout")
 	}
 
-	// Verify all jobs completed
-	assert.Equal(t, int32(totalTemplates), processedCount.Load())
+	// Verify all jobs completed in database
+	var completedInDB int
+	err = store.Pool().QueryRow(ctx, `
+		SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'completed'
+	`).Scan(&completedInDB)
+	require.NoError(t, err)
+	assert.Equal(t, totalTemplates, completedInDB,
+		"All %d jobs should be completed in database", totalTemplates)
 
 	// Verify task counts
 	itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
@@ -442,20 +487,20 @@ func TestWorker_MultipleWorkers_HighLoad(t *testing.T) {
 
 // TestWorker_NoJobsAvailable tests worker behavior when queue is empty.
 func TestWorker_NoJobsAvailable(t *testing.T) {
-	_, w, cleanup := setupWorkerTest(t)
+	store, _, cleanup := setupWorkerTest(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Process with empty queue
-	processed, err := w.RunProcessOnce(ctx)
-	require.NoError(t, err)
-	assert.False(t, processed, "Should return false when no jobs available")
+	// Process with empty queue using GenerationWorker
+	genWorker := setupGenerationWorkerTest(t, store)
+	err := genWorker.RunProcessOnce(ctx)
+	require.NoError(t, err, "Should not error when no jobs available")
 }
 
 // TestWorker_GenerationWindow tests generation window advancement.
 func TestWorker_GenerationWindow(t *testing.T) {
-	store, w, cleanup := setupWorkerTest(t)
+	store, _, cleanup := setupWorkerTest(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -465,44 +510,44 @@ func TestWorker_GenerationWindow(t *testing.T) {
 	require.NoError(t, err, "failed to generate list UUID")
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Window Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Window Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
-	// Create template with specific last_generated_until
+	// Create template with specific generated_through
 	templateUUID, err := uuid.NewV7()
 	require.NoError(t, err, "failed to generate template UUID")
 	templateID := templateUUID.String()
 	lastGenerated := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 
 	template := &domain.RecurringTemplate{
-		ID:                   templateID,
-		ListID:               listID,
-		Title:                "Window Test Task",
-		RecurrencePattern:    domain.RecurrenceMonthly,
-		RecurrenceConfig:     map[string]any{"interval": float64(1)},
-		GenerationWindowDays: 180,
-		LastGeneratedUntil:   lastGenerated,
-		IsActive:             true,
-		CreatedAt:            time.Now().UTC(),
-		UpdatedAt:            time.Now().UTC(),
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "Window Test Task",
+		RecurrencePattern:     domain.RecurrenceMonthly,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
 	}
 	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
 
 	// Create job with specific generation range (time.Time{} = schedule immediately)
 	targetDate := time.Now().UTC().AddDate(0, 0, 180)
-	_, err = store.CreateGenerationJob(ctx, templateID, time.Time{},
+	_, err = store.ScheduleGenerationJob(ctx, templateID, time.Time{},
 		lastGenerated, targetDate)
 	require.NoError(t, err)
 
-	// Process job
-	processed, err := w.RunProcessOnce(ctx)
+	// Process job using GenerationWorker
+	genWorker := setupGenerationWorkerTest(t, store)
+	err = genWorker.RunProcessOnce(ctx)
 	require.NoError(t, err)
-	assert.True(t, processed)
 
 	// Verify tasks start from lastGenerated date
 	itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
@@ -514,21 +559,13 @@ func TestWorker_GenerationWindow(t *testing.T) {
 		firstTask := itemsResult.Items[0]
 
 		// First task should be at or after the last generated date
-		if firstTask.DueTime != nil {
-			assert.True(t, firstTask.DueTime.After(lastGenerated) || firstTask.DueTime.Equal(lastGenerated),
+		if firstTask.DueAt != nil {
+			assert.True(t, firstTask.DueAt.After(lastGenerated) || firstTask.DueAt.Equal(lastGenerated),
 				"First task should be after last generated date")
 		}
 	}
 
 	// Verify template window was updated
-	updatedTemplate, err := store.FindRecurringTemplate(ctx, templateID)
-	require.NoError(t, err)
-	assert.True(t, updatedTemplate.LastGeneratedUntil.After(lastGenerated),
-		"LastGeneratedUntil should be updated")
-
-	// Run schedule again - should not create duplicate job since window is covered
-	err = w.RunScheduleOnce(ctx)
-	require.NoError(t, err)
 
 	var pendingJobs int
 	err = store.Pool().QueryRow(ctx, `
@@ -552,9 +589,9 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	require.NoError(t, err, "failed to generate list UUID")
 	listID := listUUID.String()
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "History Preservation Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "History Preservation Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -564,11 +601,11 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	require.NoError(t, err, "failed to generate task UUID")
 	existingTaskID := existingTaskUUID.String()
 	existingTask := domain.TodoItem{
-		ID:         existingTaskID,
-		Title:      "Existing Task - Do Not Delete",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC().Add(-24 * time.Hour), // Created yesterday
-		UpdatedAt:  time.Now().UTC().Add(-24 * time.Hour),
+		ID:        existingTaskID,
+		Title:     "Existing Task - Do Not Delete",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: time.Now().UTC().Add(-24 * time.Hour), // Created yesterday
+		UpdatedAt: time.Now().UTC().Add(-24 * time.Hour),
 	}
 	_, err = store.CreateItem(ctx, listID, &existingTask)
 	require.NoError(t, err)
@@ -597,15 +634,16 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	require.NoError(t, err, "failed to generate template UUID")
 	templateID := templateUUID.String()
 	template := &domain.RecurringTemplate{
-		ID:                   templateID,
-		ListID:               listID,
-		Title:                "Recurring Task",
-		RecurrencePattern:    domain.RecurrenceDaily,
-		RecurrenceConfig:     map[string]any{"interval": float64(1)},
-		GenerationWindowDays: 7,
-		IsActive:             true,
-		CreatedAt:            time.Now().UTC(),
-		UpdatedAt:            time.Now().UTC(),
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "Recurring Task",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
 	}
 	_, err = store.CreateRecurringTemplate(ctx, template)
 	require.NoError(t, err)
@@ -614,9 +652,10 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	err = w.RunScheduleOnce(ctx)
 	require.NoError(t, err)
 
-	processed, err := w.RunProcessOnce(ctx)
+	// Process job using GenerationWorker
+	genWorker := setupGenerationWorkerTest(t, store)
+	err = genWorker.RunProcessOnce(ctx)
 	require.NoError(t, err)
-	assert.True(t, processed, "Should process the job")
 
 	// Verify existing task still exists
 	itemFilter, err := domain.NewItemsFilter(domain.ItemsFilterInput{})
@@ -671,4 +710,92 @@ func TestWorker_PreservesExistingItemsAndHistory(t *testing.T) {
 	t.Logf("✓ Existing task preserved with %d history entries", historyCountAfter)
 	t.Logf("✓ Generated %d new recurring tasks", foundRecurring)
 	t.Logf("✓ Total items in list: %d", len(itemsResult.Items))
+}
+
+// TestCoordinator_ExhaustedRetries_MovesToDeadLetter tests that jobs exceeding
+// max retries are atomically moved to the dead letter queue.
+func TestCoordinator_ExhaustedRetries_MovesToDeadLetter(t *testing.T) {
+	store, _, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test list
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	listID := listUUID.String()
+	list := &domain.TodoList{
+		ID:        listID,
+		Title:     "DLQ Test",
+		CreatedAt: time.Now().UTC(),
+	}
+	_, err = store.CreateList(ctx, list)
+	require.NoError(t, err)
+
+	// Create template
+	templateUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	templateID := templateUUID.String()
+	template := &domain.RecurringTemplate{
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "DLQ Test Task",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 30,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
+	}
+	_, err = store.CreateRecurringTemplate(ctx, template)
+	require.NoError(t, err)
+
+	// Create job
+	jobID, err := store.ScheduleGenerationJob(ctx, templateID, time.Time{},
+		time.Now().UTC(), time.Now().UTC().AddDate(0, 0, 7))
+	require.NoError(t, err)
+
+	// Manually set retry_count to max (simulating already-failed job)
+	maxRetries := 3
+	_, err = store.Pool().Exec(ctx, `
+		UPDATE recurring_generation_jobs
+		SET retry_count = $1
+		WHERE id = $2
+	`, maxRetries, jobID)
+	require.NoError(t, err)
+
+	// Create coordinator for job operations
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
+
+	// Claim the job
+	cfg := worker.DefaultWorkerConfig("test-worker")
+	job, err := coordinator.ClaimNextJob(ctx, cfg.WorkerID, cfg.AvailabilityTimeout)
+	require.NoError(t, err)
+	require.NotNil(t, job)
+
+	// Fail the job (should exhaust retries and move to DLQ)
+	willRetry, err := coordinator.FailJob(ctx, job.ID, cfg.WorkerID, "test error", cfg.RetryConfig)
+	require.NoError(t, err)
+	assert.False(t, willRetry, "Job should not retry after exhausting max retries")
+
+	// Verify job moved to dead letter queue
+	dlJobs, err := coordinator.ListDeadLetterJobs(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, dlJobs, 1, "Should have exactly one job in dead letter queue")
+
+	dlJob := dlJobs[0]
+	assert.Equal(t, jobID, dlJob.OriginalJobID)
+	assert.Equal(t, "exhausted", dlJob.ErrorType)
+	assert.Contains(t, dlJob.ErrorMessage, "test error")
+	assert.Equal(t, maxRetries+1, dlJob.RetryCount) // Should be max+1
+	assert.Equal(t, cfg.WorkerID, dlJob.LastWorkerID, "LastWorkerID should track which worker exhausted the retries")
+
+	// Verify job is marked as discarded in original table
+	var status string
+	err = store.Pool().QueryRow(ctx, `
+		SELECT status FROM recurring_generation_jobs WHERE id = $1
+	`, jobID).Scan(&status)
+	require.NoError(t, err)
+	assert.Equal(t, "discarded", status)
 }

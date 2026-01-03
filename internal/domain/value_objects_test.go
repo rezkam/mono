@@ -215,7 +215,7 @@ func TestNewItemsFilter_EmptyTagsSlice(t *testing.T) {
 }
 
 func TestNewItemsFilter_ValidOrderBy(t *testing.T) {
-	testCases := []string{"due_time", "priority", "created_at", "updated_at"}
+	testCases := []string{"due_at", "priority", "created_at", "updated_at"}
 
 	for _, orderBy := range testCases {
 		t.Run(orderBy, func(t *testing.T) {
@@ -567,7 +567,7 @@ func TestNewListsSorting_EmptyInput(t *testing.T) {
 }
 
 func TestNewListsSorting_ValidOrderBy(t *testing.T) {
-	testCases := []string{"create_time", "title"}
+	testCases := []string{"created_at", "title"}
 
 	for _, orderBy := range testCases {
 		t.Run(orderBy, func(t *testing.T) {
@@ -596,7 +596,7 @@ func TestNewListsSorting_InvalidOrderBy(t *testing.T) {
 
 func TestNewListsSorting_ItemsOrderByNotAllowed(t *testing.T) {
 	// Order by fields valid for items but not for lists
-	itemsOnlyFields := []string{"due_time", "priority", "created_at", "updated_at"}
+	itemsOnlyFields := []string{"due_at", "priority", "updated_at"}
 
 	for _, field := range itemsOnlyFields {
 		t.Run(field, func(t *testing.T) {
@@ -700,6 +700,6 @@ func TestNewListsSorting_CombinedSorting(t *testing.T) {
 }
 
 func TestNewListsSorting_DefaultValues(t *testing.T) {
-	assert.Equal(t, "create_time", ListsDefaultOrderBy)
+	assert.Equal(t, "created_at", ListsDefaultOrderBy)
 	assert.Equal(t, "desc", ListsDefaultOrderDir)
 }

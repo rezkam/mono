@@ -19,7 +19,7 @@ func TestGenerateAPIKey_UniqueShortTokens(t *testing.T) {
 	duplicates := []string{}
 
 	// Generate keys as fast as possible (simulates high-throughput scenario)
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		keyParts, err := keygen.GenerateAPIKey("sk", "mono", "v1")
 		if err != nil {
 			t.Fatalf("Failed to generate key %d: %v", i, err)
@@ -46,7 +46,7 @@ func TestGenerateAPIKey_ShortTokenCollisionRate(t *testing.T) {
 	const numKeys = 100
 	seen := make(map[string]int)
 
-	for i := 0; i < numKeys; i++ {
+	for range numKeys {
 		keyParts, err := keygen.GenerateAPIKey("sk", "mono", "v1")
 		if err != nil {
 			t.Fatalf("Failed to generate key: %v", err)
@@ -186,7 +186,7 @@ func TestParseAPIKey_SpecialCharactersInLongSecret(t *testing.T) {
 // TestGenerateAndParse_RoundTrip tests that generated keys can be parsed correctly,
 // including keys whose long secrets happen to contain hyphens or underscores.
 func TestGenerateAndParse_RoundTrip(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		// Generate key
 		generated, err := keygen.GenerateAPIKey("sk", "mono", "v1")
 		require.NoError(t, err)

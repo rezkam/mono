@@ -27,7 +27,7 @@ func TestGetList_ReturnsTotalAndUndoneItems(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add 3 items (all will be "todo" status initially)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
 			Title: fmt.Sprintf("Task %d", i+1),
 		})

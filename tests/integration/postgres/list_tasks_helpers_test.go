@@ -8,6 +8,7 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,8 @@ func newListTasksTestEnv(t *testing.T) *listTasksTestEnv {
 	store, err := postgres.NewPostgresStore(ctx, pgURL)
 	require.NoError(t, err)
 
-	todoService := todo.NewService(store, todo.Config{
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{
 		DefaultPageSize: 25,
 		MaxPageSize:     100,
 	})

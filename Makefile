@@ -37,7 +37,7 @@ DEV_STORAGE_DSN ?= postgres://mono:mono_password@localhost:5432/mono_db?sslmode=
 # Both databases can run simultaneously on different ports.
 # =============================================================================
 
-.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-build-up docker-rebuild docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres docker-health docker-health-server docker-buildx-setup docker-build-migrate docker-push-migrate db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
+.PHONY: all help gen gen-openapi gen-sqlc tidy fmt fmt-check test test-one build build-worker build-apikey gen-apikey gen-apikey-docker run clean docker-build docker-run docker-up docker-build-up docker-rebuild docker-down docker-restart docker-restart-server docker-restart-worker docker-logs docker-logs-server docker-logs-worker docker-logs-postgres docker-ps docker-clean docker-shell-server docker-shell-worker docker-shell-postgres docker-health docker-health-server docker-buildx-setup docker-build-migrate docker-push-migrate db-up db-down db-clean db-migrate-up db-migrate-down db-migrate-create test-sql test-integration test-integration-up test-integration-down test-integration-clean test-integration-http test-e2e test-all test-db-status test-db-logs test-db-shell bench bench-test pgo-collect pgo-build pgo-clean lint build-timeutc-linter setup-hooks security sync-agents
 
 # Default target - show help when no target specified
 all: help
@@ -549,6 +549,27 @@ endif
 	@# -count=1 disables test caching to ensure tests run fresh against real database
 	@# -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
 	go test -v -p 1 ./tests/integration/... -count=1
+
+# Test database DSN for convenience
+TEST_DSN := postgres://postgres:postgres@localhost:5433/mono_test?sslmode=disable
+
+test-one: ## Run a specific test (usage: make test-one RUN=TestName [PKG=./path/to/pkg])
+	@if [ -z "$(RUN)" ]; then \
+		echo "Error: RUN is required"; \
+		echo "Usage: make test-one RUN=TestName"; \
+		echo "       make test-one RUN=TestTemplateJobAtomicity"; \
+		echo "       make test-one RUN=TestTemplateJobAtomicity PKG=./tests/integration/postgres"; \
+		exit 1; \
+	fi
+	@# Ensure test database is running
+	@if ! docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then \
+		echo "Test database not running. Starting it..."; \
+		$(MAKE) test-integration-up; \
+	fi
+	@# Run the specific test
+	@PKG_PATH=$${PKG:-./tests/integration/...}; \
+	echo "Running test '$(RUN)' in $$PKG_PATH..."; \
+	MONO_STORAGE_DSN="$(TEST_DSN)" go test -v -run "$(RUN)" $$PKG_PATH -count=1
 
 test-e2e: ## [TEST DB] Run end-to-end tests (auto-cleanup before/after)
 	@echo "=== Cleaning any existing test database ==="

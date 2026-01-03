@@ -41,9 +41,9 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Priority Semantic Order Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Priority Semantic Order Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -68,12 +68,12 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 
 		p := priority
 		item := &domain.TodoItem{
-			ID:         itemID,
-			Title:      "Priority " + string(priority),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: now.Add(time.Duration(i) * time.Second), // Slight offset
-			UpdatedAt:  now,
-			Priority:   &p,
+			ID:        itemID,
+			Title:     "Priority " + string(priority),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: now.Add(time.Duration(i) * time.Second), // Slight offset
+			UpdatedAt: now,
+			Priority:  &p,
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestPrioritySorting_SemanticOrder(t *testing.T) {
 		require.Len(t, descResult.Items, 4)
 
 		// ASC and DESC should be exact reverses
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			assert.Equal(t, ascResult.Items[i].ID, descResult.Items[3-i].ID,
 				"ASC[%d] should equal DESC[%d]", i, 3-i)
 		}
@@ -210,9 +210,9 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Not Alphabetical Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Not Alphabetical Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -222,24 +222,24 @@ func TestPrioritySorting_NotAlphabetical(t *testing.T) {
 
 	highPriority := domain.TaskPriorityHigh
 	highItem := &domain.TodoItem{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		Title:      "High Priority Task",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: now,
-		UpdatedAt:  now,
-		Priority:   &highPriority,
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		Title:     "High Priority Task",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Priority:  &highPriority,
 	}
 	_, err = store.CreateItem(ctx, listID, highItem)
 	require.NoError(t, err)
 
 	lowPriority := domain.TaskPriorityLow
 	lowItem := &domain.TodoItem{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		Title:      "Low Priority Task",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: now.Add(time.Second),
-		UpdatedAt:  now,
-		Priority:   &lowPriority,
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		Title:     "Low Priority Task",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: now.Add(time.Second),
+		UpdatedAt: now,
+		Priority:  &lowPriority,
 	}
 	_, err = store.CreateItem(ctx, listID, lowItem)
 	require.NoError(t, err)
@@ -318,9 +318,9 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Nulls Last Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Nulls Last Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -330,36 +330,36 @@ func TestPrioritySorting_WithNulls(t *testing.T) {
 	// Create item with priority
 	highPriority := domain.TaskPriorityHigh
 	highItem := &domain.TodoItem{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		Title:      "High Priority",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: now,
-		UpdatedAt:  now,
-		Priority:   &highPriority,
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		Title:     "High Priority",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Priority:  &highPriority,
 	}
 	_, err = store.CreateItem(ctx, listID, highItem)
 	require.NoError(t, err)
 
 	// Create item without priority (NULL)
 	nullItem := &domain.TodoItem{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		Title:      "No Priority",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: now.Add(time.Second),
-		UpdatedAt:  now,
-		Priority:   nil, // NULL priority
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		Title:     "No Priority",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: now.Add(time.Second),
+		UpdatedAt: now,
+		Priority:  nil, // NULL priority
 	}
 	_, err = store.CreateItem(ctx, listID, nullItem)
 	require.NoError(t, err)
 
 	lowPriority := domain.TaskPriorityLow
 	lowItem := &domain.TodoItem{
-		ID:         uuid.Must(uuid.NewV7()).String(),
-		Title:      "Low Priority",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: now.Add(2 * time.Second),
-		UpdatedAt:  now,
-		Priority:   &lowPriority,
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		Title:     "Low Priority",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: now.Add(2 * time.Second),
+		UpdatedAt: now,
+		Priority:  &lowPriority,
 	}
 	_, err = store.CreateItem(ctx, listID, lowItem)
 	require.NoError(t, err)

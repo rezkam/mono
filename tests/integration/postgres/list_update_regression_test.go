@@ -9,16 +9,17 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestUpdateList_PreservesCreateTime is a regression test ensuring that
-// UpdateList does NOT corrupt create_time to zero value.
+// TestUpdateList_PreservesCreatedAt is a regression test ensuring that
+// UpdateList does NOT corrupt created_at to zero value.
 //
-// Bug: Prior implementation included create_time in UPDATE SET clause,
+// Bug: Prior implementation included created_at in UPDATE SET clause,
 // causing it to be overwritten with Go's zero time when not explicitly set.
-func TestUpdateList_PreservesCreateTime(t *testing.T) {
+func TestUpdateList_PreservesCreatedAt(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
 
@@ -29,49 +30,49 @@ func TestUpdateList_PreservesCreateTime(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	// Create a list with known create_time
+	// Create a list with known created_at
 	listUUID, err := uuid.NewV7()
 	require.NoError(t, err)
 	listID := listUUID.String()
-	originalCreateTime := time.Now().UTC().Truncate(time.Microsecond)
+	originalCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Original Title",
-		CreateTime: originalCreateTime,
+		ID:        listID,
+		Title:     "Original Title",
+		CreatedAt: originalCreatedAt,
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
-	// Verify create_time was set correctly in database
-	var dbCreateTime time.Time
+	// Verify created_at was set correctly in database
+	var dbCreatedAt time.Time
 	err = db.QueryRowContext(ctx, `
-		SELECT create_time FROM todo_lists WHERE id = $1
-	`, listID).Scan(&dbCreateTime)
+		SELECT created_at FROM todo_lists WHERE id = $1
+	`, listID).Scan(&dbCreatedAt)
 	require.NoError(t, err)
-	require.False(t, dbCreateTime.IsZero(), "create_time should be set on creation")
+	require.False(t, dbCreatedAt.IsZero(), "created_at should be set on creation")
 
-	// Update the list title (UpdateList only takes Title, not CreateTime)
+	// Update the list title (UpdateList only takes Title, not CreatedAt)
 	list.Title = "Updated Title"
 	_, err = store.UpdateList(ctx, ListToUpdateParams(list))
 	require.NoError(t, err)
 
-	// Verify create_time was NOT modified
-	var afterUpdateCreateTime time.Time
+	// Verify created_at was NOT modified
+	var afterUpdateCreatedAt time.Time
 	err = db.QueryRowContext(ctx, `
-		SELECT create_time FROM todo_lists WHERE id = $1
-	`, listID).Scan(&afterUpdateCreateTime)
+		SELECT created_at FROM todo_lists WHERE id = $1
+	`, listID).Scan(&afterUpdateCreatedAt)
 	require.NoError(t, err)
 
-	assert.Equal(t, dbCreateTime.Unix(), afterUpdateCreateTime.Unix(),
-		"create_time should be immutable after creation - UpdateList must not modify it")
-	assert.False(t, afterUpdateCreateTime.IsZero(),
-		"create_time must not be corrupted to zero value")
+	assert.Equal(t, dbCreatedAt.Unix(), afterUpdateCreatedAt.Unix(),
+		"created_at should be immutable after creation - UpdateList must not modify it")
+	assert.False(t, afterUpdateCreatedAt.IsZero(),
+		"created_at must not be corrupted to zero value")
 }
 
-// TestUpdateList_PreservesCreateTime_MultipleUpdates ensures create_time
+// TestUpdateList_PreservesCreatedAt_MultipleUpdates ensures created_at
 // remains stable across multiple list updates.
-func TestUpdateList_PreservesCreateTime_MultipleUpdates(t *testing.T) {
+func TestUpdateList_PreservesCreatedAt_MultipleUpdates(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
 
@@ -88,18 +89,18 @@ func TestUpdateList_PreservesCreateTime_MultipleUpdates(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Title v1",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Title v1",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
-	// Get original create_time
-	var originalCreateTime time.Time
+	// Get original created_at
+	var originalCreatedAt time.Time
 	err = db.QueryRowContext(ctx, `
-		SELECT create_time FROM todo_lists WHERE id = $1
-	`, listID).Scan(&originalCreateTime)
+		SELECT created_at FROM todo_lists WHERE id = $1
+	`, listID).Scan(&originalCreatedAt)
 	require.NoError(t, err)
 
 	// Perform multiple updates
@@ -110,19 +111,19 @@ func TestUpdateList_PreservesCreateTime_MultipleUpdates(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Verify create_time unchanged after all updates
-	var finalCreateTime time.Time
+	// Verify created_at unchanged after all updates
+	var finalCreatedAt time.Time
 	err = db.QueryRowContext(ctx, `
-		SELECT create_time FROM todo_lists WHERE id = $1
-	`, listID).Scan(&finalCreateTime)
+		SELECT created_at FROM todo_lists WHERE id = $1
+	`, listID).Scan(&finalCreatedAt)
 	require.NoError(t, err)
 
-	assert.Equal(t, originalCreateTime.Unix(), finalCreateTime.Unix(),
-		"create_time should remain unchanged after multiple updates")
+	assert.Equal(t, originalCreatedAt.Unix(), finalCreatedAt.Unix(),
+		"created_at should remain unchanged after multiple updates")
 }
 
-// TestUpdateItem_PreservesCreateTime ensures item create_time is immutable.
-func TestUpdateItem_PreservesCreateTime(t *testing.T) {
+// TestUpdateItem_PreservesCreatedAt ensures item created_at is immutable.
+func TestUpdateItem_PreservesCreatedAt(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
 
@@ -133,7 +134,8 @@ func TestUpdateItem_PreservesCreateTime(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create list and item
 	list, err := todoService.CreateList(ctx, "Test List")
@@ -147,13 +149,13 @@ func TestUpdateItem_PreservesCreateTime(t *testing.T) {
 	require.NoError(t, err)
 	itemID := createdItem.ID
 
-	// Get original create_time
-	var originalCreateTime time.Time
+	// Get original created_at
+	var originalCreatedAt time.Time
 	err = db.QueryRowContext(ctx, `
-		SELECT create_time FROM todo_items WHERE id = $1
-	`, itemID).Scan(&originalCreateTime)
+		SELECT created_at FROM todo_items WHERE id = $1
+	`, itemID).Scan(&originalCreatedAt)
 	require.NoError(t, err)
-	require.False(t, originalCreateTime.IsZero())
+	require.False(t, originalCreatedAt.IsZero())
 
 	// Update the item
 	existingItem, err := todoService.GetItem(ctx, itemID)
@@ -163,15 +165,15 @@ func TestUpdateItem_PreservesCreateTime(t *testing.T) {
 	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, existingItem))
 	require.NoError(t, err)
 
-	// Verify create_time unchanged
-	var afterUpdateCreateTime time.Time
+	// Verify created_at unchanged
+	var afterUpdateCreatedAt time.Time
 	err = db.QueryRowContext(ctx, `
-		SELECT create_time FROM todo_items WHERE id = $1
-	`, itemID).Scan(&afterUpdateCreateTime)
+		SELECT created_at FROM todo_items WHERE id = $1
+	`, itemID).Scan(&afterUpdateCreatedAt)
 	require.NoError(t, err)
 
-	assert.Equal(t, originalCreateTime.Unix(), afterUpdateCreateTime.Unix(),
-		"item create_time should be immutable")
+	assert.Equal(t, originalCreatedAt.Unix(), afterUpdateCreatedAt.Unix(),
+		"item created_at should be immutable")
 }
 
 // TestListLists_ReturnsCorrectItemCounts verifies list metadata (TotalItems, UndoneItems)
@@ -187,7 +189,8 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Close()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	list, err := todoService.CreateList(ctx, "Count Test")
@@ -195,7 +198,7 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	listID := list.ID
 
 	// Add 3 items
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		item := &domain.TodoItem{
 			Title: "Task",
 		}

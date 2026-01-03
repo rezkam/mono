@@ -81,14 +81,14 @@ func TestTimingAttackMitigated_WithDataIndependentTiming(t *testing.T) {
 	t.Log("Measuring timing with FIXED implementation...")
 
 	// Measure: Non-existent key (should now compute hash too!)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 		authenticator.ValidateAPIKey(ctx, nonExistentKey)
 		nonExistentTime += time.Since(start)
 	}
 
 	// Measure: Existing key with wrong secret (also computes hash)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 		authenticator.ValidateAPIKey(ctx, validKeyWrongSecret)
 		existingWrongSecretTime += time.Since(start)
@@ -155,7 +155,7 @@ func TestWithDataIndependentTiming_AlwaysComputesHash(t *testing.T) {
 	t.Log("Measuring hash computation overhead...")
 
 	// Measure: WITH hash computation (fixed implementation)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 
 		subtle.WithDataIndependentTiming(func() {
@@ -167,7 +167,7 @@ func TestWithDataIndependentTiming_AlwaysComputesHash(t *testing.T) {
 	}
 
 	// Measure: WITHOUT hash computation (vulnerable implementation)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 
 		subtle.WithDataIndependentTiming(func() {

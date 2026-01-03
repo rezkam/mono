@@ -18,6 +18,7 @@ import (
 	"github.com/rezkam/mono/internal/infrastructure/http/handler"
 	"github.com/rezkam/mono/internal/infrastructure/observability"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 )
 
 // Default values for optional configuration.
@@ -110,8 +111,11 @@ func run() error {
 
 // initializeAPIServer wires application services and HTTP components.
 func initializeAPIServer(store *postgres.Store, cfg *config.ServerConfig) (*httpServer.APIServer, func(), error) {
+	// Initialize task generator for recurring templates
+	generator := recurring.NewDomainGenerator()
+
 	// Initialize todo service
-	todoService := todo.NewService(store, todo.Config{
+	todoService := todo.NewService(store, generator, todo.Config{
 		DefaultPageSize: cfg.Todo.DefaultPageSize,
 		MaxPageSize:     cfg.Todo.MaxPageSize,
 	})

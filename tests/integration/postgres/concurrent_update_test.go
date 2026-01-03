@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,8 @@ import (
 // to the same item complete successfully without data loss or corruption.
 func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	store, ctx := SetupTestStore(t)
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -27,9 +29,9 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Concurrent Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Concurrent Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -40,11 +42,11 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	itemID := itemUUID.String()
 
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Original Title",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Original Title",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -105,7 +107,8 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 //   - Successful update is preserved, failed request must refetch and retry
 func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	store, ctx := SetupTestStore(t)
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create list
 	listUUID, err := uuid.NewV7()
@@ -113,9 +116,9 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -126,11 +129,11 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 	itemID := itemUUID.String()
 
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Task 1",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Task 1",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -225,7 +228,8 @@ func TestConcurrentUpdateItem_LostUpdatePrevention(t *testing.T) {
 //   - Failed requests can refetch (version=2) and retry
 func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	store, ctx := SetupTestStore(t)
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -233,9 +237,9 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Concurrent Field Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Concurrent Field Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -246,12 +250,12 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 	itemID := itemUUID.String()
 
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Original Title",
-		Status:     domain.TaskStatusTodo,
-		Tags:       []string{"original"},
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Original Title",
+		Status:    domain.TaskStatusTodo,
+		Tags:      []string{"original"},
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -336,7 +340,8 @@ func TestConcurrentUpdateItem_DifferentFields(t *testing.T) {
 // timestamp is properly managed during concurrent updates.
 func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	store, ctx := SetupTestStore(t)
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -344,9 +349,9 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Timestamp Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Timestamp Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -358,11 +363,11 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 
 	createTime := time.Now().UTC().UTC()
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Timestamp Test",
-		Status:     domain.TaskStatusTodo,
-		CreateTime: createTime,
-		UpdatedAt:  createTime,
+		ID:        itemID,
+		Title:     "Timestamp Test",
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: createTime,
+		UpdatedAt: createTime,
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -416,7 +421,7 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	assert.True(t, finalItem.UpdatedAt.After(initialUpdatedAt) || finalItem.UpdatedAt.Equal(initialUpdatedAt),
 		"UpdatedAt should be at or after the initial updated_at from database")
 
-	t.Logf("CreateTime: %s, InitialUpdatedAt: %s, FinalUpdatedAt: %s",
+	t.Logf("CreatedAt: %s, InitialUpdatedAt: %s, FinalUpdatedAt: %s",
 		createTime.Format(time.RFC3339Nano),
 		initialUpdatedAt.Format(time.RFC3339Nano),
 		finalItem.UpdatedAt.Format(time.RFC3339Nano))
@@ -426,7 +431,8 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 // to different items don't interfere with each other.
 func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 	store, ctx := SetupTestStore(t)
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -434,9 +440,9 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Multi-Item Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Multi-Item Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -444,17 +450,17 @@ func TestConcurrentUpdateItem_DifferentItems(t *testing.T) {
 	// Create multiple items
 	const numItems = 10
 	itemIDs := make([]string, numItems)
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 		itemIDs[i] = itemUUID.String()
 
 		item := &domain.TodoItem{
-			ID:         itemIDs[i],
-			Title:      fmt.Sprintf("Item %d", i),
-			Status:     domain.TaskStatusTodo,
-			CreateTime: time.Now().UTC().UTC(),
-			UpdatedAt:  time.Now().UTC().UTC(),
+			ID:        itemIDs[i],
+			Title:     fmt.Sprintf("Item %d", i),
+			Status:    domain.TaskStatusTodo,
+			CreatedAt: time.Now().UTC().UTC(),
+			UpdatedAt: time.Now().UTC().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)

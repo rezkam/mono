@@ -24,16 +24,11 @@ type Repository interface {
 
 	// === Job Operations ===
 
-	// CreateGenerationJob creates a new background job for generating recurring tasks.
+	// ScheduleGenerationJob schedules a new background job for generating recurring tasks.
 	// scheduledFor: when to run the job (zero value = immediate)
 	// from/until: date range for task generation
 	// Returns the created job ID or error if creation fails.
-	CreateGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error)
-
-	// ClaimNextGenerationJob atomically claims the next pending job.
-	// Returns empty string if no jobs available, job ID if claimed successfully.
-	// Returns error only on failure (not for empty queue).
-	ClaimNextGenerationJob(ctx context.Context) (string, error)
+	ScheduleGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error)
 
 	// GetGenerationJob retrieves job details by ID.
 	// Returns error if job not found.
@@ -57,4 +52,31 @@ type Repository interface {
 	// BatchCreateTodoItems creates multiple todo items in a single operation.
 	// Returns the number of items created.
 	BatchCreateTodoItems(ctx context.Context, listID string, items []domain.TodoItem) (int64, error)
+
+	// BatchInsertItemsIgnoreConflict inserts items in batch with conflict handling.
+	// Duplicates based on (recurring_template_id, occurs_at) are silently ignored.
+	// Returns count of successfully inserted items.
+	BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error)
+
+	// SetGeneratedThrough updates the generated_through marker after generation.
+	SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error
+
+	// === Exception Operations ===
+
+	// ListExceptions retrieves exceptions for a template in date range.
+	// Used during generation to filter out deleted/edited instances.
+	ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
+
+	// === Reconciliation Operations ===
+
+	// FindStaleTemplatesForReconciliation retrieves templates needing reconciliation.
+	// Excludes templates with pending/running jobs if ExcludePending is true.
+	// Excludes templates updated after UpdatedBefore (grace period).
+	// Returns templates where generated_through < TargetDate.
+	FindStaleTemplatesForReconciliation(ctx context.Context, params FindStaleParams) ([]*domain.RecurringTemplate, error)
+
+	// DeleteFuturePendingItems deletes all pending items for a template that occur after the specified date.
+	// Used during reconciliation to remove items that shouldn't exist beyond the template's generated_through marker.
+	// Returns count of deleted items.
+	DeleteFuturePendingItems(ctx context.Context, templateID string, after time.Time) (int64, error)
 }

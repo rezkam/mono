@@ -10,6 +10,7 @@ import (
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
 	"github.com/rezkam/mono/internal/ptr"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,8 @@ func TestEtag_ReturnedInItemResponse(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list and item
 	listID := createTestList(t, store, "Etag Test List")
@@ -62,7 +64,8 @@ func TestEtag_UpdateWithMatchingEtag(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list and item
 	listID := createTestList(t, store, "Etag Update Test")
@@ -105,7 +108,8 @@ func TestEtag_UpdateWithMismatchingEtag(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list and item
 	listID := createTestList(t, store, "Etag Conflict Test")
@@ -141,7 +145,8 @@ func TestEtag_UpdateWithoutEtag(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list and item
 	listID := createTestList(t, store, "Etag Optional Test")
@@ -178,7 +183,8 @@ func TestEtag_ConcurrentUpdates(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list and item
 	listID := createTestList(t, store, "Etag Concurrent Test")
@@ -242,7 +248,8 @@ func TestEtag_FieldMaskUpdate(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listID := createTestList(t, store, "Field Mask Test")
@@ -250,13 +257,13 @@ func TestEtag_FieldMaskUpdate(t *testing.T) {
 	// Create item with multiple fields set
 	itemID := newUUID(t)
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Original Title",
-		Status:     domain.TaskStatusTodo,
-		Priority:   ptr.To(domain.TaskPriorityHigh),
-		Tags:       []string{"original", "test"},
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:        itemID,
+		Title:     "Original Title",
+		Status:    domain.TaskStatusTodo,
+		Priority:  ptr.To(domain.TaskPriorityHigh),
+		Tags:      []string{"original", "test"},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	_, err = todoService.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -299,7 +306,8 @@ func TestEtag_CannotBeSetByClient(t *testing.T) {
 	defer cleanup()
 	_ = db
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list and item
 	listID := createTestList(t, store, "Etag Protection Test")
@@ -333,9 +341,9 @@ func createTestList(t *testing.T, store *postgres.Store, title string) string {
 	t.Helper()
 	listID := newUUID(t)
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      title,
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     title,
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err := store.CreateList(context.Background(), list)
 	require.NoError(t, err)
@@ -345,11 +353,11 @@ func createTestList(t *testing.T, store *postgres.Store, title string) string {
 func createTestItem(t *testing.T, svc *todo.Service, listID, title string) *domain.TodoItem {
 	t.Helper()
 	item := &domain.TodoItem{
-		ID:         newUUID(t),
-		Title:      title,
-		Status:     domain.TaskStatusTodo,
-		CreateTime: time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:        newUUID(t),
+		Title:     title,
+		Status:    domain.TaskStatusTodo,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	created, err := svc.CreateItem(context.Background(), listID, item)
 	require.NoError(t, err)

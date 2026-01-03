@@ -10,27 +10,34 @@ import (
 )
 
 // DomainGenerator handles the generation of task instances from recurring templates using domain types.
-type DomainGenerator struct {
-	// Repository interface for future use (e.g., checking existing tasks)
-	// Currently unused but kept for extensibility
-	repo any
-}
+type DomainGenerator struct{}
 
 // NewDomainGenerator creates a new task generator that works with domain types.
-func NewDomainGenerator(repo any) *DomainGenerator {
-	return &DomainGenerator{
-		repo: repo,
-	}
+func NewDomainGenerator() *DomainGenerator {
+	return &DomainGenerator{}
 }
 
-// GenerateTasksForTemplate generates task instances for a given template within the specified date range.
-func (g *DomainGenerator) GenerateTasksForTemplate(ctx context.Context, template *domain.RecurringTemplate, start, end time.Time) ([]domain.TodoItem, error) {
+// GenerateTasksForTemplateWithExceptions generates tasks while filtering exception dates.
+func (g *DomainGenerator) GenerateTasksForTemplateWithExceptions(
+	ctx context.Context,
+	template *domain.RecurringTemplate,
+	start, end time.Time,
+	exceptions []*domain.RecurringTemplateException,
+) ([]*domain.TodoItem, error) {
+	// Build exception map for O(1) lookup
+	exceptionTimes := make(map[time.Time]bool)
+	for _, exc := range exceptions {
+		// Normalize to UTC for comparison
+		normalized := exc.OccursAt.UTC()
+		exceptionTimes[normalized] = true
+	}
+
 	calculator := GetCalculator(template.RecurrencePattern)
 	if calculator == nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRecurrencePattern, template.RecurrencePattern)
 	}
 
-	// Parse recurrence config - it's already a map[string]interface{}
+	// Parse recurrence config
 	config := template.RecurrenceConfig
 	if config == nil {
 		config = make(map[string]any)
@@ -39,32 +46,42 @@ func (g *DomainGenerator) GenerateTasksForTemplate(ctx context.Context, template
 	// Calculate all occurrences in the range
 	occurrences := calculator.OccurrencesBetween(start, end, config)
 
-	// Generate task instances
-	var tasks []domain.TodoItem
+	// Filter out exceptions and create tasks
+	tasks := make([]*domain.TodoItem, 0, len(occurrences))
 	for _, occurrence := range occurrences {
+		normalizedOccurrence := occurrence.UTC()
+
+		// Skip if this date is an exception
+		if exceptionTimes[normalizedOccurrence] {
+			continue
+		}
+
 		task, err := g.createTaskInstance(template, occurrence)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create task instance for %s: %w", occurrence.Format(time.RFC3339), err)
 		}
-		tasks = append(tasks, task)
+		tasks = append(tasks, &task)
 	}
 
 	return tasks, nil
 }
 
-// createTaskInstance creates a single task instance from a template for a specific date.
-func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate, instanceDate time.Time) (domain.TodoItem, error) {
+// createTaskInstance creates a single task instance from a template for a specific occurrence.
+func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate, occursAt time.Time) (domain.TodoItem, error) {
 	taskIDObj, err := uuid.NewV7()
 	if err != nil {
 		return domain.TodoItem{}, fmt.Errorf("failed to generate task ID: %w", err)
 	}
 	taskID := taskIDObj.String()
 
-	// Calculate due time if offset is specified
-	var dueTime *time.Time
+	// StartsAt is the date portion (when task becomes visible)
+	startsAt := time.Date(occursAt.Year(), occursAt.Month(), occursAt.Day(), 0, 0, 0, 0, occursAt.Location())
+
+	// Calculate DueAt if offset is specified
+	var dueAt *time.Time
 	if template.DueOffset != nil {
-		due := instanceDate.Add(*template.DueOffset)
-		dueTime = &due
+		due := startsAt.Add(*template.DueOffset)
+		dueAt = &due
 	}
 
 	templateID := template.ID
@@ -75,12 +92,14 @@ func (g *DomainGenerator) createTaskInstance(template *domain.RecurringTemplate,
 		Status:              domain.TaskStatusTodo,
 		Priority:            template.Priority,
 		EstimatedDuration:   template.EstimatedDuration,
-		CreateTime:          time.Now().UTC(),
+		CreatedAt:           time.Now().UTC(),
 		UpdatedAt:           time.Now().UTC(),
-		DueTime:             dueTime,
+		DueAt:               dueAt,
 		Tags:                template.Tags,
 		RecurringTemplateID: &templateID,
-		InstanceDate:        &instanceDate,
+		StartsAt:            &startsAt, // Date when task becomes visible
+		OccursAt:            &occursAt, // Exact timestamp for this occurrence
+		DueOffset:           template.DueOffset,
 	}
 
 	return task, nil

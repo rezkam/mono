@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,8 +17,7 @@ type mockRepository struct {
 	updateGenerationWindowFunc func(ctx context.Context, id string, until time.Time) error
 
 	// Jobs
-	createGenerationJobFunc    func(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error)
-	claimNextGenerationJobFunc func(ctx context.Context) (string, error)
+	scheduleGenerationJobFunc  func(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error)
 	getGenerationJobFunc       func(ctx context.Context, id string) (*domain.GenerationJob, error)
 	updateJobStatusFunc        func(ctx context.Context, id, status string, errorMessage *string) error
 	hasPendingOrRunningJobFunc func(ctx context.Context, templateID string) (bool, error)
@@ -50,18 +48,11 @@ func (m *mockRepository) UpdateRecurringTemplateGenerationWindow(ctx context.Con
 	return nil
 }
 
-func (m *mockRepository) CreateGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
-	if m.createGenerationJobFunc != nil {
-		return m.createGenerationJobFunc(ctx, templateID, scheduledFor, from, until)
+func (m *mockRepository) ScheduleGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
+	if m.scheduleGenerationJobFunc != nil {
+		return m.scheduleGenerationJobFunc(ctx, templateID, scheduledFor, from, until)
 	}
 	return "job-id", nil
-}
-
-func (m *mockRepository) ClaimNextGenerationJob(ctx context.Context) (string, error) {
-	if m.claimNextGenerationJobFunc != nil {
-		return m.claimNextGenerationJobFunc(ctx)
-	}
-	return "", nil
 }
 
 func (m *mockRepository) GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error) {
@@ -99,310 +90,43 @@ func (m *mockRepository) BatchCreateTodoItems(ctx context.Context, listID string
 	return int64(len(items)), nil
 }
 
-// TestProcessOneJob_UpdateStatusError_TemplateNotFound tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as failed after template error.
-func TestProcessOneJob_UpdateStatusError_TemplateNotFound(t *testing.T) {
-	templateErr := domain.ErrTemplateNotFound
-	statusUpdateErr := domain.ErrDatabaseUnavailable
-
-	repo := &mockRepository{
-		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
-			return "job-123", nil
-		},
-		getGenerationJobFunc: func(ctx context.Context, id string) (*domain.GenerationJob, error) {
-			return &domain.GenerationJob{
-				ID:            "job-123",
-				TemplateID:    "template-456",
-				GenerateFrom:  time.Now().UTC(),
-				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
-			}, nil
-		},
-		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-			return nil, templateErr
-		},
-		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "failed" {
-				return statusUpdateErr
-			}
-			return nil
-		},
-	}
-
-	w := New(repo, WithOperationTimeout(5*time.Second))
-	ctx := context.Background()
-
-	processed, err := w.RunProcessOnce(ctx)
-
-	if processed {
-		t.Error("expected processed to be false when template not found")
-	}
-	if err == nil {
-		t.Fatal("expected error when both template and status update fail")
-	}
-	// Error should mention both failures
-	if !strings.Contains(err.Error(), "failed to get template") {
-		t.Errorf("error should mention template failure, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "failed to update job status") {
-		t.Errorf("error should mention status update failure, got: %v", err)
-	}
+func (m *mockRepository) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	return len(items), nil
 }
 
-// TestProcessOneJob_UpdateStatusError_GenerationFailed tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as failed after generation error.
-func TestProcessOneJob_UpdateStatusError_GenerationFailed(t *testing.T) {
-	statusUpdateErr := domain.ErrDatabaseUnavailable
-
-	repo := &mockRepository{
-		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
-			return "job-123", nil
-		},
-		getGenerationJobFunc: func(ctx context.Context, id string) (*domain.GenerationJob, error) {
-			return &domain.GenerationJob{
-				ID:            "job-123",
-				TemplateID:    "template-456",
-				GenerateFrom:  time.Now().UTC(),
-				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
-			}, nil
-		},
-		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-			return &domain.RecurringTemplate{
-				ID:                "template-456",
-				ListID:            "list-789",
-				Title:             "Test Template",
-				RecurrencePattern: "INVALID_PATTERN", // Will cause generator to fail
-				IsActive:          true,
-			}, nil
-		},
-		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "failed" {
-				return statusUpdateErr
-			}
-			return nil
-		},
-	}
-
-	w := New(repo, WithOperationTimeout(5*time.Second))
-	ctx := context.Background()
-
-	processed, err := w.RunProcessOnce(ctx)
-
-	if processed {
-		t.Error("expected processed to be false when generation fails")
-	}
-	if err == nil {
-		t.Fatal("expected error when both generation and status update fail")
-	}
-	// Error should mention both failures
-	if !strings.Contains(err.Error(), "failed to generate tasks") {
-		t.Errorf("error should mention generation failure, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "failed to update job status") {
-		t.Errorf("error should mention status update failure, got: %v", err)
-	}
+func (m *mockRepository) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	return nil
 }
 
-// TestProcessOneJob_UpdateStatusError_TaskCreationFailed tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as failed after task creation error.
-func TestProcessOneJob_UpdateStatusError_TaskCreationFailed(t *testing.T) {
-	taskCreateErr := domain.ErrFailedToCreateTask
-	statusUpdateErr := domain.ErrDatabaseUnavailable
-
-	repo := &mockRepository{
-		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
-			return "job-123", nil
-		},
-		getGenerationJobFunc: func(ctx context.Context, id string) (*domain.GenerationJob, error) {
-			return &domain.GenerationJob{
-				ID:            "job-123",
-				TemplateID:    "template-456",
-				GenerateFrom:  time.Now().UTC(),
-				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
-			}, nil
-		},
-		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-			return &domain.RecurringTemplate{
-				ID:                   "template-456",
-				ListID:               "list-789",
-				Title:                "Test Template",
-				RecurrencePattern:    domain.RecurrenceDaily,
-				IsActive:             true,
-				GenerationWindowDays: 7,
-			}, nil
-		},
-		batchCreateTodoItemsFunc: func(ctx context.Context, listID string, items []domain.TodoItem) (int64, error) {
-			return 0, taskCreateErr
-		},
-		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "failed" {
-				return statusUpdateErr
-			}
-			return nil
-		},
-	}
-
-	w := New(repo, WithOperationTimeout(5*time.Second))
-	ctx := context.Background()
-
-	processed, err := w.RunProcessOnce(ctx)
-
-	if processed {
-		t.Error("expected processed to be false when task creation fails")
-	}
-	if err == nil {
-		t.Fatal("expected error when both task creation and status update fail")
-	}
-	// Error should mention both failures
-	if !strings.Contains(err.Error(), "failed to create tasks") {
-		t.Errorf("error should mention task creation failure, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "failed to update job status") {
-		t.Errorf("error should mention status update failure, got: %v", err)
-	}
+func (m *mockRepository) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+	return nil, nil
 }
 
-// TestProcessOneJob_UpdateStatusError_CompletionFailed tests that errors from
-// UpdateGenerationJobStatus are not ignored when marking job as completed.
-func TestProcessOneJob_UpdateStatusError_CompletionFailed(t *testing.T) {
-	statusUpdateErr := domain.ErrCompletionFailed
-	var tasksCreated int64
-
-	repo := &mockRepository{
-		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
-			return "job-123", nil
-		},
-		getGenerationJobFunc: func(ctx context.Context, id string) (*domain.GenerationJob, error) {
-			return &domain.GenerationJob{
-				ID:            "job-123",
-				TemplateID:    "template-456",
-				GenerateFrom:  time.Now().UTC(),
-				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
-			}, nil
-		},
-		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-			return &domain.RecurringTemplate{
-				ID:                   "template-456",
-				ListID:               "list-789",
-				Title:                "Test Template",
-				RecurrencePattern:    domain.RecurrenceDaily,
-				IsActive:             true,
-				GenerationWindowDays: 7,
-			}, nil
-		},
-		batchCreateTodoItemsFunc: func(ctx context.Context, listID string, items []domain.TodoItem) (int64, error) {
-			tasksCreated = int64(len(items))
-			return tasksCreated, nil
-		},
-		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "completed" {
-				return statusUpdateErr
-			}
-			return nil
-		},
-	}
-
-	w := New(repo, WithOperationTimeout(5*time.Second))
-	ctx := context.Background()
-
-	processed, err := w.RunProcessOnce(ctx)
-
-	// Tasks were created, so some work was done
-	if tasksCreated == 0 {
-		t.Error("expected at least one task to be created")
-	}
-
-	// But processing should fail because we couldn't mark job as completed
-	if processed {
-		t.Error("expected processed to be false when completion status update fails")
-	}
-	if err == nil {
-		t.Fatal("expected error when marking job as completed fails")
-	}
-	if !strings.Contains(err.Error(), "failed to mark job as completed") {
-		t.Errorf("error should mention completion failure, got: %v", err)
-	}
+func (m *mockRepository) FindStaleTemplatesForReconciliation(ctx context.Context, params FindStaleParams) ([]*domain.RecurringTemplate, error) {
+	return nil, nil
 }
 
-// TestProcessOneJob_StatusUpdateSuccess tests that when UpdateGenerationJobStatus succeeds,
-// errors are still properly returned for the primary failure.
-func TestProcessOneJob_StatusUpdateSuccess_TemplateNotFound(t *testing.T) {
-	templateErr := domain.ErrTemplateNotFound
-	statusUpdated := false
-
-	repo := &mockRepository{
-		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
-			return "job-123", nil
-		},
-		getGenerationJobFunc: func(ctx context.Context, id string) (*domain.GenerationJob, error) {
-			return &domain.GenerationJob{
-				ID:            "job-123",
-				TemplateID:    "template-456",
-				GenerateFrom:  time.Now().UTC(),
-				GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
-			}, nil
-		},
-		getRecurringTemplateFunc: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-			return nil, templateErr
-		},
-		updateJobStatusFunc: func(ctx context.Context, id, status string, errorMessage *string) error {
-			if status == "failed" {
-				statusUpdated = true
-			}
-			return nil
-		},
-	}
-
-	w := New(repo, WithOperationTimeout(5*time.Second))
-	ctx := context.Background()
-
-	processed, err := w.RunProcessOnce(ctx)
-
-	if processed {
-		t.Error("expected processed to be false when template not found")
-	}
-	if err == nil {
-		t.Fatal("expected error when template not found")
-	}
-	if !statusUpdated {
-		t.Error("expected status to be updated to failed")
-	}
-	// Error should only mention template failure (status update succeeded)
-	if !strings.Contains(err.Error(), "failed to get template") {
-		t.Errorf("error should mention template failure, got: %v", err)
-	}
-	if strings.Contains(err.Error(), "failed to update job status") {
-		t.Errorf("error should NOT mention status update failure when it succeeded, got: %v", err)
-	}
+func (m *mockRepository) DeleteFuturePendingItems(ctx context.Context, templateID string, after time.Time) (int64, error) {
+	return 0, nil
 }
 
-// TestWorker_GracefulShutdown tests that in-flight operations complete on shutdown.
-// When ctx is cancelled:
-// 1. Worker stops accepting new work (tickers stop)
-// 2. In-flight operations complete (not aborted)
-// 3. Worker exits cleanly
-//
-// Note: This test uses real time.Sleep because it's testing actual shutdown behavior
-// of a long-running worker with tickers. synctest is not appropriate here.
+// TestWorker_GracefulShutdown tests that in-flight scheduling operations complete on shutdown.
 func TestWorker_GracefulShutdown(t *testing.T) {
 	var operationStarted atomic.Bool
 	var operationCompleted atomic.Bool
 
 	repo := &mockRepository{
 		getActiveTemplatesFunc: func(ctx context.Context) ([]*domain.RecurringTemplate, error) {
-			return nil, nil
-		},
-		claimNextGenerationJobFunc: func(ctx context.Context) (string, error) {
 			operationStarted.Store(true)
 			// Simulate slow operation - should complete even after shutdown signal
 			time.Sleep(200 * time.Millisecond)
 			operationCompleted.Store(true)
-			return "", nil
+			return nil, nil
 		},
 	}
 
 	w := New(repo,
-		WithScheduleInterval(1*time.Hour),        // Don't trigger scheduler
-		WithProcessInterval(50*time.Millisecond), // Trigger processor quickly
+		WithScheduleInterval(50*time.Millisecond), // Trigger scheduler quickly
 		WithOperationTimeout(5*time.Second),
 	)
 
@@ -414,7 +138,7 @@ func TestWorker_GracefulShutdown(t *testing.T) {
 	}()
 
 	// Wait for operation to START
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if operationStarted.Load() {
 			break
 		}
@@ -440,5 +164,101 @@ func TestWorker_GracefulShutdown(t *testing.T) {
 	// Verify operation completed (was not aborted)
 	if !operationCompleted.Load() {
 		t.Error("in-flight operation was aborted - should have completed gracefully")
+	}
+}
+
+// TestRunScheduleOnce_SchedulesJobsForTemplatesNeedingGeneration tests that
+// RunScheduleOnce creates jobs for templates that need generation.
+func TestRunScheduleOnce_SchedulesJobsForTemplatesNeedingGeneration(t *testing.T) {
+	var scheduledTemplateIDs []string
+
+	repo := &mockRepository{
+		getActiveTemplatesFunc: func(ctx context.Context) ([]*domain.RecurringTemplate, error) {
+			return []*domain.RecurringTemplate{
+				{
+					ID:                    "template-1",
+					ListID:                "list-1",
+					Title:                 "Daily Task",
+					IsActive:              true,
+					GenerationHorizonDays: 7,
+					CreatedAt:             time.Now().UTC().AddDate(0, 0, -30),
+				},
+				{
+					ID:                    "template-2",
+					ListID:                "list-2",
+					Title:                 "Weekly Task",
+					IsActive:              true,
+					GenerationHorizonDays: 14,
+					CreatedAt:             time.Now().UTC().AddDate(0, 0, -30),
+				},
+			}, nil
+		},
+		scheduleGenerationJobFunc: func(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
+			scheduledTemplateIDs = append(scheduledTemplateIDs, templateID)
+			return "job-" + templateID, nil
+		},
+	}
+
+	w := New(repo)
+	ctx := context.Background()
+
+	err := w.RunScheduleOnce(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scheduledTemplateIDs) != 2 {
+		t.Errorf("expected 2 jobs scheduled, got %d", len(scheduledTemplateIDs))
+	}
+}
+
+// TestRunScheduleOnce_SkipsTemplatesWithExistingJobs tests that templates
+// with pending or running jobs are skipped.
+func TestRunScheduleOnce_SkipsTemplatesWithExistingJobs(t *testing.T) {
+	var scheduledTemplateIDs []string
+
+	repo := &mockRepository{
+		getActiveTemplatesFunc: func(ctx context.Context) ([]*domain.RecurringTemplate, error) {
+			return []*domain.RecurringTemplate{
+				{
+					ID:                    "template-1",
+					ListID:                "list-1",
+					Title:                 "Has Pending Job",
+					IsActive:              true,
+					GenerationHorizonDays: 7,
+					CreatedAt:             time.Now().UTC().AddDate(0, 0, -30),
+				},
+				{
+					ID:                    "template-2",
+					ListID:                "list-2",
+					Title:                 "No Pending Job",
+					IsActive:              true,
+					GenerationHorizonDays: 7,
+					CreatedAt:             time.Now().UTC().AddDate(0, 0, -30),
+				},
+			}, nil
+		},
+		hasPendingOrRunningJobFunc: func(ctx context.Context, templateID string) (bool, error) {
+			return templateID == "template-1", nil
+		},
+		scheduleGenerationJobFunc: func(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
+			scheduledTemplateIDs = append(scheduledTemplateIDs, templateID)
+			return "job-" + templateID, nil
+		},
+	}
+
+	w := New(repo)
+	ctx := context.Background()
+
+	err := w.RunScheduleOnce(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scheduledTemplateIDs) != 1 {
+		t.Errorf("expected 1 job scheduled, got %d", len(scheduledTemplateIDs))
+	}
+	if len(scheduledTemplateIDs) > 0 && scheduledTemplateIDs[0] != "template-2" {
+		t.Errorf("expected template-2 to be scheduled, got %s", scheduledTemplateIDs[0])
 	}
 }

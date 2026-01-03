@@ -2,35 +2,30 @@
 INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
-    create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone
+    created_at, updated_at, due_at, tags,
+    recurring_template_id, starts_at, occurs_at, due_offset, timezone
 ) VALUES (
     sqlc.arg(id), sqlc.arg(list_id), sqlc.arg(title), sqlc.arg(status), sqlc.arg(priority),
     sqlc.narg('estimated_duration'), sqlc.narg('actual_duration'),
-    sqlc.arg(create_time), sqlc.arg(updated_at), sqlc.narg(due_time), sqlc.arg(tags),
-    sqlc.narg(recurring_template_id), sqlc.narg(instance_date), sqlc.narg(timezone)
+    sqlc.arg(created_at), sqlc.arg(updated_at), sqlc.narg(due_at), sqlc.arg(tags),
+    sqlc.narg(recurring_template_id), sqlc.narg(starts_at), sqlc.narg(occurs_at), sqlc.narg(due_offset), sqlc.narg(timezone)
 )
 RETURNING *;
 
 -- name: BatchCreateTodoItems :copyfrom
--- Bulk insert using PostgreSQL's COPY protocol.
--- This bypasses:
---   - Query parsing per row
---   - Planner overhead per row
---   - Network round trips per row
--- Result: ~10x performance for batch operations (30-90 items → single operation).
+-- Bulk insert using PostgreSQL COPY protocol for high performance
 INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
-    create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone,
+    created_at, updated_at, due_at, tags,
+    recurring_template_id, starts_at, occurs_at, due_offset, timezone,
     version
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7,
     $8, $9, $10, $11,
-    $12, $13, $14,
-    $15
+    $12, $13, $14, $15, $16,
+    $17
 );
 
 -- name: GetTodoItem :one
@@ -40,11 +35,11 @@ WHERE id = $1;
 -- name: GetTodoItemsByListId :many
 SELECT * FROM todo_items
 WHERE list_id = $1
-ORDER BY create_time ASC;
+ORDER BY created_at ASC;
 
 -- name: GetAllTodoItems :many
 SELECT * FROM todo_items
-ORDER BY list_id, create_time ASC;
+ORDER BY list_id, created_at ASC;
 
 -- name: UpdateTodoItem :one
 -- DATA ACCESS PATTERN: Partial update with explicit flags
@@ -62,9 +57,10 @@ SET title = CASE WHEN sqlc.arg('set_title')::boolean THEN sqlc.narg('title') ELS
     priority = CASE WHEN sqlc.arg('set_priority')::boolean THEN sqlc.narg('priority') ELSE priority END,
     estimated_duration = CASE WHEN sqlc.arg('set_estimated_duration')::boolean THEN sqlc.narg('estimated_duration') ELSE estimated_duration END,
     actual_duration = CASE WHEN sqlc.arg('set_actual_duration')::boolean THEN sqlc.narg('actual_duration') ELSE actual_duration END,
-    due_time = CASE WHEN sqlc.arg('set_due_time')::boolean THEN sqlc.narg('due_time') ELSE due_time END,
+    due_at = CASE WHEN sqlc.arg('set_due_at')::boolean THEN sqlc.narg('due_at') ELSE due_at END,
     tags = CASE WHEN sqlc.arg('set_tags')::boolean THEN sqlc.narg('tags') ELSE tags END,
     timezone = CASE WHEN sqlc.arg('set_timezone')::boolean THEN sqlc.narg('timezone') ELSE timezone END,
+    recurring_template_id = CASE WHEN sqlc.arg('detach_from_template')::boolean THEN NULL ELSE recurring_template_id END,
     updated_at = NOW(),
     version = version + 1
 WHERE id = sqlc.arg('id')
@@ -105,10 +101,10 @@ WHERE
     (array_length($9::text[], 1) IS NULL OR status != ALL($9::text[])) AND
     (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
     (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
-    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
-    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
+    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_at <= $5) AND
+    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_at >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
-    ($8::timestamptz = '0001-01-01 00:00:00+00' OR create_time >= $8);
+    ($8::timestamptz = '0001-01-01 00:00:00+00' OR created_at >= $8);
 
 -- name: ListTasksWithFilters :many
 -- Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
@@ -124,9 +120,9 @@ WHERE
 --   $6: due_after         - Filter tasks due after timestamp (zero time to skip)
 --   $7: updated_at        - Filter by last update time (zero time to skip)
 --   $8: created_at        - Filter by creation time (zero time to skip)
---   $9: order_by          - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
---                           Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
---                           For bare field names, defaults are: due_time=asc, priority=asc,
+--   $9: order_by          - Combined field+direction: 'due_at_asc', 'due_at_desc', etc.
+--                           Supports: due_at, priority, created_at, updated_at with _asc or _desc suffix
+--                           For bare field names, defaults are: due_at=asc, priority=asc,
 --                           created_at=desc, updated_at=desc
 --   $10: limit            - Page size (max items to return)
 --   $11: offset           - Pagination offset (skip N items)
@@ -149,29 +145,34 @@ WHERE
 -- provide security - parameterized queries are the security boundary.
 --
 -- Access pattern examples:
---   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
+--   - "Show my overdue tasks": filter by due_before=now, order by due_at_asc
 --   - "Active work": statuses=[todo, in_progress], default sort
---   - "High priority items": priorities=[high, urgent], order by due_time_asc
+--   - "High priority items": priorities=[high, urgent], order by due_at_asc
 --   - "Tasks tagged 'urgent' and 'work'": tags=[urgent, work] (item must have both)
-SELECT *, COUNT(*) OVER() AS total_count FROM todo_items
+SELECT i.*, COUNT(*) OVER() AS total_count
+FROM todo_items i
+LEFT JOIN recurring_template_exceptions e
+    ON i.recurring_template_id = e.template_id
+    AND i.occurs_at = e.occurs_at
 WHERE
-    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
-    (array_length($12::text[], 1) IS NULL OR status != ALL($12::text[])) AND
-    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
-    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
-    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
-    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
-    ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
-    ($8::timestamptz = '0001-01-01 00:00:00+00' OR create_time >= $8)
+    e.id IS NULL AND  -- Exclude items with exceptions
+    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR i.list_id = $1) AND
+    (array_length($2::text[], 1) IS NULL OR i.status = ANY($2::text[])) AND
+    (array_length($12::text[], 1) IS NULL OR i.status != ALL($12::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR i.priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR i.tags ?& $4::text[]) AND
+    ($5::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at <= $5) AND
+    ($6::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at >= $6) AND
+    ($7::timestamptz = '0001-01-01 00:00:00+00' OR i.updated_at >= $7) AND
+    ($8::timestamptz = '0001-01-01 00:00:00+00' OR i.created_at >= $8)
 ORDER BY
-    -- due_time: default ASC
-    CASE WHEN $9::text IN ('due_time', 'due_time_asc') THEN due_time END ASC NULLS LAST,
-    CASE WHEN $9::text = 'due_time_desc' THEN due_time END DESC NULLS LAST,
+    -- due_at: default ASC
+    CASE WHEN $9::text IN ('due_at', 'due_at_asc') THEN i.due_at END ASC NULLS LAST,
+    CASE WHEN $9::text = 'due_at_desc' THEN i.due_at END DESC NULLS LAST,
     -- priority: default ASC (semantic order: low=1 < medium=2 < high=3 < urgent=4)
     -- Uses numeric weights instead of lexical ordering to match proto enum semantics
     CASE WHEN $9::text IN ('priority', 'priority_asc') THEN
-        CASE priority
+        CASE i.priority
             WHEN 'low' THEN 1
             WHEN 'medium' THEN 2
             WHEN 'high' THEN 3
@@ -179,7 +180,7 @@ ORDER BY
         END
     END ASC NULLS LAST,
     CASE WHEN $9::text = 'priority_desc' THEN
-        CASE priority
+        CASE i.priority
             WHEN 'low' THEN 1
             WHEN 'medium' THEN 2
             WHEN 'high' THEN 3
@@ -187,12 +188,38 @@ ORDER BY
         END
     END DESC NULLS LAST,
     -- created_at: default DESC
-    CASE WHEN $9::text = 'created_at_asc' THEN create_time END ASC,
-    CASE WHEN $9::text IN ('created_at', 'created_at_desc') THEN create_time END DESC,
+    CASE WHEN $9::text = 'created_at_asc' THEN i.created_at END ASC,
+    CASE WHEN $9::text IN ('created_at', 'created_at_desc') THEN i.created_at END DESC,
     -- updated_at: default DESC
-    CASE WHEN $9::text = 'updated_at_asc' THEN updated_at END ASC,
-    CASE WHEN $9::text IN ('updated_at', 'updated_at_desc') THEN updated_at END DESC,
+    CASE WHEN $9::text = 'updated_at_asc' THEN i.updated_at END ASC,
+    CASE WHEN $9::text IN ('updated_at', 'updated_at_desc') THEN i.updated_at END DESC,
     -- Fallback: created_at DESC (when no valid order_by specified)
-    create_time DESC
+    i.created_at DESC
 LIMIT $10
 OFFSET $11;
+
+-- name: InsertItemIgnoreConflict :exec
+-- Idempotent single insert with ON CONFLICT DO NOTHING
+-- Used in batch operations - duplicates silently ignored based on UNIQUE(recurring_template_id, occurs_at)
+INSERT INTO todo_items (
+    id, list_id, title, status, priority,
+    estimated_duration, actual_duration,
+    created_at, updated_at, due_at, tags,
+    recurring_template_id, starts_at, occurs_at, due_offset, timezone,
+    version
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14, $15, $16,
+    $17
+)
+ON CONFLICT (recurring_template_id, occurs_at) WHERE recurring_template_id IS NOT NULL
+DO NOTHING;
+
+-- name: DeleteFuturePendingItems :execrows
+-- Delete future pending items for a template (used before regeneration)
+DELETE FROM todo_items
+WHERE recurring_template_id = $1
+  AND occurs_at >= $2
+  AND status = 'todo';

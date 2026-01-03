@@ -27,15 +27,15 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 	dueTime := time.Now().UTC().Add(48 * time.Hour).UTC()
 
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Original Title",
-		Status:     domain.TaskStatusTodo,
-		Priority:   &priorityLow,
-		Tags:       []string{"old-tag"},
-		DueTime:    &dueTime,
-		Timezone:   &timezone,
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Original Title",
+		Status:    domain.TaskStatusTodo,
+		Priority:  &priorityLow,
+		Tags:      []string{"old-tag"},
+		DueAt:     &dueTime,
+		Timezone:  &timezone,
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = env.Store().CreateItem(env.Context(), listID, item)
 	require.NoError(t, err)
@@ -44,13 +44,13 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 	existingItem, err := env.Service().GetItem(env.Context(), itemID)
 	require.NoError(t, err)
 
-	newDueTime := time.Now().UTC().Add(72 * time.Hour).UTC()
+	newDueAt := time.Now().UTC().Add(72 * time.Hour).UTC()
 	priorityHigh := domain.TaskPriorityHigh
 	existingItem.Title = "Updated Title"
 	existingItem.Status = domain.TaskStatusInProgress
 	existingItem.Priority = &priorityHigh
 	existingItem.Tags = []string{"new-tag-1", "new-tag-2"}
-	existingItem.DueTime = &newDueTime
+	existingItem.DueAt = &newDueAt
 
 	_, err = env.Service().UpdateItem(env.Context(), ItemToUpdateParams(listID, existingItem))
 	require.NoError(t, err)
@@ -64,8 +64,8 @@ func TestFieldMask_MultipleFields(t *testing.T) {
 	require.NotNil(t, updatedItem.Priority)
 	assert.Equal(t, domain.TaskPriorityHigh, *updatedItem.Priority)
 	assert.ElementsMatch(t, []string{"new-tag-1", "new-tag-2"}, updatedItem.Tags)
-	require.NotNil(t, updatedItem.DueTime)
-	assert.Equal(t, newDueTime.Unix(), updatedItem.DueTime.Unix())
+	require.NotNil(t, updatedItem.DueAt)
+	assert.Equal(t, newDueAt.Unix(), updatedItem.DueAt.Unix())
 
 	fetchedItem, err := env.Store().FindItemByID(env.Context(), itemID)
 	require.NoError(t, err)

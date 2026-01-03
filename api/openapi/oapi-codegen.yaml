@@ -3,6 +3,6 @@ generate:
   chi-server: true
   models: true
   embedded-spec: true
-output: internal/http/openapi/generated.go
+output: internal/infrastructure/http/openapi/generated.go
 output-options:
   skip-prune: true

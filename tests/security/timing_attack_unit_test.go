@@ -26,7 +26,7 @@ func TestHashTimingIsMeasurable(t *testing.T) {
 
 	// Measure FAST path (no hash computation)
 	t.Log("Measuring FAST path (no hash)...")
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 
 		// Simulate fast path: just comparison with dummy hash (no computation)
@@ -37,7 +37,7 @@ func TestHashTimingIsMeasurable(t *testing.T) {
 
 	// Measure SLOW path (with hash computation)
 	t.Log("Measuring SLOW path (with BLAKE2b hash)...")
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 
 		// Simulate slow path: hash computation + comparison
@@ -134,7 +134,7 @@ func TestAuthenticationFlowVulnerability(t *testing.T) {
 	t.Log("Simulating authentication flow...")
 
 	// Simulate: Non-existent short token (current FAST path)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 
 		// Current vulnerable code path:
@@ -147,7 +147,7 @@ func TestAuthenticationFlowVulnerability(t *testing.T) {
 	}
 
 	// Simulate: Existing short token with wrong secret (current SLOW path)
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 
 		// Current vulnerable code path:
@@ -195,14 +195,14 @@ func TestConstantTimeComparisonIsConstantTime(t *testing.T) {
 	var diffFirstTime, diffLastTime time.Duration
 
 	// Measure: Difference at first position
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 		_ = subtle.ConstantTimeCompare([]byte(hash1), []byte(hash2DiffFirst))
 		diffFirstTime += time.Since(start)
 	}
 
 	// Measure: Difference at last position
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		start := time.Now().UTC()
 		_ = subtle.ConstantTimeCompare([]byte(hash1), []byte(hash2DiffLast))
 		diffLastTime += time.Since(start)

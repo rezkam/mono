@@ -27,7 +27,7 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 		ListID:   listID.String(),
 		Tags:     derefStringSlice(req.Tags),
 		Timezone: req.Timezone,
-		DueTime:  req.DueTime,
+		DueAt:    req.DueAt,
 	}
 
 	// Parse estimated_duration if provided
@@ -57,9 +57,9 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 		item.RecurringTemplateID = &templateID
 	}
 
-	// Set instance date if provided
+	// Set occurrence time if provided
 	if req.InstanceDate != nil {
-		item.InstanceDate = req.InstanceDate
+		item.OccursAt = req.InstanceDate
 	}
 
 	// Call service layer (validation and ID generation happens here)
@@ -126,8 +126,8 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 				}
 				params.Priority = &priority
 			}
-		case "due_time":
-			params.DueTime = req.Item.DueTime
+		case "due_at":
+			params.DueAt = req.Item.DueAt
 		case "tags":
 			if req.Item.Tags != nil {
 				params.Tags = req.Item.Tags
@@ -171,6 +171,14 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 	response.OK(w, openapi.UpdateItemResponse{
 		Item: &itemDTO,
 	})
+}
+
+// DeleteItem implements ServerInterface.DeleteItem.
+// DELETE /v1/lists/{list_id}/items/{item_id}
+func (h *TodoHandler) DeleteItem(w http.ResponseWriter, r *http.Request, listID types.UUID, itemID types.UUID) {
+	// TODO: Implement delete item
+	// For now, return 501 Not Implemented
+	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // ListItems implements ServerInterface.ListItems.

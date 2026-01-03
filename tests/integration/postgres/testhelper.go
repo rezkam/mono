@@ -84,11 +84,11 @@ func ItemToUpdateParams(listID string, item *domain.TodoItem) domain.UpdateItemP
 		ItemID:            item.ID,
 		ListID:            listID,
 		Etag:              nil, // Tests that need optimistic locking should pass etag explicitly
-		UpdateMask:        []string{"title", "status", "priority", "due_time", "tags", "timezone", "estimated_duration", "actual_duration"},
+		UpdateMask:        []string{"title", "status", "priority", "due_at", "tags", "timezone", "estimated_duration", "actual_duration"},
 		Title:             &item.Title,
 		Status:            &item.Status,
 		Priority:          item.Priority,
-		DueTime:           item.DueTime,
+		DueAt:             item.DueAt,
 		Tags:              &item.Tags,
 		Timezone:          item.Timezone,
 		EstimatedDuration: item.EstimatedDuration,

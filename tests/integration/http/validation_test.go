@@ -513,7 +513,7 @@ func TestValidation_ManyTags(t *testing.T) {
 
 	// Create 100 tags
 	manyTags := make([]string, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		manyTags[i] = fmt.Sprintf("tag-%03d", i)
 	}
 

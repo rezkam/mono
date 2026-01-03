@@ -31,27 +31,27 @@ func TestFindItemByID_Success(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "FindItemByID Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "FindItemByID Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
 	// Create multiple items
 	var targetItemID string
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		itemUUID, err := uuid.NewV7()
 		require.NoError(t, err)
 
 		priority := domain.TaskPriorityMedium
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      "Task " + string(rune('A'+i)),
-			Status:     domain.TaskStatusTodo,
-			Priority:   &priority,
-			CreateTime: time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:        itemUUID.String(),
+			Title:     "Task " + string(rune('A'+i)),
+			Status:    domain.TaskStatusTodo,
+			Priority:  &priority,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		_, err = store.CreateItem(ctx, listID, item)
 		require.NoError(t, err)
@@ -135,9 +135,9 @@ func TestFindItemByID_ReturnsAllFields(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Full Fields Test",
-		CreateTime: time.Now().UTC(),
+		ID:        listID,
+		Title:     "Full Fields Test",
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -156,11 +156,11 @@ func TestFindItemByID_ReturnsAllFields(t *testing.T) {
 		Title:             "Full Item",
 		Status:            domain.TaskStatusInProgress,
 		Priority:          &priority,
-		DueTime:           &dueTime,
+		DueAt:             &dueTime,
 		EstimatedDuration: &estimatedDuration,
 		Tags:              []string{"urgent", "work"},
 		Timezone:          &timezone,
-		CreateTime:        time.Now().UTC(),
+		CreatedAt:         time.Now().UTC(),
 		UpdatedAt:         time.Now().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
@@ -178,8 +178,8 @@ func TestFindItemByID_ReturnsAllFields(t *testing.T) {
 	require.NotNil(t, retrieved.Priority)
 	assert.Equal(t, domain.TaskPriorityHigh, *retrieved.Priority)
 
-	require.NotNil(t, retrieved.DueTime)
-	assert.WithinDuration(t, dueTime, *retrieved.DueTime, time.Second)
+	require.NotNil(t, retrieved.DueAt)
+	assert.WithinDuration(t, dueTime, *retrieved.DueAt, time.Second)
 
 	require.NotNil(t, retrieved.EstimatedDuration)
 	assert.Equal(t, estimatedDuration, *retrieved.EstimatedDuration)

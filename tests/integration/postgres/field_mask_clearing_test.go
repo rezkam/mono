@@ -10,6 +10,7 @@ import (
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	postgres "github.com/rezkam/mono/internal/infrastructure/persistence/postgres"
+	"github.com/rezkam/mono/internal/recurring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,8 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -40,9 +42,9 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Field Mask Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Field Mask Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -54,12 +56,12 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 
 	priority := domain.TaskPriorityHigh
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Item with Priority",
-		Status:     domain.TaskStatusTodo,
-		Priority:   &priority,
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Item with Priority",
+		Status:    domain.TaskStatusTodo,
+		Priority:  &priority,
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -81,8 +83,8 @@ func TestFieldMask_ClearPriority(t *testing.T) {
 	assert.Nil(t, fetchedItem.Priority, "Priority should be cleared after field mask update")
 }
 
-// TestFieldMask_ClearDueTime verifies that field mask can clear optional due_time field.
-func TestFieldMask_ClearDueTime(t *testing.T) {
+// TestFieldMask_ClearDueAt verifies that field mask can clear optional due_at field.
+func TestFieldMask_ClearDueAt(t *testing.T) {
 	pgURL := GetTestStorageDSN(t)
 
 	ctx := context.Background()
@@ -99,7 +101,8 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -107,44 +110,44 @@ func TestFieldMask_ClearDueTime(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "DueTime Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "DueAt Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
 
-	// Create an item with due_time
+	// Create an item with due_at
 	itemUUID, err := uuid.NewV7()
 	require.NoError(t, err)
 	itemID := itemUUID.String()
 
 	dueTime := time.Now().UTC().Add(24 * time.Hour).UTC()
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Item with DueTime",
-		Status:     domain.TaskStatusTodo,
-		DueTime:    &dueTime,
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Item with DueAt",
+		Status:    domain.TaskStatusTodo,
+		DueAt:     &dueTime,
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
-	// Verify due_time is set
+	// Verify due_at is set
 	fetchedItem, err := store.FindItemByID(ctx, itemID)
 	require.NoError(t, err)
-	require.NotNil(t, fetchedItem.DueTime, "DueTime should be set initially")
+	require.NotNil(t, fetchedItem.DueAt, "DueAt should be set initially")
 
-	// Clear due_time by setting it to nil
-	fetchedItem.DueTime = nil
+	// Clear due_at by setting it to nil
+	fetchedItem.DueAt = nil
 	_, err = todoService.UpdateItem(ctx, ItemToUpdateParams(listID, fetchedItem))
 	require.NoError(t, err)
 
-	// Verify due_time is cleared
+	// Verify due_at is cleared
 	fetchedItem, err = store.FindItemByID(ctx, itemID)
 	require.NoError(t, err)
-	assert.Nil(t, fetchedItem.DueTime, "DueTime should be cleared after field mask update")
+	assert.Nil(t, fetchedItem.DueAt, "DueAt should be cleared after field mask update")
 }
 
 // TestFieldMask_ClearEstimatedDuration verifies that field mask can clear optional estimated_duration field.
@@ -165,7 +168,8 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -173,9 +177,9 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Duration Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Duration Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -191,7 +195,7 @@ func TestFieldMask_ClearEstimatedDuration(t *testing.T) {
 		Title:             "Item with Duration",
 		Status:            domain.TaskStatusTodo,
 		EstimatedDuration: &duration,
-		CreateTime:        time.Now().UTC().UTC(),
+		CreatedAt:         time.Now().UTC().UTC(),
 		UpdatedAt:         time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
@@ -232,7 +236,8 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -240,9 +245,9 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Timezone Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Timezone Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -254,12 +259,12 @@ func TestFieldMask_ClearTimezone(t *testing.T) {
 
 	timezone := "America/New_York"
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Item with Timezone",
-		Status:     domain.TaskStatusTodo,
-		Timezone:   &timezone,
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Item with Timezone",
+		Status:    domain.TaskStatusTodo,
+		Timezone:  &timezone,
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -299,7 +304,8 @@ func TestFieldMask_ClearTags(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -307,9 +313,9 @@ func TestFieldMask_ClearTags(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Tags Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Tags Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -320,12 +326,12 @@ func TestFieldMask_ClearTags(t *testing.T) {
 	itemID := itemUUID.String()
 
 	item := &domain.TodoItem{
-		ID:         itemID,
-		Title:      "Item with Tags",
-		Status:     domain.TaskStatusTodo,
-		Tags:       []string{"work", "urgent", "important"},
-		CreateTime: time.Now().UTC().UTC(),
-		UpdatedAt:  time.Now().UTC().UTC(),
+		ID:        itemID,
+		Title:     "Item with Tags",
+		Status:    domain.TaskStatusTodo,
+		Tags:      []string{"work", "urgent", "important"},
+		CreatedAt: time.Now().UTC().UTC(),
+		UpdatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
@@ -365,7 +371,8 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		}
 	}()
 
-	todoService := todo.NewService(store, todo.Config{})
+	generator := recurring.NewDomainGenerator()
+	todoService := todo.NewService(store, generator, todo.Config{})
 
 	// Create a list
 	listUUID, err := uuid.NewV7()
@@ -373,9 +380,9 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	listID := listUUID.String()
 
 	list := &domain.TodoList{
-		ID:         listID,
-		Title:      "Partial Update Test List",
-		CreateTime: time.Now().UTC().UTC(),
+		ID:        listID,
+		Title:     "Partial Update Test List",
+		CreatedAt: time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateList(ctx, list)
 	require.NoError(t, err)
@@ -395,11 +402,11 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 		Title:             "Fully Populated Item",
 		Status:            domain.TaskStatusTodo,
 		Priority:          &priority,
-		DueTime:           &dueTime,
+		DueAt:             &dueTime,
 		EstimatedDuration: &duration,
 		Timezone:          &timezone,
 		Tags:              []string{"test", "important"},
-		CreateTime:        time.Now().UTC().UTC(),
+		CreatedAt:         time.Now().UTC().UTC(),
 		UpdatedAt:         time.Now().UTC().UTC(),
 	}
 	_, err = store.CreateItem(ctx, listID, item)
@@ -419,7 +426,7 @@ func TestFieldMask_PartialUpdate_DoesNotClearOtherFields(t *testing.T) {
 	assert.Equal(t, "Updated Title Only", fetchedItem.Title, "Title should be updated")
 	assert.NotNil(t, fetchedItem.Priority, "Priority should be preserved")
 	assert.Equal(t, domain.TaskPriorityHigh, *fetchedItem.Priority, "Priority value should be unchanged")
-	assert.NotNil(t, fetchedItem.DueTime, "DueTime should be preserved")
+	assert.NotNil(t, fetchedItem.DueAt, "DueAt should be preserved")
 	assert.NotNil(t, fetchedItem.EstimatedDuration, "EstimatedDuration should be preserved")
 	assert.Equal(t, 3*time.Hour, *fetchedItem.EstimatedDuration, "Duration value should be unchanged")
 	assert.NotNil(t, fetchedItem.Timezone, "Timezone should be preserved")

@@ -34,7 +34,7 @@ func TestListTasks_DefaultPageSizeFromService(t *testing.T) {
 	// If HTTP layer is incorrectly applying its own default (50), all 30 items would be returned.
 	// If service layer default (25) is correctly used, only 25 items should be returned.
 	numItems := 30
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		_, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
 			Title: fmt.Sprintf("Item %02d", i+1),
 		})
@@ -110,7 +110,7 @@ func TestListTasks_ExplicitPageSizeRespected(t *testing.T) {
 	require.NoError(t, err)
 
 	numItems := 20
-	for i := 0; i < numItems; i++ {
+	for i := range numItems {
 		_, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
 			Title: fmt.Sprintf("Item %02d", i+1),
 		})

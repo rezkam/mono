@@ -138,7 +138,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 		}
 
 		var targetKey string
-		for i := 0; i < numKeys; i++ {
+		for i := range numKeys {
 			key, err := auth.CreateAPIKey(ctx, store, "sk", "mono", "v1",
 				fmt.Sprintf("Key %d", i), nil)
 			if err != nil {
@@ -175,7 +175,7 @@ func BenchmarkAuthO1_vs_On(b *testing.B) {
 		}
 
 		var targetKey string
-		for i := 0; i < numKeys; i++ {
+		for i := range numKeys {
 			key, err := auth.CreateAPIKey(ctx, store, "sk", "mono", "v1",
 				fmt.Sprintf("Key %d", i), nil)
 			if err != nil {

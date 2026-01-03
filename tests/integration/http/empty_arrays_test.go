@@ -177,12 +177,13 @@ func TestEmptyArraysNotNull(t *testing.T) {
 
 		// Create template directly via service (bypasses any HTTP helper)
 		template := &domain.RecurringTemplate{
-			ListID:               list.ID,
-			Title:                "Template without tags",
-			RecurrencePattern:    domain.RecurrenceDaily,
-			RecurrenceConfig:     map[string]any{}, // Required field
-			IsActive:             true,
-			GenerationWindowDays: 30,
+			ListID:                list.ID,
+			Title:                 "Template without tags",
+			RecurrencePattern:     domain.RecurrenceDaily,
+			RecurrenceConfig:      map[string]any{}, // Required field
+			IsActive:              true,
+			SyncHorizonDays:       14,
+			GenerationHorizonDays: 30,
 			// Tags field not set (will be nil)
 		}
 		createdTemplate, err := ts.TodoService.CreateRecurringTemplate(ctx, template)

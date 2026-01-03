@@ -38,14 +38,14 @@ func TestListTasks_FilteringAndOrdering(t *testing.T) {
 		require.NoError(t, err)
 
 		item := &domain.TodoItem{
-			ID:         itemUUID.String(),
-			Title:      data.title,
-			Status:     data.status,
-			Priority:   data.priority,
-			Tags:       data.tags,
-			DueTime:    data.dueTime,
-			CreateTime: now,
-			UpdatedAt:  now,
+			ID:        itemUUID.String(),
+			Title:     data.title,
+			Status:    data.status,
+			Priority:  data.priority,
+			Tags:      data.tags,
+			DueAt:     data.dueTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		_, err = env.Store().CreateItem(env.Context(), listID, item)
 		require.NoError(t, err)
@@ -78,7 +78,7 @@ func TestListTasks_FilteringAndOrdering(t *testing.T) {
 	t.Run("filter_by_tag_order_by_due_time", func(t *testing.T) {
 		filter, err := domain.NewItemsFilter(domain.ItemsFilterInput{
 			Tags:     []string{"work"},
-			OrderBy:  ptrString("due_time"),
+			OrderBy:  ptrString("due_at"),
 			OrderDir: ptrString("asc"),
 		})
 		require.NoError(t, err)
@@ -92,8 +92,8 @@ func TestListTasks_FilteringAndOrdering(t *testing.T) {
 
 		assert.Equal(t, 4, len(result.Items))
 		for i := 0; i < len(result.Items)-1; i++ {
-			assert.True(t, result.Items[i].DueTime.Before(*result.Items[i+1].DueTime),
-				"Items should be ordered by due_time ascending")
+			assert.True(t, result.Items[i].DueAt.Before(*result.Items[i+1].DueAt),
+				"Items should be ordered by due_at ascending")
 			assert.Contains(t, result.Items[i].Tags, "work")
 		}
 		assert.Contains(t, result.Items[len(result.Items)-1].Tags, "work")
@@ -547,13 +547,13 @@ func TestListTasks_DefaultSorting(t *testing.T) {
 	listID := list.ID
 
 	// Create items with specific creation order
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		item := &domain.TodoItem{
 			Title: "Item " + string(rune('A'+i)),
 		}
 		_, err := env.Service().CreateItem(env.Context(), listID, item)
 		require.NoError(t, err)
-		// Database assigns create_time automatically with microsecond precision
+		// Database assigns created_at automatically with microsecond precision
 		// No artificial delay needed
 	}
 
@@ -570,7 +570,7 @@ func TestListTasks_DefaultSorting(t *testing.T) {
 	assert.Len(t, result.Items, 5)
 	// Items should be in reverse creation order (most recent first)
 	for i := 0; i < len(result.Items)-1; i++ {
-		assert.True(t, result.Items[i].CreateTime.After(result.Items[i+1].CreateTime),
+		assert.True(t, result.Items[i].CreatedAt.After(result.Items[i+1].CreatedAt),
 			"Items should be ordered by created_at descending (default)")
 	}
 }

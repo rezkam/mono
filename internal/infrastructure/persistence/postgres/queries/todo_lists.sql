@@ -1,5 +1,5 @@
 -- name: CreateTodoList :one
-INSERT INTO todo_lists (id, title, create_time)
+INSERT INTO todo_lists (id, title, created_at)
 VALUES ($1, $2, $3)
 RETURNING *;
 
@@ -13,14 +13,14 @@ WHERE id = @id;
 SELECT
     tl.id,
     tl.title,
-    tl.create_time,
+    tl.created_at,
     tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY(@undone_statuses::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 WHERE tl.id = @id
-GROUP BY tl.id, tl.title, tl.create_time, tl.version;
+GROUP BY tl.id, tl.title, tl.created_at, tl.version;
 
 -- name: UpdateTodoList :one
 -- ATOMIC UPDATE WITH COUNTS: Uses CTE to update and return counts in single statement.
@@ -43,13 +43,13 @@ WITH updated AS (
 SELECT
     u.id,
     u.title,
-    u.create_time,
+    u.created_at,
     u.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY(@undone_statuses::text[])), 0)::int AS undone_items
 FROM updated u
 LEFT JOIN todo_items ti ON u.id = ti.list_id
-GROUP BY u.id, u.title, u.create_time, u.version;
+GROUP BY u.id, u.title, u.created_at, u.version;
 
 -- name: DeleteTodoList :execrows
 -- DATA ACCESS PATTERN: Single-query existence check via rowsAffected
@@ -61,7 +61,7 @@ WHERE id = $1;
 -- name: ListTodoLists :many
 -- Legacy query: Returns all lists without items (use ListTodoListsWithCounts for list views).
 SELECT * FROM todo_lists
-ORDER BY create_time DESC;
+ORDER BY created_at DESC;
 
 -- name: ListTodoListsWithCounts :many
 -- Optimized for LIST VIEW access pattern: Returns list metadata with item counts.
@@ -77,14 +77,14 @@ ORDER BY create_time DESC;
 SELECT
     tl.id,
     tl.title,
-    tl.create_time,
+    tl.created_at,
     tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY(@undone_statuses::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
-GROUP BY tl.id, tl.title, tl.create_time, tl.version
-ORDER BY tl.create_time DESC;
+GROUP BY tl.id, tl.title, tl.created_at, tl.version
+ORDER BY tl.created_at DESC;
 
 -- name: FindTodoListsWithFilters :many
 -- Advanced list query with filtering, sorting, and pagination.
@@ -92,16 +92,16 @@ ORDER BY tl.create_time DESC;
 --
 -- Parameters use nullable types for optional filters:
 --   - title_contains: Filters by title substring (case-insensitive)
---   - create_time_after: Filters lists created after this time
---   - create_time_before: Filters lists created before this time
---   - order_by: Column to sort by ("create_time" or "title")
+--   - created_at_after: Filters lists created after this time
+--   - created_at_before: Filters lists created before this time
+--   - order_by: Column to sort by ("created_at" or "title")
 --   - order_dir: Sort direction ("asc" or "desc")
 --   - page_limit: Maximum number of results to return
 --   - page_offset: Number of results to skip
 SELECT
     tl.id,
     tl.title,
-    tl.create_time,
+    tl.created_at,
     tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY(@undone_statuses::text[])), 0)::int AS undone_items
@@ -109,9 +109,9 @@ FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 WHERE
     (@title_contains::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || @title_contains || '%'))
-    AND (@create_time_after::timestamptz IS NULL OR tl.create_time > @create_time_after)
-    AND (@create_time_before::timestamptz IS NULL OR tl.create_time < @create_time_before)
-GROUP BY tl.id, tl.title, tl.create_time, tl.version
+    AND (@created_at_after::timestamptz IS NULL OR tl.created_at > @created_at_after)
+    AND (@created_at_before::timestamptz IS NULL OR tl.created_at < @created_at_before)
+GROUP BY tl.id, tl.title, tl.created_at, tl.version
 ORDER BY
     CASE
         WHEN @order_by = 'title' AND @order_dir = 'asc' THEN tl.title
@@ -120,12 +120,12 @@ ORDER BY
         WHEN @order_by = 'title' AND @order_dir = 'desc' THEN tl.title
     END DESC,
     CASE
-        WHEN @order_by = 'create_time' AND @order_dir = 'asc' THEN tl.create_time
-        WHEN (@order_by IS NULL OR @order_by = '') AND (@order_dir IS NULL OR @order_dir = '' OR @order_dir = 'asc') THEN tl.create_time
+        WHEN @order_by = 'created_at' AND @order_dir = 'asc' THEN tl.created_at
+        WHEN (@order_by IS NULL OR @order_by = '') AND (@order_dir IS NULL OR @order_dir = '' OR @order_dir = 'asc') THEN tl.created_at
     END ASC,
     CASE
-        WHEN @order_by = 'create_time' AND @order_dir = 'desc' THEN tl.create_time
-        WHEN (@order_by IS NULL OR @order_by = '') AND @order_dir = 'desc' THEN tl.create_time
+        WHEN @order_by = 'created_at' AND @order_dir = 'desc' THEN tl.created_at
+        WHEN (@order_by IS NULL OR @order_by = '') AND @order_dir = 'desc' THEN tl.created_at
     END DESC
 LIMIT @page_limit
 OFFSET @page_offset;
@@ -136,5 +136,5 @@ SELECT COUNT(DISTINCT tl.id)::int AS total_count
 FROM todo_lists tl
 WHERE
     (@title_contains::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || @title_contains || '%'))
-    AND (@create_time_after::timestamptz IS NULL OR tl.create_time > @create_time_after)
-    AND (@create_time_before::timestamptz IS NULL OR tl.create_time < @create_time_before);
+    AND (@created_at_after::timestamptz IS NULL OR tl.created_at > @created_at_after)
+    AND (@created_at_before::timestamptz IS NULL OR tl.created_at < @created_at_before);
