@@ -215,9 +215,189 @@ func (s *Store) CreateGenerationJob(ctx context.Context, job *domain.GenerationJ
 	return s.queries.InsertGenerationJob(ctx, params)
 }
 
-// === Transaction Support ===
+// === Composite Operations ===
+
+// UpdateItemWithException atomically updates a recurring item and creates an exception.
+func (s *Store) UpdateItemWithException(
+	ctx context.Context,
+	params domain.UpdateItemParams,
+	exception *domain.RecurringTemplateException,
+) (*domain.TodoItem, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txStore := &Store{pool: s.pool, queries: s.queries.WithTx(tx)}
+
+	// 1. Create exception first
+	_, err = txStore.CreateException(ctx, exception)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Update item
+	updatedItem, err := txStore.UpdateItem(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return updatedItem, nil
+}
+
+// DeleteItemWithException atomically archives an item and creates a deletion exception.
+func (s *Store) DeleteItemWithException(
+	ctx context.Context,
+	listID string,
+	itemID string,
+	exception *domain.RecurringTemplateException,
+) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txStore := &Store{pool: s.pool, queries: s.queries.WithTx(tx)}
+
+	// 1. Create exception first
+	_, err = txStore.CreateException(ctx, exception)
+	if err != nil {
+		return err
+	}
+
+	// 2. Archive item (soft delete by setting status to archived)
+	archived := domain.TaskStatusArchived
+	updateParams := domain.UpdateItemParams{
+		ItemID:     itemID,
+		ListID:     listID,
+		UpdateMask: []string{"status"},
+		Status:     &archived,
+	}
+
+	_, err = txStore.UpdateItem(ctx, updateParams)
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// CreateTemplateWithInitialGeneration atomically creates a template and generates initial items.
+func (s *Store) CreateTemplateWithInitialGeneration(
+	ctx context.Context,
+	template *domain.RecurringTemplate,
+	syncItems []*domain.TodoItem,
+	syncEnd time.Time,
+	asyncJob *domain.GenerationJob,
+) (*domain.RecurringTemplate, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txStore := &Store{pool: s.pool, queries: s.queries.WithTx(tx)}
+
+	// 1. Create template
+	createdTemplate, err := txStore.CreateRecurringTemplate(ctx, template)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create template: %w", err)
+	}
+
+	// 2. Insert sync horizon items
+	if len(syncItems) > 0 {
+		_, err = txStore.BatchInsertItemsIgnoreConflict(ctx, syncItems)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert sync items: %w", err)
+		}
+	}
+
+	// 3. Update generation marker
+	if err := txStore.SetGeneratedThrough(ctx, template.ID, syncEnd); err != nil {
+		return nil, fmt.Errorf("failed to update generation marker: %w", err)
+	}
+
+	// 4. Create async generation job (if provided)
+	if asyncJob != nil {
+		if err := txStore.CreateGenerationJob(ctx, asyncJob); err != nil {
+			return nil, fmt.Errorf("failed to create generation job: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return createdTemplate, nil
+}
+
+// UpdateTemplateWithRegeneration atomically updates template and regenerates future items.
+func (s *Store) UpdateTemplateWithRegeneration(
+	ctx context.Context,
+	params domain.UpdateRecurringTemplateParams,
+	deleteFrom time.Time,
+	syncItems []*domain.TodoItem,
+	syncEnd time.Time,
+) (*domain.RecurringTemplate, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txStore := &Store{pool: s.pool, queries: s.queries.WithTx(tx)}
+
+	// 1. Update template
+	_, err = txStore.UpdateRecurringTemplate(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update template: %w", err)
+	}
+
+	// 2. Delete future pending items
+	if _, err := txStore.DeleteFuturePendingItems(ctx, params.TemplateID, deleteFrom); err != nil {
+		return nil, fmt.Errorf("failed to delete future items: %w", err)
+	}
+
+	// 3. Insert regenerated items
+	if len(syncItems) > 0 {
+		_, err = txStore.BatchInsertItemsIgnoreConflict(ctx, syncItems)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert regenerated items: %w", err)
+		}
+	}
+
+	// 4. Update generation marker
+	if err := txStore.SetGeneratedThrough(ctx, params.TemplateID, syncEnd); err != nil {
+		return nil, fmt.Errorf("failed to update generation marker: %w", err)
+	}
+
+	// 5. Refetch template to get updated generated_through value
+	finalTemplate, err := txStore.FindRecurringTemplate(ctx, params.TemplateID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to refetch template: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return finalTemplate, nil
+}
+
+// === Transaction Support (DEPRECATED) ===
 
 // Transaction executes a function within a database transaction.
+// DEPRECATED: Use composite operations instead (UpdateItemWithException, etc.)
 func (s *Store) Transaction(ctx context.Context, fn func(tx todo.Repository) error) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

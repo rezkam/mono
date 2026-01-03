@@ -127,10 +127,65 @@ type Repository interface {
 	// ListAllExceptionsByTemplate retrieves all exceptions for a template.
 	ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error)
 
-	// === Transaction Support ===
+	// === Composite Operations ===
+	// These operations execute multiple steps atomically.
+	// Implementation handles atomicity (e.g., database transactions, locks, etc.).
+
+	// UpdateItemWithException atomically updates a recurring item and creates an exception.
+	// This prevents the template from regenerating over the customized occurrence.
+	// Returns domain.ErrItemNotFound if item doesn't exist.
+	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
+	UpdateItemWithException(
+		ctx context.Context,
+		params domain.UpdateItemParams,
+		exception *domain.RecurringTemplateException,
+	) (*domain.TodoItem, error)
+
+	// DeleteItemWithException atomically archives an item and creates a deletion exception.
+	// This prevents the template from regenerating the occurrence.
+	// Returns domain.ErrItemNotFound if item doesn't exist.
+	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
+	DeleteItemWithException(
+		ctx context.Context,
+		listID string,
+		itemID string,
+		exception *domain.RecurringTemplateException,
+	) error
+
+	// CreateTemplateWithInitialGeneration atomically creates a template and generates initial items.
+	// Generates items up to template.SyncHorizonDays and schedules async job for remaining days.
+	// All operations succeed together or fail together (template, items, generation marker, job).
+	// Returns the created template with generation markers set.
+	// Returns domain.ErrListNotFound if list doesn't exist.
+	CreateTemplateWithInitialGeneration(
+		ctx context.Context,
+		template *domain.RecurringTemplate,
+		syncItems []*domain.TodoItem,
+		syncEnd time.Time,
+		asyncJob *domain.GenerationJob,
+	) (*domain.RecurringTemplate, error)
+
+	// UpdateTemplateWithRegeneration atomically updates template and regenerates future items.
+	// Steps: updates template, deletes future pending items, regenerates with new pattern.
+	// Uses exceptions to filter already-customized occurrences.
+	// All operations succeed together or fail together.
+	// Returns the updated template with new generation markers.
+	// Returns domain.ErrTemplateNotFound if template doesn't exist.
+	// Returns domain.ErrVersionConflict if etag doesn't match current version.
+	UpdateTemplateWithRegeneration(
+		ctx context.Context,
+		params domain.UpdateRecurringTemplateParams,
+		deleteFrom time.Time,
+		syncItems []*domain.TodoItem,
+		syncEnd time.Time,
+	) (*domain.RecurringTemplate, error)
+
+	// === Transaction Support (DEPRECATED) ===
+	// TODO: Remove after migrating to composite operations above.
 
 	// Transaction executes multiple repository operations atomically.
 	// All operations within fn succeed together or fail together.
 	// If fn returns an error, all operations are rolled back.
+	// DEPRECATED: Use composite operations instead (UpdateItemWithException, etc.)
 	Transaction(ctx context.Context, fn func(tx Repository) error) error
 }
