@@ -9,19 +9,31 @@ import (
 
 	"context"
 	"database/sql"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	// Bulk insert using PostgreSQL's COPY protocol.
-	// This bypasses:
-	//   - Query parsing per row
-	//   - Planner overhead per row
-	//   - Network round trips per row
-	// Result: ~10x performance for batch operations (30-90 items → single operation).
+	// Bulk insert using PostgreSQL COPY protocol for high performance
 	BatchCreateTodoItems(ctx context.Context, arg []BatchCreateTodoItemsParams) (int64, error)
+	// Cancel a pending or scheduled job immediately.
+	// Returns 0 rows if job doesn't exist or is not cancellable.
+	CancelPendingJob(ctx context.Context, id string) (int64, error)
 	// Checks if an API key exists by ID.
 	// Used by UpdateLastUsed to distinguish "not found" from "timestamp not later".
 	CheckAPIKeyExists(ctx context.Context, id string) (bool, error)
+	// Atomically claim the next pending or stuck running job using SKIP LOCKED.
+	// Returns the job if claimed, or NULL if no jobs available.
+	// This query covers two scenarios:
+	//   1. Pending jobs ready to run (scheduled_for <= NOW)
+	//   2. Running jobs past availability timeout (stuck workers)
+	ClaimNextPendingJob(ctx context.Context) (ClaimNextPendingJobRow, error)
+	// Remove expired leases (housekeeping).
+	CleanupExpiredLeases(ctx context.Context) (int64, error)
+	// Mark job as completed, but only if still owned by the specified worker.
+	// Returns 0 rows if job doesn't exist or ownership was lost.
+	// Note: available_at is set to completed_at since NOT NULL constraint prevents NULL.
+	CompleteJobWithOwnershipCheck(ctx context.Context, arg CompleteJobWithOwnershipCheckParams) (int64, error)
 	// Counts total matching items for pagination (used when main query returns empty page).
 	// Uses same WHERE clause as ListTasksWithFilters for consistency.
 	// $2: statuses array (empty array skips filter, OR logic within array)
@@ -32,11 +44,7 @@ type Querier interface {
 	// Count total matching lists for pagination (same filters as FindTodoListsWithFilters).
 	CountTodoListsWithFilters(ctx context.Context, arg CountTodoListsWithFiltersParams) (int32, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) error
-	// Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
-	// to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
-	// between the application and database from making jobs temporarily unclaimable.
-	// For future scheduling, pass an explicit timestamp to override the default.
-	CreateGenerationJob(ctx context.Context, arg CreateGenerationJobParams) error
+	CreateException(ctx context.Context, arg CreateExceptionParams) (RecurringTemplateException, error)
 	CreateRecurringTemplate(ctx context.Context, arg CreateRecurringTemplateParams) (RecurringTaskTemplate, error)
 	CreateStatusHistoryEntry(ctx context.Context, arg CreateStatusHistoryEntryParams) error
 	CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) (TodoItem, error)
@@ -49,11 +57,15 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Soft delete with existence detection in single operation
 	DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error)
-	DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.Null[time.Time]) error
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-	// Hard delete with built-in existence verification
+	// Cleanup old completed jobs for housekeeping.
+	DeleteCompletedJobsOlderThan(ctx context.Context, completedAt sql.Null[time.Time]) (int64, error)
+	DeleteException(ctx context.Context, arg DeleteExceptionParams) error
+	// Delete future pending items for a template (used before regeneration)
+	DeleteFuturePendingItems(ctx context.Context, arg DeleteFuturePendingItemsParams) (int64, error)
 	DeleteRecurringTemplate(ctx context.Context, id string) (int64, error)
+	// Cleanup old resolved dead letter jobs (housekeeping).
+	// Retention period determined by caller (e.g., 30 days).
+	DeleteResolvedDeadLetterJobs(ctx context.Context, reviewedAt pgtype.Timestamptz) (int64, error)
 	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Single-query delete with existence detection built-in
@@ -63,21 +75,45 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Efficient detection of non-existent records without separate SELECT query
 	DeleteTodoList(ctx context.Context, id string) (int64, error)
+	// Move job to discarded state after exhausting retries.
+	DiscardJobAfterMaxRetries(ctx context.Context, arg DiscardJobAfterMaxRetriesParams) (int64, error)
+	// Mark job as discarded with ownership verification.
+	// Used by MoveToDeadLetter for atomic DLQ + discard operation.
+	// Returns 0 rows if job doesn't exist or ownership was lost.
+	DiscardJobWithOwnershipCheck(ctx context.Context, arg DiscardJobWithOwnershipCheckParams) (int64, error)
+	// Extend the availability timeout for a running job (heartbeat).
+	// Only succeeds if job is still owned by the specified worker.
+	ExtendJobAvailability(ctx context.Context, arg ExtendJobAvailabilityParams) (int64, error)
+	FindExceptionByOccurrence(ctx context.Context, arg FindExceptionByOccurrenceParams) (RecurringTemplateException, error)
+	// Find templates that need generation (generated_through < target date)
+	FindStaleTemplates(ctx context.Context, arg FindStaleTemplatesParams) ([]RecurringTaskTemplate, error)
+	// Find templates needing reconciliation across all lists.
+	// Used by reconciliation worker to ensure all templates are properly generated.
+	// Excludes:
+	//   - Templates updated after updated_before (grace period for newly created/updated)
+	//   - Templates with pending/running jobs (if exclude_pending is true)
+	//   - Templates already generated through their target date
+	FindStaleTemplatesForReconciliation(ctx context.Context, arg FindStaleTemplatesForReconciliationParams) ([]RecurringTaskTemplate, error)
 	// Advanced list query with filtering, sorting, and pagination.
 	// Supports AIP-160-style filtering and AIP-132-style sorting.
 	//
 	// Parameters use nullable types for optional filters:
 	//   - title_contains: Filters by title substring (case-insensitive)
-	//   - create_time_after: Filters lists created after this time
-	//   - create_time_before: Filters lists created before this time
-	//   - order_by: Column to sort by ("create_time" or "title")
+	//   - created_at_after: Filters lists created after this time
+	//   - created_at_before: Filters lists created before this time
+	//   - order_by: Column to sort by ("created_at" or "title")
 	//   - order_dir: Sort direction ("asc" or "desc")
 	//   - page_limit: Maximum number of results to return
 	//   - page_offset: Number of results to skip
 	FindTodoListsWithFilters(ctx context.Context, arg FindTodoListsWithFiltersParams) ([]FindTodoListsWithFiltersRow, error)
 	GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error)
 	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
+	// Retrieve a specific dead letter job by ID.
+	GetDeadLetterJob(ctx context.Context, id pgtype.UUID) (DeadLetterJob, error)
+	// Retrieve a generation job by ID
 	GetGenerationJob(ctx context.Context, id string) (RecurringGenerationJob, error)
+	// Retrieve the current lease holder for a run type.
+	GetLease(ctx context.Context, runType string) (CronJobLease, error)
 	GetRecurringTemplate(ctx context.Context, id string) (RecurringTaskTemplate, error)
 	GetTaskStatusHistory(ctx context.Context, taskID string) ([]TaskStatusHistory, error)
 	GetTaskStatusHistoryByDateRange(ctx context.Context, arg GetTaskStatusHistoryByDateRangeParams) ([]TaskStatusHistory, error)
@@ -87,13 +123,39 @@ type Querier interface {
 	// Returns a single list by ID with item counts (for detail view).
 	// undone_statuses parameter: domain layer defines which statuses count as "undone".
 	GetTodoListWithCounts(ctx context.Context, arg GetTodoListWithCountsParams) (GetTodoListWithCountsRow, error)
-	// Checks if a template already has a pending or running job to prevent duplicates.
-	// Returns true if such a job exists, false otherwise.
-	HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error)
+	// Move a failed job to the dead letter queue for admin review.
+	InsertDeadLetterJob(ctx context.Context, arg InsertDeadLetterJobParams) error
+	// Generation Job Queue - Timestamp Fields Explained
+	// ====================================================
+	// scheduled_for: WHEN the job should execute (user's intent)
+	//   - Set at creation or retry scheduling
+	//   - Determines job ordering (earliest scheduled_for processed first)
+	//   - For pending jobs: must be <= NOW() to be claimable
+	//
+	// available_at: WHEN the job can be claimed by workers (availability window)
+	//   - For pending jobs: equals scheduled_for (immediately available when scheduled)
+	//   - For running jobs: NOW() + timeout (e.g., 5 minutes visibility window)
+	//   - Enables stuck job recovery: if worker crashes, job becomes claimable when available_at <= NOW()
+	//   - Pattern inspired by SQS Visibility Timeout
+	//
+	// Example timeline:
+	//   T+0s:  Job created with scheduled_for=NOW(), available_at=NOW()
+	//   T+1s:  Worker claims job → status='running', available_at=NOW()+5min
+	//   T+301s: Worker crashes (doesn't complete or extend)
+	//   T+301s: Job becomes claimable again (available_at <= NOW())
+	// Insert a single generation job
+	InsertGenerationJob(ctx context.Context, arg InsertGenerationJobParams) error
+	// Idempotent single insert with ON CONFLICT DO NOTHING
+	// Used in batch operations - duplicates silently ignored based on UNIQUE(recurring_template_id, occurs_at)
+	InsertItemIgnoreConflict(ctx context.Context, arg InsertItemIgnoreConflictParams) error
 	ListActiveAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListAllActiveRecurringTemplates(ctx context.Context) ([]RecurringTaskTemplate, error)
+	ListAllExceptionsByTemplate(ctx context.Context, templateID pgtype.UUID) ([]RecurringTemplateException, error)
 	ListAllRecurringTemplatesByList(ctx context.Context, listID string) ([]RecurringTaskTemplate, error)
-	ListPendingGenerationJobs(ctx context.Context, arg ListPendingGenerationJobsParams) ([]RecurringGenerationJob, error)
+	ListExceptions(ctx context.Context, arg ListExceptionsParams) ([]RecurringTemplateException, error)
+	// Retrieve unresolved dead letter jobs for admin review.
+	// Ordered by failure time (most recent first).
+	ListPendingDeadLetterJobs(ctx context.Context, limit int32) ([]DeadLetterJob, error)
 	ListRecurringTemplates(ctx context.Context, listID string) ([]RecurringTaskTemplate, error)
 	// Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
 	// Performance: Pushes all operations to PostgreSQL with proper indexes vs loading all items to memory.
@@ -108,9 +170,9 @@ type Querier interface {
 	//   $6: due_after         - Filter tasks due after timestamp (zero time to skip)
 	//   $7: updated_at        - Filter by last update time (zero time to skip)
 	//   $8: created_at        - Filter by creation time (zero time to skip)
-	//   $9: order_by          - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
-	//                           Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
-	//                           For bare field names, defaults are: due_time=asc, priority=asc,
+	//   $9: order_by          - Combined field+direction: 'due_at_asc', 'due_at_desc', etc.
+	//                           Supports: due_at, priority, created_at, updated_at with _asc or _desc suffix
+	//                           For bare field names, defaults are: due_at=asc, priority=asc,
 	//                           created_at=desc, updated_at=desc
 	//   $10: limit            - Page size (max items to return)
 	//   $11: offset           - Pagination offset (skip N items)
@@ -133,9 +195,9 @@ type Querier interface {
 	// provide security - parameterized queries are the security boundary.
 	//
 	// Access pattern examples:
-	//   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
+	//   - "Show my overdue tasks": filter by due_before=now, order by due_at_asc
 	//   - "Active work": statuses=[todo, in_progress], default sort
-	//   - "High priority items": priorities=[high, urgent], order by due_time_asc
+	//   - "High priority items": priorities=[high, urgent], order by due_at_asc
 	//   - "Tasks tagged 'urgent' and 'work'": tags=[urgent, work] (item must have both)
 	ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]ListTasksWithFiltersRow, error)
 	// Legacy query: Returns all lists without items (use ListTodoListsWithCounts for list views).
@@ -151,27 +213,38 @@ type Querier interface {
 	// This query uses LEFT JOIN to ensure lists with zero items still appear with count=0.
 	// The FILTER clause efficiently counts only matching items in a single pass.
 	ListTodoListsWithCounts(ctx context.Context, undoneStatuses []string) ([]ListTodoListsWithCountsRow, error)
+	// Mark a dead letter job as discarded with admin note.
+	MarkDeadLetterAsDiscarded(ctx context.Context, arg MarkDeadLetterAsDiscardedParams) (int64, error)
+	// Mark a dead letter job as retried by admin.
+	MarkDeadLetterAsRetried(ctx context.Context, arg MarkDeadLetterAsRetriedParams) (int64, error)
+	// Final cancellation by worker after cooperative shutdown.
+	MarkJobAsCancelled(ctx context.Context, arg MarkJobAsCancelledParams) (int64, error)
+	// Mark a claimed job as running with worker ownership and availability timeout.
+	// Returns 0 rows if job doesn't exist or was already claimed by another worker.
+	MarkJobAsRunning(ctx context.Context, arg MarkJobAsRunningParams) (int64, error)
+	// Release a lease held by the specified holder.
+	// Only succeeds if the lease is currently held by this holder.
+	ReleaseLease(ctx context.Context, arg ReleaseLeaseParams) (int64, error)
+	// Renew an existing lease by extending its expiration.
+	// Only succeeds if the lease is currently held by this holder.
+	RenewLease(ctx context.Context, arg RenewLeaseParams) (int64, error)
+	// Request cancellation for a running job (sets cancelling status).
+	// Worker must cooperatively stop processing when it sees this status.
+	RequestCancellationForRunningJob(ctx context.Context, id string) (int64, error)
+	// Reschedule job for retry with incremented retry count.
+	// Only succeeds if job is still owned by the specified worker.
+	ScheduleJobRetry(ctx context.Context, arg ScheduleJobRetryParams) (int64, error)
+	SetGeneratedThrough(ctx context.Context, arg SetGeneratedThroughParams) (int64, error)
+	// Atomically try to acquire or renew a lease for exclusive execution.
+	// Uses INSERT ON CONFLICT to handle both initial acquisition and renewal.
+	// Returns the lease if successfully acquired/renewed, NULL otherwise.
+	TryAcquireLease(ctx context.Context, arg TryAcquireLeaseParams) (CronJobLease, error)
 	// Updates last_used_at only if the new timestamp is later than the current value.
 	// Returns 0 rows affected if: (1) key doesn't exist, OR (2) timestamp not later.
 	// Repository uses CheckAPIKeyExists to distinguish these cases.
 	UpdateAPIKeyLastUsed(ctx context.Context, arg UpdateAPIKeyLastUsedParams) (int64, error)
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-	//
-	// retry_count is preserved automatically (not in SET clause)
-	// Critical for worker: Detects if job was deleted/claimed by another worker between operations
-	UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error)
-	// FIELD MASK PATTERN: Selective field updates with CASE expressions
-	// Only updates fields where set_<field> = true (field mask support)
-	// CONCURRENCY: Optional version check for optimistic locking
-	// Returns NULL if:
-	//   - Template doesn't exist
-	//   - Version mismatch (when expected_version provided)
+	// Field mask pattern with optimistic locking support
 	UpdateRecurringTemplate(ctx context.Context, arg UpdateRecurringTemplateParams) (RecurringTaskTemplate, error)
-	// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
-	// Critical for worker: Detects if template was deleted between job claim and generation
-	UpdateRecurringTemplateGenerationWindow(ctx context.Context, arg UpdateRecurringTemplateGenerationWindowParams) (int64, error)
 	// DATA ACCESS PATTERN: Partial update with explicit flags
 	// Supports field masks by passing boolean flags for fields to update
 	// Returns updated row, or pgx.ErrNoRows if:

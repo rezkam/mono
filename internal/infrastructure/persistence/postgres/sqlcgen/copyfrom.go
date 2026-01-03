@@ -36,12 +36,14 @@ func (r iteratorForBatchCreateTodoItems) Values() ([]interface{}, error) {
 		r.rows[0].Priority,
 		r.rows[0].EstimatedDuration,
 		r.rows[0].ActualDuration,
-		r.rows[0].CreateTime,
+		r.rows[0].CreatedAt,
 		r.rows[0].UpdatedAt,
-		r.rows[0].DueTime,
+		r.rows[0].DueAt,
 		r.rows[0].Tags,
 		r.rows[0].RecurringTemplateID,
-		r.rows[0].InstanceDate,
+		r.rows[0].StartsAt,
+		r.rows[0].OccursAt,
+		r.rows[0].DueOffset,
 		r.rows[0].Timezone,
 		r.rows[0].Version,
 	}, nil
@@ -51,13 +53,7 @@ func (r iteratorForBatchCreateTodoItems) Err() error {
 	return nil
 }
 
-// Bulk insert using PostgreSQL's COPY protocol.
-// This bypasses:
-//   - Query parsing per row
-//   - Planner overhead per row
-//   - Network round trips per row
-//
-// Result: ~10x performance for batch operations (30-90 items → single operation).
+// Bulk insert using PostgreSQL COPY protocol for high performance
 func (q *Queries) BatchCreateTodoItems(ctx context.Context, arg []BatchCreateTodoItemsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"todo_items"}, []string{"id", "list_id", "title", "status", "priority", "estimated_duration", "actual_duration", "create_time", "updated_at", "due_time", "tags", "recurring_template_id", "instance_date", "timezone", "version"}, &iteratorForBatchCreateTodoItems{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"todo_items"}, []string{"id", "list_id", "title", "status", "priority", "estimated_duration", "actual_duration", "created_at", "updated_at", "due_at", "tags", "recurring_template_id", "starts_at", "occurs_at", "due_offset", "timezone", "version"}, &iteratorForBatchCreateTodoItems{rows: arg})
 }

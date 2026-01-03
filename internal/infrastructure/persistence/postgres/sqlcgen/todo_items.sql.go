@@ -15,21 +15,23 @@ import (
 )
 
 type BatchCreateTodoItemsParams struct {
-	ID                  string              `json:"id"`
-	ListID              string              `json:"list_id"`
-	Title               string              `json:"title"`
-	Status              string              `json:"status"`
-	Priority            sql.Null[string]    `json:"priority"`
-	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          time.Time           `json:"create_time"`
-	UpdatedAt           time.Time           `json:"updated_at"`
-	DueTime             sql.Null[time.Time] `json:"due_time"`
-	Tags                []byte              `json:"tags"`
-	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
-	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
-	Timezone            sql.Null[string]    `json:"timezone"`
-	Version             int32               `json:"version"`
+	ID                  string             `json:"id"`
+	ListID              string             `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            sql.Null[string]   `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	DueAt               pgtype.Timestamptz `json:"due_at"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
+	StartsAt            pgtype.Date        `json:"starts_at"`
+	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
+	DueOffset           pgtype.Interval    `json:"due_offset"`
+	Timezone            sql.Null[string]   `json:"timezone"`
+	Version             int32              `json:"version"`
 }
 
 const countTasksWithFilters = `-- name: CountTasksWithFilters :one
@@ -40,10 +42,10 @@ WHERE
     (array_length($9::text[], 1) IS NULL OR status != ALL($9::text[])) AND
     (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
     (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
-    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
-    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
+    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_at <= $5) AND
+    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_at >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
-    ($8::timestamptz = '0001-01-01 00:00:00+00' OR create_time >= $8)
+    ($8::timestamptz = '0001-01-01 00:00:00+00' OR created_at >= $8)
 `
 
 type CountTasksWithFiltersParams struct {
@@ -85,32 +87,34 @@ const createTodoItem = `-- name: CreateTodoItem :one
 INSERT INTO todo_items (
     id, list_id, title, status, priority,
     estimated_duration, actual_duration,
-    create_time, updated_at, due_time, tags,
-    recurring_template_id, instance_date, timezone
+    created_at, updated_at, due_at, tags,
+    recurring_template_id, starts_at, occurs_at, due_offset, timezone
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7,
     $8, $9, $10, $11,
-    $12, $13, $14
+    $12, $13, $14, $15, $16
 )
-RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version
+RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, created_at, updated_at, due_at, tags, recurring_template_id, starts_at, occurs_at, due_offset, timezone, version
 `
 
 type CreateTodoItemParams struct {
-	ID                  string              `json:"id"`
-	ListID              string              `json:"list_id"`
-	Title               string              `json:"title"`
-	Status              string              `json:"status"`
-	Priority            sql.Null[string]    `json:"priority"`
-	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          time.Time           `json:"create_time"`
-	UpdatedAt           time.Time           `json:"updated_at"`
-	DueTime             sql.Null[time.Time] `json:"due_time"`
-	Tags                []byte              `json:"tags"`
-	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
-	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
-	Timezone            sql.Null[string]    `json:"timezone"`
+	ID                  string             `json:"id"`
+	ListID              string             `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            sql.Null[string]   `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	DueAt               pgtype.Timestamptz `json:"due_at"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
+	StartsAt            pgtype.Date        `json:"starts_at"`
+	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
+	DueOffset           pgtype.Interval    `json:"due_offset"`
+	Timezone            sql.Null[string]   `json:"timezone"`
 }
 
 func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) (TodoItem, error) {
@@ -122,12 +126,14 @@ func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) 
 		arg.Priority,
 		arg.EstimatedDuration,
 		arg.ActualDuration,
-		arg.CreateTime,
+		arg.CreatedAt,
 		arg.UpdatedAt,
-		arg.DueTime,
+		arg.DueAt,
 		arg.Tags,
 		arg.RecurringTemplateID,
-		arg.InstanceDate,
+		arg.StartsAt,
+		arg.OccursAt,
+		arg.DueOffset,
 		arg.Timezone,
 	)
 	var i TodoItem
@@ -139,16 +145,39 @@ func (q *Queries) CreateTodoItem(ctx context.Context, arg CreateTodoItemParams) 
 		&i.Priority,
 		&i.EstimatedDuration,
 		&i.ActualDuration,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DueTime,
+		&i.DueAt,
 		&i.Tags,
 		&i.RecurringTemplateID,
-		&i.InstanceDate,
+		&i.StartsAt,
+		&i.OccursAt,
+		&i.DueOffset,
 		&i.Timezone,
 		&i.Version,
 	)
 	return i, err
+}
+
+const deleteFuturePendingItems = `-- name: DeleteFuturePendingItems :execrows
+DELETE FROM todo_items
+WHERE recurring_template_id = $1
+  AND occurs_at >= $2
+  AND status = 'todo'
+`
+
+type DeleteFuturePendingItemsParams struct {
+	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
+	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
+}
+
+// Delete future pending items for a template (used before regeneration)
+func (q *Queries) DeleteFuturePendingItems(ctx context.Context, arg DeleteFuturePendingItemsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFuturePendingItems, arg.RecurringTemplateID, arg.OccursAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteTodoItem = `-- name: DeleteTodoItem :execrows
@@ -178,8 +207,8 @@ func (q *Queries) DeleteTodoItemsByListId(ctx context.Context, listID string) er
 }
 
 const getAllTodoItems = `-- name: GetAllTodoItems :many
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version FROM todo_items
-ORDER BY list_id, create_time ASC
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, created_at, updated_at, due_at, tags, recurring_template_id, starts_at, occurs_at, due_offset, timezone, version FROM todo_items
+ORDER BY list_id, created_at ASC
 `
 
 func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
@@ -199,12 +228,14 @@ func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
 			&i.Priority,
 			&i.EstimatedDuration,
 			&i.ActualDuration,
-			&i.CreateTime,
+			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DueTime,
+			&i.DueAt,
 			&i.Tags,
 			&i.RecurringTemplateID,
-			&i.InstanceDate,
+			&i.StartsAt,
+			&i.OccursAt,
+			&i.DueOffset,
 			&i.Timezone,
 			&i.Version,
 		); err != nil {
@@ -219,7 +250,7 @@ func (q *Queries) GetAllTodoItems(ctx context.Context) ([]TodoItem, error) {
 }
 
 const getTodoItem = `-- name: GetTodoItem :one
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version FROM todo_items
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, created_at, updated_at, due_at, tags, recurring_template_id, starts_at, occurs_at, due_offset, timezone, version FROM todo_items
 WHERE id = $1
 `
 
@@ -234,12 +265,14 @@ func (q *Queries) GetTodoItem(ctx context.Context, id string) (TodoItem, error) 
 		&i.Priority,
 		&i.EstimatedDuration,
 		&i.ActualDuration,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DueTime,
+		&i.DueAt,
 		&i.Tags,
 		&i.RecurringTemplateID,
-		&i.InstanceDate,
+		&i.StartsAt,
+		&i.OccursAt,
+		&i.DueOffset,
 		&i.Timezone,
 		&i.Version,
 	)
@@ -247,9 +280,9 @@ func (q *Queries) GetTodoItem(ctx context.Context, id string) (TodoItem, error) 
 }
 
 const getTodoItemsByListId = `-- name: GetTodoItemsByListId :many
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version FROM todo_items
+SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, created_at, updated_at, due_at, tags, recurring_template_id, starts_at, occurs_at, due_offset, timezone, version FROM todo_items
 WHERE list_id = $1
-ORDER BY create_time ASC
+ORDER BY created_at ASC
 `
 
 func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID string) ([]TodoItem, error) {
@@ -269,12 +302,14 @@ func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID string) ([]To
 			&i.Priority,
 			&i.EstimatedDuration,
 			&i.ActualDuration,
-			&i.CreateTime,
+			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DueTime,
+			&i.DueAt,
 			&i.Tags,
 			&i.RecurringTemplateID,
-			&i.InstanceDate,
+			&i.StartsAt,
+			&i.OccursAt,
+			&i.DueOffset,
 			&i.Timezone,
 			&i.Version,
 		); err != nil {
@@ -288,26 +323,94 @@ func (q *Queries) GetTodoItemsByListId(ctx context.Context, listID string) ([]To
 	return items, nil
 }
 
+const insertItemIgnoreConflict = `-- name: InsertItemIgnoreConflict :exec
+INSERT INTO todo_items (
+    id, list_id, title, status, priority,
+    estimated_duration, actual_duration,
+    created_at, updated_at, due_at, tags,
+    recurring_template_id, starts_at, occurs_at, due_offset, timezone,
+    version
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14, $15, $16,
+    $17
+)
+ON CONFLICT (recurring_template_id, occurs_at) WHERE recurring_template_id IS NOT NULL
+DO NOTHING
+`
+
+type InsertItemIgnoreConflictParams struct {
+	ID                  string             `json:"id"`
+	ListID              string             `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            sql.Null[string]   `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	DueAt               pgtype.Timestamptz `json:"due_at"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
+	StartsAt            pgtype.Date        `json:"starts_at"`
+	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
+	DueOffset           pgtype.Interval    `json:"due_offset"`
+	Timezone            sql.Null[string]   `json:"timezone"`
+	Version             int32              `json:"version"`
+}
+
+// Idempotent single insert with ON CONFLICT DO NOTHING
+// Used in batch operations - duplicates silently ignored based on UNIQUE(recurring_template_id, occurs_at)
+func (q *Queries) InsertItemIgnoreConflict(ctx context.Context, arg InsertItemIgnoreConflictParams) error {
+	_, err := q.db.Exec(ctx, insertItemIgnoreConflict,
+		arg.ID,
+		arg.ListID,
+		arg.Title,
+		arg.Status,
+		arg.Priority,
+		arg.EstimatedDuration,
+		arg.ActualDuration,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.DueAt,
+		arg.Tags,
+		arg.RecurringTemplateID,
+		arg.StartsAt,
+		arg.OccursAt,
+		arg.DueOffset,
+		arg.Timezone,
+		arg.Version,
+	)
+	return err
+}
+
 const listTasksWithFilters = `-- name: ListTasksWithFilters :many
-SELECT id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version, COUNT(*) OVER() AS total_count FROM todo_items
+SELECT i.id, i.list_id, i.title, i.status, i.priority, i.estimated_duration, i.actual_duration, i.created_at, i.updated_at, i.due_at, i.tags, i.recurring_template_id, i.starts_at, i.occurs_at, i.due_offset, i.timezone, i.version, COUNT(*) OVER() AS total_count
+FROM todo_items i
+LEFT JOIN recurring_template_exceptions e
+    ON i.recurring_template_id = e.template_id
+    AND i.occurs_at = e.occurs_at
 WHERE
-    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
-    (array_length($12::text[], 1) IS NULL OR status != ALL($12::text[])) AND
-    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
-    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
-    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_time <= $5) AND
-    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_time >= $6) AND
-    ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
-    ($8::timestamptz = '0001-01-01 00:00:00+00' OR create_time >= $8)
+    e.id IS NULL AND  -- Exclude items with exceptions
+    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR i.list_id = $1) AND
+    (array_length($2::text[], 1) IS NULL OR i.status = ANY($2::text[])) AND
+    (array_length($12::text[], 1) IS NULL OR i.status != ALL($12::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR i.priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR i.tags ?& $4::text[]) AND
+    ($5::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at <= $5) AND
+    ($6::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at >= $6) AND
+    ($7::timestamptz = '0001-01-01 00:00:00+00' OR i.updated_at >= $7) AND
+    ($8::timestamptz = '0001-01-01 00:00:00+00' OR i.created_at >= $8)
 ORDER BY
-    -- due_time: default ASC
-    CASE WHEN $9::text IN ('due_time', 'due_time_asc') THEN due_time END ASC NULLS LAST,
-    CASE WHEN $9::text = 'due_time_desc' THEN due_time END DESC NULLS LAST,
+    -- due_at: default ASC
+    CASE WHEN $9::text IN ('due_at', 'due_at_asc') THEN i.due_at END ASC NULLS LAST,
+    CASE WHEN $9::text = 'due_at_desc' THEN i.due_at END DESC NULLS LAST,
     -- priority: default ASC (semantic order: low=1 < medium=2 < high=3 < urgent=4)
     -- Uses numeric weights instead of lexical ordering to match proto enum semantics
     CASE WHEN $9::text IN ('priority', 'priority_asc') THEN
-        CASE priority
+        CASE i.priority
             WHEN 'low' THEN 1
             WHEN 'medium' THEN 2
             WHEN 'high' THEN 3
@@ -315,7 +418,7 @@ ORDER BY
         END
     END ASC NULLS LAST,
     CASE WHEN $9::text = 'priority_desc' THEN
-        CASE priority
+        CASE i.priority
             WHEN 'low' THEN 1
             WHEN 'medium' THEN 2
             WHEN 'high' THEN 3
@@ -323,13 +426,13 @@ ORDER BY
         END
     END DESC NULLS LAST,
     -- created_at: default DESC
-    CASE WHEN $9::text = 'created_at_asc' THEN create_time END ASC,
-    CASE WHEN $9::text IN ('created_at', 'created_at_desc') THEN create_time END DESC,
+    CASE WHEN $9::text = 'created_at_asc' THEN i.created_at END ASC,
+    CASE WHEN $9::text IN ('created_at', 'created_at_desc') THEN i.created_at END DESC,
     -- updated_at: default DESC
-    CASE WHEN $9::text = 'updated_at_asc' THEN updated_at END ASC,
-    CASE WHEN $9::text IN ('updated_at', 'updated_at_desc') THEN updated_at END DESC,
+    CASE WHEN $9::text = 'updated_at_asc' THEN i.updated_at END ASC,
+    CASE WHEN $9::text IN ('updated_at', 'updated_at_desc') THEN i.updated_at END DESC,
     -- Fallback: created_at DESC (when no valid order_by specified)
-    create_time DESC
+    i.created_at DESC
 LIMIT $10
 OFFSET $11
 `
@@ -350,22 +453,24 @@ type ListTasksWithFiltersParams struct {
 }
 
 type ListTasksWithFiltersRow struct {
-	ID                  string              `json:"id"`
-	ListID              string              `json:"list_id"`
-	Title               string              `json:"title"`
-	Status              string              `json:"status"`
-	Priority            sql.Null[string]    `json:"priority"`
-	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          time.Time           `json:"create_time"`
-	UpdatedAt           time.Time           `json:"updated_at"`
-	DueTime             sql.Null[time.Time] `json:"due_time"`
-	Tags                []byte              `json:"tags"`
-	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
-	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
-	Timezone            sql.Null[string]    `json:"timezone"`
-	Version             int32               `json:"version"`
-	TotalCount          int64               `json:"total_count"`
+	ID                  string             `json:"id"`
+	ListID              string             `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            sql.Null[string]   `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	DueAt               pgtype.Timestamptz `json:"due_at"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
+	StartsAt            pgtype.Date        `json:"starts_at"`
+	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
+	DueOffset           pgtype.Interval    `json:"due_offset"`
+	Timezone            sql.Null[string]   `json:"timezone"`
+	Version             int32              `json:"version"`
+	TotalCount          int64              `json:"total_count"`
 }
 
 // Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
@@ -382,9 +487,9 @@ type ListTasksWithFiltersRow struct {
 //	$6: due_after         - Filter tasks due after timestamp (zero time to skip)
 //	$7: updated_at        - Filter by last update time (zero time to skip)
 //	$8: created_at        - Filter by creation time (zero time to skip)
-//	$9: order_by          - Combined field+direction: 'due_time_asc', 'due_time_desc', etc.
-//	                        Supports: due_time, priority, created_at, updated_at with _asc or _desc suffix
-//	                        For bare field names, defaults are: due_time=asc, priority=asc,
+//	$9: order_by          - Combined field+direction: 'due_at_asc', 'due_at_desc', etc.
+//	                        Supports: due_at, priority, created_at, updated_at with _asc or _desc suffix
+//	                        For bare field names, defaults are: due_at=asc, priority=asc,
 //	                        created_at=desc, updated_at=desc
 //	$10: limit            - Page size (max items to return)
 //	$11: offset           - Pagination offset (skip N items)
@@ -407,9 +512,9 @@ type ListTasksWithFiltersRow struct {
 // provide security - parameterized queries are the security boundary.
 //
 // Access pattern examples:
-//   - "Show my overdue tasks": filter by due_before=now, order by due_time_asc
+//   - "Show my overdue tasks": filter by due_before=now, order by due_at_asc
 //   - "Active work": statuses=[todo, in_progress], default sort
-//   - "High priority items": priorities=[high, urgent], order by due_time_asc
+//   - "High priority items": priorities=[high, urgent], order by due_at_asc
 //   - "Tasks tagged 'urgent' and 'work'": tags=[urgent, work] (item must have both)
 func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFiltersParams) ([]ListTasksWithFiltersRow, error) {
 	rows, err := q.db.Query(ctx, listTasksWithFilters,
@@ -441,12 +546,14 @@ func (q *Queries) ListTasksWithFilters(ctx context.Context, arg ListTasksWithFil
 			&i.Priority,
 			&i.EstimatedDuration,
 			&i.ActualDuration,
-			&i.CreateTime,
+			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DueTime,
+			&i.DueAt,
 			&i.Tags,
 			&i.RecurringTemplateID,
-			&i.InstanceDate,
+			&i.StartsAt,
+			&i.OccursAt,
+			&i.DueOffset,
 			&i.Timezone,
 			&i.Version,
 			&i.TotalCount,
@@ -468,37 +575,39 @@ SET title = CASE WHEN $1::boolean THEN $2 ELSE title END,
     priority = CASE WHEN $5::boolean THEN $6 ELSE priority END,
     estimated_duration = CASE WHEN $7::boolean THEN $8 ELSE estimated_duration END,
     actual_duration = CASE WHEN $9::boolean THEN $10 ELSE actual_duration END,
-    due_time = CASE WHEN $11::boolean THEN $12 ELSE due_time END,
+    due_at = CASE WHEN $11::boolean THEN $12 ELSE due_at END,
     tags = CASE WHEN $13::boolean THEN $14 ELSE tags END,
     timezone = CASE WHEN $15::boolean THEN $16 ELSE timezone END,
+    recurring_template_id = CASE WHEN $17::boolean THEN NULL ELSE recurring_template_id END,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $17
-  AND list_id = $18
-  AND ($19::integer IS NULL OR version = $19::integer)
-RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, create_time, updated_at, due_time, tags, recurring_template_id, instance_date, timezone, version
+WHERE id = $18
+  AND list_id = $19
+  AND ($20::integer IS NULL OR version = $20::integer)
+RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, created_at, updated_at, due_at, tags, recurring_template_id, starts_at, occurs_at, due_offset, timezone, version
 `
 
 type UpdateTodoItemParams struct {
-	SetTitle             bool                `json:"set_title"`
-	Title                string              `json:"title"`
-	SetStatus            bool                `json:"set_status"`
-	Status               sql.Null[string]    `json:"status"`
-	SetPriority          bool                `json:"set_priority"`
-	Priority             sql.Null[string]    `json:"priority"`
-	SetEstimatedDuration bool                `json:"set_estimated_duration"`
-	EstimatedDuration    pgtype.Interval     `json:"estimated_duration"`
-	SetActualDuration    bool                `json:"set_actual_duration"`
-	ActualDuration       pgtype.Interval     `json:"actual_duration"`
-	SetDueTime           bool                `json:"set_due_time"`
-	DueTime              sql.Null[time.Time] `json:"due_time"`
-	SetTags              bool                `json:"set_tags"`
-	Tags                 []byte              `json:"tags"`
-	SetTimezone          bool                `json:"set_timezone"`
-	Timezone             sql.Null[string]    `json:"timezone"`
-	ID                   string              `json:"id"`
-	ListID               string              `json:"list_id"`
-	ExpectedVersion      pgtype.Int4         `json:"expected_version"`
+	SetTitle             bool               `json:"set_title"`
+	Title                string             `json:"title"`
+	SetStatus            bool               `json:"set_status"`
+	Status               sql.Null[string]   `json:"status"`
+	SetPriority          bool               `json:"set_priority"`
+	Priority             sql.Null[string]   `json:"priority"`
+	SetEstimatedDuration bool               `json:"set_estimated_duration"`
+	EstimatedDuration    pgtype.Interval    `json:"estimated_duration"`
+	SetActualDuration    bool               `json:"set_actual_duration"`
+	ActualDuration       pgtype.Interval    `json:"actual_duration"`
+	SetDueAt             bool               `json:"set_due_at"`
+	DueAt                pgtype.Timestamptz `json:"due_at"`
+	SetTags              bool               `json:"set_tags"`
+	Tags                 []byte             `json:"tags"`
+	SetTimezone          bool               `json:"set_timezone"`
+	Timezone             sql.Null[string]   `json:"timezone"`
+	DetachFromTemplate   bool               `json:"detach_from_template"`
+	ID                   string             `json:"id"`
+	ListID               string             `json:"list_id"`
+	ExpectedVersion      pgtype.Int4        `json:"expected_version"`
 }
 
 // DATA ACCESS PATTERN: Partial update with explicit flags
@@ -523,12 +632,13 @@ func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) 
 		arg.EstimatedDuration,
 		arg.SetActualDuration,
 		arg.ActualDuration,
-		arg.SetDueTime,
-		arg.DueTime,
+		arg.SetDueAt,
+		arg.DueAt,
 		arg.SetTags,
 		arg.Tags,
 		arg.SetTimezone,
 		arg.Timezone,
+		arg.DetachFromTemplate,
 		arg.ID,
 		arg.ListID,
 		arg.ExpectedVersion,
@@ -542,12 +652,14 @@ func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) 
 		&i.Priority,
 		&i.EstimatedDuration,
 		&i.ActualDuration,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DueTime,
+		&i.DueAt,
 		&i.Tags,
 		&i.RecurringTemplateID,
-		&i.InstanceDate,
+		&i.StartsAt,
+		&i.OccursAt,
+		&i.DueOffset,
 		&i.Timezone,
 		&i.Version,
 	)

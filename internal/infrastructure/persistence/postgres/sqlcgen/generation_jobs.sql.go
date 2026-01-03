@@ -9,168 +9,361 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createGenerationJob = `-- name: CreateGenerationJob :exec
-INSERT INTO recurring_generation_jobs (
-    id, template_id, scheduled_for, status,
-    generate_from, generate_until, created_at
-) VALUES (
-    $1, $2, COALESCE($3, now()), $4, $5, $6, $7
-)
+const cancelPendingJob = `-- name: CancelPendingJob :execrows
+UPDATE recurring_generation_jobs
+SET status = 'cancelled'
+WHERE id = $1 AND status IN ('pending', 'scheduled')
 `
 
-type CreateGenerationJobParams struct {
-	ID            string      `json:"id"`
-	TemplateID    string      `json:"template_id"`
-	Column3       interface{} `json:"column_3"`
-	Status        string      `json:"status"`
-	GenerateFrom  time.Time   `json:"generate_from"`
-	GenerateUntil time.Time   `json:"generate_until"`
-	CreatedAt     time.Time   `json:"created_at"`
+// Cancel a pending or scheduled job immediately.
+// Returns 0 rows if job doesn't exist or is not cancellable.
+func (q *Queries) CancelPendingJob(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelPendingJob, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-// Creates a new generation job. For immediate scheduling, pass NULL for scheduled_for
-// to use the database's transaction timestamp (DEFAULT now()). This prevents clock skew
-// between the application and database from making jobs temporarily unclaimable.
-// For future scheduling, pass an explicit timestamp to override the default.
-func (q *Queries) CreateGenerationJob(ctx context.Context, arg CreateGenerationJobParams) error {
-	_, err := q.db.Exec(ctx, createGenerationJob,
-		arg.ID,
-		arg.TemplateID,
-		arg.Column3,
-		arg.Status,
-		arg.GenerateFrom,
-		arg.GenerateUntil,
-		arg.CreatedAt,
+const claimNextPendingJob = `-- name: ClaimNextPendingJob :one
+SELECT id, template_id, generate_from, generate_until, retry_count, scheduled_for, created_at
+FROM recurring_generation_jobs
+WHERE (status = 'pending' AND scheduled_for <= NOW())
+   OR (status = 'running' AND available_at <= NOW())
+ORDER BY scheduled_for
+LIMIT 1
+FOR UPDATE SKIP LOCKED
+`
+
+type ClaimNextPendingJobRow struct {
+	ID            string    `json:"id"`
+	TemplateID    string    `json:"template_id"`
+	GenerateFrom  time.Time `json:"generate_from"`
+	GenerateUntil time.Time `json:"generate_until"`
+	RetryCount    int32     `json:"retry_count"`
+	ScheduledFor  time.Time `json:"scheduled_for"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// Atomically claim the next pending or stuck running job using SKIP LOCKED.
+// Returns the job if claimed, or NULL if no jobs available.
+// This query covers two scenarios:
+//  1. Pending jobs ready to run (scheduled_for <= NOW)
+//  2. Running jobs past availability timeout (stuck workers)
+func (q *Queries) ClaimNextPendingJob(ctx context.Context) (ClaimNextPendingJobRow, error) {
+	row := q.db.QueryRow(ctx, claimNextPendingJob)
+	var i ClaimNextPendingJobRow
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.GenerateFrom,
+		&i.GenerateUntil,
+		&i.RetryCount,
+		&i.ScheduledFor,
+		&i.CreatedAt,
 	)
-	return err
+	return i, err
 }
 
-const deleteCompletedGenerationJobs = `-- name: DeleteCompletedGenerationJobs :exec
+const completeJobWithOwnershipCheck = `-- name: CompleteJobWithOwnershipCheck :execrows
+UPDATE recurring_generation_jobs
+SET status = 'completed',
+    completed_at = NOW(),
+    claimed_by = NULL,
+    claimed_at = NULL,
+    available_at = NOW()
+WHERE id = $1 AND claimed_by = $2
+`
+
+type CompleteJobWithOwnershipCheckParams struct {
+	ID        string           `json:"id"`
+	ClaimedBy sql.Null[string] `json:"claimed_by"`
+}
+
+// Mark job as completed, but only if still owned by the specified worker.
+// Returns 0 rows if job doesn't exist or ownership was lost.
+// Note: available_at is set to completed_at since NOT NULL constraint prevents NULL.
+func (q *Queries) CompleteJobWithOwnershipCheck(ctx context.Context, arg CompleteJobWithOwnershipCheckParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeJobWithOwnershipCheck, arg.ID, arg.ClaimedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteCompletedJobsOlderThan = `-- name: DeleteCompletedJobsOlderThan :execrows
 DELETE FROM recurring_generation_jobs
 WHERE status = 'completed' AND completed_at < $1
 `
 
-func (q *Queries) DeleteCompletedGenerationJobs(ctx context.Context, completedAt sql.Null[time.Time]) error {
-	_, err := q.db.Exec(ctx, deleteCompletedGenerationJobs, completedAt)
-	return err
+// Cleanup old completed jobs for housekeeping.
+func (q *Queries) DeleteCompletedJobsOlderThan(ctx context.Context, completedAt sql.Null[time.Time]) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCompletedJobsOlderThan, completedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const getGenerationJob = `-- name: GetGenerationJob :one
-SELECT id, template_id, scheduled_for, started_at, completed_at, failed_at, status, error_message, retry_count, generate_from, generate_until, created_at FROM recurring_generation_jobs
+const discardJobAfterMaxRetries = `-- name: DiscardJobAfterMaxRetries :execrows
+UPDATE recurring_generation_jobs
+SET status = 'discarded',
+    retry_count = $2,
+    error_message = $3,
+    failed_at = NOW()
 WHERE id = $1
 `
 
+type DiscardJobAfterMaxRetriesParams struct {
+	ID           string           `json:"id"`
+	RetryCount   int32            `json:"retry_count"`
+	ErrorMessage sql.Null[string] `json:"error_message"`
+}
+
+// Move job to discarded state after exhausting retries.
+func (q *Queries) DiscardJobAfterMaxRetries(ctx context.Context, arg DiscardJobAfterMaxRetriesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, discardJobAfterMaxRetries, arg.ID, arg.RetryCount, arg.ErrorMessage)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const discardJobWithOwnershipCheck = `-- name: DiscardJobWithOwnershipCheck :execrows
+UPDATE recurring_generation_jobs
+SET status = 'discarded',
+    error_message = $3,
+    failed_at = NOW(),
+    claimed_by = NULL,
+    claimed_at = NULL,
+    available_at = NOW()
+WHERE id = $1 AND claimed_by = $2
+`
+
+type DiscardJobWithOwnershipCheckParams struct {
+	ID           string           `json:"id"`
+	ClaimedBy    sql.Null[string] `json:"claimed_by"`
+	ErrorMessage sql.Null[string] `json:"error_message"`
+}
+
+// Mark job as discarded with ownership verification.
+// Used by MoveToDeadLetter for atomic DLQ + discard operation.
+// Returns 0 rows if job doesn't exist or ownership was lost.
+func (q *Queries) DiscardJobWithOwnershipCheck(ctx context.Context, arg DiscardJobWithOwnershipCheckParams) (int64, error) {
+	result, err := q.db.Exec(ctx, discardJobWithOwnershipCheck, arg.ID, arg.ClaimedBy, arg.ErrorMessage)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const extendJobAvailability = `-- name: ExtendJobAvailability :execrows
+UPDATE recurring_generation_jobs
+SET available_at = $3
+WHERE id = $1 AND claimed_by = $2 AND status = 'running'
+`
+
+type ExtendJobAvailabilityParams struct {
+	ID          string             `json:"id"`
+	ClaimedBy   sql.Null[string]   `json:"claimed_by"`
+	AvailableAt pgtype.Timestamptz `json:"available_at"`
+}
+
+// Extend the availability timeout for a running job (heartbeat).
+// Only succeeds if job is still owned by the specified worker.
+func (q *Queries) ExtendJobAvailability(ctx context.Context, arg ExtendJobAvailabilityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, extendJobAvailability, arg.ID, arg.ClaimedBy, arg.AvailableAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getGenerationJob = `-- name: GetGenerationJob :one
+SELECT id, template_id, status, available_at, claimed_by, claimed_at, generate_from, generate_until, scheduled_for, created_at, started_at, completed_at, failed_at, error_message, retry_count FROM recurring_generation_jobs
+WHERE id = $1
+`
+
+// Retrieve a generation job by ID
 func (q *Queries) GetGenerationJob(ctx context.Context, id string) (RecurringGenerationJob, error) {
 	row := q.db.QueryRow(ctx, getGenerationJob, id)
 	var i RecurringGenerationJob
 	err := row.Scan(
 		&i.ID,
 		&i.TemplateID,
+		&i.Status,
+		&i.AvailableAt,
+		&i.ClaimedBy,
+		&i.ClaimedAt,
+		&i.GenerateFrom,
+		&i.GenerateUntil,
 		&i.ScheduledFor,
+		&i.CreatedAt,
 		&i.StartedAt,
 		&i.CompletedAt,
 		&i.FailedAt,
-		&i.Status,
 		&i.ErrorMessage,
 		&i.RetryCount,
-		&i.GenerateFrom,
-		&i.GenerateUntil,
-		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const hasPendingOrRunningJob = `-- name: HasPendingOrRunningJob :one
-SELECT EXISTS(
-    SELECT 1 FROM recurring_generation_jobs
-    WHERE template_id = $1 AND status IN ('pending', 'running')
-) AS has_job
+const insertGenerationJob = `-- name: InsertGenerationJob :exec
+
+INSERT INTO recurring_generation_jobs (
+    id, template_id, generate_from, generate_until,
+    scheduled_for, status, retry_count, created_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8
+)
 `
 
-// Checks if a template already has a pending or running job to prevent duplicates.
-// Returns true if such a job exists, false otherwise.
-func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
-	row := q.db.QueryRow(ctx, hasPendingOrRunningJob, templateID)
-	var has_job bool
-	err := row.Scan(&has_job)
-	return has_job, err
+type InsertGenerationJobParams struct {
+	ID            string    `json:"id"`
+	TemplateID    string    `json:"template_id"`
+	GenerateFrom  time.Time `json:"generate_from"`
+	GenerateUntil time.Time `json:"generate_until"`
+	ScheduledFor  time.Time `json:"scheduled_for"`
+	Status        string    `json:"status"`
+	RetryCount    int32     `json:"retry_count"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
-const listPendingGenerationJobs = `-- name: ListPendingGenerationJobs :many
-SELECT id, template_id, scheduled_for, started_at, completed_at, failed_at, status, error_message, retry_count, generate_from, generate_until, created_at FROM recurring_generation_jobs
-WHERE status = 'pending' AND scheduled_for <= $1
-ORDER BY scheduled_for ASC
-LIMIT $2
-`
-
-type ListPendingGenerationJobsParams struct {
-	ScheduledFor time.Time `json:"scheduled_for"`
-	Limit        int32     `json:"limit"`
-}
-
-func (q *Queries) ListPendingGenerationJobs(ctx context.Context, arg ListPendingGenerationJobsParams) ([]RecurringGenerationJob, error) {
-	rows, err := q.db.Query(ctx, listPendingGenerationJobs, arg.ScheduledFor, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RecurringGenerationJob{}
-	for rows.Next() {
-		var i RecurringGenerationJob
-		if err := rows.Scan(
-			&i.ID,
-			&i.TemplateID,
-			&i.ScheduledFor,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.FailedAt,
-			&i.Status,
-			&i.ErrorMessage,
-			&i.RetryCount,
-			&i.GenerateFrom,
-			&i.GenerateUntil,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const updateGenerationJobStatus = `-- name: UpdateGenerationJobStatus :execrows
-UPDATE recurring_generation_jobs
-SET status = $1,
-    started_at = CASE WHEN $1 = 'running' THEN $2 ELSE started_at END,
-    completed_at = CASE WHEN $1 = 'completed' THEN $2 ELSE completed_at END,
-    failed_at = CASE WHEN $1 = 'failed' THEN $2 ELSE failed_at END,
-    error_message = $3
-WHERE id = $4
-`
-
-type UpdateGenerationJobStatusParams struct {
-	Status       string              `json:"status"`
-	StartedAt    sql.Null[time.Time] `json:"started_at"`
-	ErrorMessage sql.Null[string]    `json:"error_message"`
-	ID           string              `json:"id"`
-}
-
-// DATA ACCESS PATTERN: Single-query existence check via rowsAffected
-// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
+// Generation Job Queue - Timestamp Fields Explained
+// ====================================================
+// scheduled_for: WHEN the job should execute (user's intent)
+//   - Set at creation or retry scheduling
+//   - Determines job ordering (earliest scheduled_for processed first)
+//   - For pending jobs: must be <= NOW() to be claimable
 //
-// retry_count is preserved automatically (not in SET clause)
-// Critical for worker: Detects if job was deleted/claimed by another worker between operations
-func (q *Queries) UpdateGenerationJobStatus(ctx context.Context, arg UpdateGenerationJobStatusParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateGenerationJobStatus,
-		arg.Status,
-		arg.StartedAt,
-		arg.ErrorMessage,
+// available_at: WHEN the job can be claimed by workers (availability window)
+//   - For pending jobs: equals scheduled_for (immediately available when scheduled)
+//   - For running jobs: NOW() + timeout (e.g., 5 minutes visibility window)
+//   - Enables stuck job recovery: if worker crashes, job becomes claimable when available_at <= NOW()
+//   - Pattern inspired by SQS Visibility Timeout
+//
+// Example timeline:
+//
+//	T+0s:  Job created with scheduled_for=NOW(), available_at=NOW()
+//	T+1s:  Worker claims job → status='running', available_at=NOW()+5min
+//	T+301s: Worker crashes (doesn't complete or extend)
+//	T+301s: Job becomes claimable again (available_at <= NOW())
+//
+// Insert a single generation job
+func (q *Queries) InsertGenerationJob(ctx context.Context, arg InsertGenerationJobParams) error {
+	_, err := q.db.Exec(ctx, insertGenerationJob,
 		arg.ID,
+		arg.TemplateID,
+		arg.GenerateFrom,
+		arg.GenerateUntil,
+		arg.ScheduledFor,
+		arg.Status,
+		arg.RetryCount,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const markJobAsCancelled = `-- name: MarkJobAsCancelled :execrows
+UPDATE recurring_generation_jobs
+SET status = 'cancelled',
+    claimed_by = NULL,
+    claimed_at = NULL,
+    available_at = NULL
+WHERE id = $1 AND status = 'cancelling' AND claimed_by = $2
+`
+
+type MarkJobAsCancelledParams struct {
+	ID        string           `json:"id"`
+	ClaimedBy sql.Null[string] `json:"claimed_by"`
+}
+
+// Final cancellation by worker after cooperative shutdown.
+func (q *Queries) MarkJobAsCancelled(ctx context.Context, arg MarkJobAsCancelledParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markJobAsCancelled, arg.ID, arg.ClaimedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markJobAsRunning = `-- name: MarkJobAsRunning :execrows
+UPDATE recurring_generation_jobs
+SET status = 'running',
+    started_at = NOW(),
+    claimed_by = $2,
+    claimed_at = NOW(),
+    available_at = $3
+WHERE id = $1
+`
+
+type MarkJobAsRunningParams struct {
+	ID          string             `json:"id"`
+	ClaimedBy   sql.Null[string]   `json:"claimed_by"`
+	AvailableAt pgtype.Timestamptz `json:"available_at"`
+}
+
+// Mark a claimed job as running with worker ownership and availability timeout.
+// Returns 0 rows if job doesn't exist or was already claimed by another worker.
+func (q *Queries) MarkJobAsRunning(ctx context.Context, arg MarkJobAsRunningParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markJobAsRunning, arg.ID, arg.ClaimedBy, arg.AvailableAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const requestCancellationForRunningJob = `-- name: RequestCancellationForRunningJob :execrows
+UPDATE recurring_generation_jobs
+SET status = 'cancelling'
+WHERE id = $1 AND status = 'running'
+`
+
+// Request cancellation for a running job (sets cancelling status).
+// Worker must cooperatively stop processing when it sees this status.
+func (q *Queries) RequestCancellationForRunningJob(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, requestCancellationForRunningJob, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const scheduleJobRetry = `-- name: ScheduleJobRetry :execrows
+UPDATE recurring_generation_jobs
+SET status = 'pending',
+    retry_count = $2,
+    error_message = $3,
+    scheduled_for = $4,
+    failed_at = NOW(),
+    claimed_by = NULL,
+    claimed_at = NULL,
+    available_at = $4  -- Match scheduled_for: job available when scheduled (not before due to backoff)
+WHERE id = $1 AND claimed_by = $5
+`
+
+type ScheduleJobRetryParams struct {
+	ID           string           `json:"id"`
+	RetryCount   int32            `json:"retry_count"`
+	ErrorMessage sql.Null[string] `json:"error_message"`
+	ScheduledFor time.Time        `json:"scheduled_for"`
+	ClaimedBy    sql.Null[string] `json:"claimed_by"`
+}
+
+// Reschedule job for retry with incremented retry count.
+// Only succeeds if job is still owned by the specified worker.
+func (q *Queries) ScheduleJobRetry(ctx context.Context, arg ScheduleJobRetryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, scheduleJobRetry,
+		arg.ID,
+		arg.RetryCount,
+		arg.ErrorMessage,
+		arg.ScheduledFor,
+		arg.ClaimedBy,
 	)
 	if err != nil {
 		return 0, err

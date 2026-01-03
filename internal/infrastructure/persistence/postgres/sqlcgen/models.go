@@ -26,37 +26,79 @@ type ApiKey struct {
 	ExpiresAt      sql.Null[time.Time] `json:"expires_at"`
 }
 
+type CronJobLease struct {
+	RunType    string             `json:"run_type"`
+	HolderID   string             `json:"holder_id"`
+	AcquiredAt pgtype.Timestamptz `json:"acquired_at"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	RenewedAt  pgtype.Timestamptz `json:"renewed_at"`
+	RunCount   int64              `json:"run_count"`
+}
+
+type DeadLetterJob struct {
+	ID                   pgtype.UUID        `json:"id"`
+	OriginalJobID        pgtype.UUID        `json:"original_job_id"`
+	TemplateID           pgtype.UUID        `json:"template_id"`
+	GenerateFrom         pgtype.Timestamptz `json:"generate_from"`
+	GenerateUntil        pgtype.Timestamptz `json:"generate_until"`
+	ErrorType            string             `json:"error_type"`
+	ErrorMessage         sql.Null[string]   `json:"error_message"`
+	StackTrace           sql.Null[string]   `json:"stack_trace"`
+	FailedAt             pgtype.Timestamptz `json:"failed_at"`
+	ReviewedAt           pgtype.Timestamptz `json:"reviewed_at"`
+	Resolution           sql.Null[string]   `json:"resolution"`
+	ReviewedBy           sql.Null[string]   `json:"reviewed_by"`
+	ReviewerNote         sql.Null[string]   `json:"reviewer_note"`
+	RetryCount           int32              `json:"retry_count"`
+	LastWorkerID         sql.Null[string]   `json:"last_worker_id"`
+	OriginalScheduledFor pgtype.Timestamptz `json:"original_scheduled_for"`
+	OriginalCreatedAt    pgtype.Timestamptz `json:"original_created_at"`
+}
+
 type RecurringGenerationJob struct {
 	ID            string              `json:"id"`
 	TemplateID    string              `json:"template_id"`
+	Status        string              `json:"status"`
+	AvailableAt   pgtype.Timestamptz  `json:"available_at"`
+	ClaimedBy     sql.Null[string]    `json:"claimed_by"`
+	ClaimedAt     pgtype.Timestamptz  `json:"claimed_at"`
+	GenerateFrom  time.Time           `json:"generate_from"`
+	GenerateUntil time.Time           `json:"generate_until"`
 	ScheduledFor  time.Time           `json:"scheduled_for"`
+	CreatedAt     time.Time           `json:"created_at"`
 	StartedAt     sql.Null[time.Time] `json:"started_at"`
 	CompletedAt   sql.Null[time.Time] `json:"completed_at"`
 	FailedAt      sql.Null[time.Time] `json:"failed_at"`
-	Status        string              `json:"status"`
 	ErrorMessage  sql.Null[string]    `json:"error_message"`
 	RetryCount    int32               `json:"retry_count"`
-	GenerateFrom  time.Time           `json:"generate_from"`
-	GenerateUntil time.Time           `json:"generate_until"`
-	CreatedAt     time.Time           `json:"created_at"`
 }
 
 type RecurringTaskTemplate struct {
-	ID                   string           `json:"id"`
-	ListID               string           `json:"list_id"`
-	Title                string           `json:"title"`
-	Tags                 []byte           `json:"tags"`
-	Priority             sql.Null[string] `json:"priority"`
-	EstimatedDuration    pgtype.Interval  `json:"estimated_duration"`
-	RecurrencePattern    string           `json:"recurrence_pattern"`
-	RecurrenceConfig     []byte           `json:"recurrence_config"`
-	DueOffset            pgtype.Interval  `json:"due_offset"`
-	IsActive             bool             `json:"is_active"`
-	CreatedAt            time.Time        `json:"created_at"`
-	UpdatedAt            time.Time        `json:"updated_at"`
-	LastGeneratedUntil   time.Time        `json:"last_generated_until"`
-	GenerationWindowDays int32            `json:"generation_window_days"`
-	Version              int32            `json:"version"`
+	ID                    string           `json:"id"`
+	ListID                string           `json:"list_id"`
+	Title                 string           `json:"title"`
+	Tags                  []byte           `json:"tags"`
+	Priority              sql.Null[string] `json:"priority"`
+	EstimatedDuration     pgtype.Interval  `json:"estimated_duration"`
+	RecurrencePattern     string           `json:"recurrence_pattern"`
+	RecurrenceConfig      []byte           `json:"recurrence_config"`
+	DueOffset             pgtype.Interval  `json:"due_offset"`
+	IsActive              bool             `json:"is_active"`
+	CreatedAt             time.Time        `json:"created_at"`
+	UpdatedAt             time.Time        `json:"updated_at"`
+	GeneratedThrough      pgtype.Date      `json:"generated_through"`
+	SyncHorizonDays       int32            `json:"sync_horizon_days"`
+	GenerationHorizonDays int32            `json:"generation_horizon_days"`
+	Version               int32            `json:"version"`
+}
+
+type RecurringTemplateException struct {
+	ID            pgtype.UUID        `json:"id"`
+	TemplateID    pgtype.UUID        `json:"template_id"`
+	OccursAt      pgtype.Timestamptz `json:"occurs_at"`
+	ExceptionType string             `json:"exception_type"`
+	ItemID        pgtype.UUID        `json:"item_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type TaskStatusHistory struct {
@@ -69,26 +111,28 @@ type TaskStatusHistory struct {
 }
 
 type TodoItem struct {
-	ID                  string              `json:"id"`
-	ListID              string              `json:"list_id"`
-	Title               string              `json:"title"`
-	Status              string              `json:"status"`
-	Priority            sql.Null[string]    `json:"priority"`
-	EstimatedDuration   pgtype.Interval     `json:"estimated_duration"`
-	ActualDuration      pgtype.Interval     `json:"actual_duration"`
-	CreateTime          time.Time           `json:"create_time"`
-	UpdatedAt           time.Time           `json:"updated_at"`
-	DueTime             sql.Null[time.Time] `json:"due_time"`
-	Tags                []byte              `json:"tags"`
-	RecurringTemplateID uuid.NullUUID       `json:"recurring_template_id"`
-	InstanceDate        sql.Null[time.Time] `json:"instance_date"`
-	Timezone            sql.Null[string]    `json:"timezone"`
-	Version             int32               `json:"version"`
+	ID                  string             `json:"id"`
+	ListID              string             `json:"list_id"`
+	Title               string             `json:"title"`
+	Status              string             `json:"status"`
+	Priority            sql.Null[string]   `json:"priority"`
+	EstimatedDuration   pgtype.Interval    `json:"estimated_duration"`
+	ActualDuration      pgtype.Interval    `json:"actual_duration"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	DueAt               pgtype.Timestamptz `json:"due_at"`
+	Tags                []byte             `json:"tags"`
+	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
+	StartsAt            pgtype.Date        `json:"starts_at"`
+	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
+	DueOffset           pgtype.Interval    `json:"due_offset"`
+	Timezone            sql.Null[string]   `json:"timezone"`
+	Version             int32              `json:"version"`
 }
 
 type TodoList struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	CreateTime time.Time `json:"create_time"`
-	Version    int32     `json:"version"`
+	ID        string             `json:"id"`
+	Title     string             `json:"title"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Version   int32              `json:"version"`
 }

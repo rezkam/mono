@@ -7,7 +7,6 @@ package sqlcgen
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -17,43 +16,43 @@ SELECT COUNT(DISTINCT tl.id)::int AS total_count
 FROM todo_lists tl
 WHERE
     ($1::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || $1 || '%'))
-    AND ($2::timestamptz IS NULL OR tl.create_time > $2)
-    AND ($3::timestamptz IS NULL OR tl.create_time < $3)
+    AND ($2::timestamptz IS NULL OR tl.created_at > $2)
+    AND ($3::timestamptz IS NULL OR tl.created_at < $3)
 `
 
 type CountTodoListsWithFiltersParams struct {
-	TitleContains    string             `json:"title_contains"`
-	CreateTimeAfter  pgtype.Timestamptz `json:"create_time_after"`
-	CreateTimeBefore pgtype.Timestamptz `json:"create_time_before"`
+	TitleContains   string             `json:"title_contains"`
+	CreatedAtAfter  pgtype.Timestamptz `json:"created_at_after"`
+	CreatedAtBefore pgtype.Timestamptz `json:"created_at_before"`
 }
 
 // Count total matching lists for pagination (same filters as FindTodoListsWithFilters).
 func (q *Queries) CountTodoListsWithFilters(ctx context.Context, arg CountTodoListsWithFiltersParams) (int32, error) {
-	row := q.db.QueryRow(ctx, countTodoListsWithFilters, arg.TitleContains, arg.CreateTimeAfter, arg.CreateTimeBefore)
+	row := q.db.QueryRow(ctx, countTodoListsWithFilters, arg.TitleContains, arg.CreatedAtAfter, arg.CreatedAtBefore)
 	var total_count int32
 	err := row.Scan(&total_count)
 	return total_count, err
 }
 
 const createTodoList = `-- name: CreateTodoList :one
-INSERT INTO todo_lists (id, title, create_time)
+INSERT INTO todo_lists (id, title, created_at)
 VALUES ($1, $2, $3)
-RETURNING id, title, create_time, version
+RETURNING id, title, created_at, version
 `
 
 type CreateTodoListParams struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	CreateTime time.Time `json:"create_time"`
+	ID        string             `json:"id"`
+	Title     string             `json:"title"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 func (q *Queries) CreateTodoList(ctx context.Context, arg CreateTodoListParams) (TodoList, error) {
-	row := q.db.QueryRow(ctx, createTodoList, arg.ID, arg.Title, arg.CreateTime)
+	row := q.db.QueryRow(ctx, createTodoList, arg.ID, arg.Title, arg.CreatedAt)
 	var i TodoList
 	err := row.Scan(
 		&i.ID,
 		&i.Title,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.Version,
 	)
 	return i, err
@@ -79,7 +78,7 @@ const findTodoListsWithFilters = `-- name: FindTodoListsWithFilters :many
 SELECT
     tl.id,
     tl.title,
-    tl.create_time,
+    tl.created_at,
     tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
@@ -87,9 +86,9 @@ FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 WHERE
     ($2::text IS NULL OR LOWER(tl.title) LIKE LOWER('%' || $2 || '%'))
-    AND ($3::timestamptz IS NULL OR tl.create_time > $3)
-    AND ($4::timestamptz IS NULL OR tl.create_time < $4)
-GROUP BY tl.id, tl.title, tl.create_time, tl.version
+    AND ($3::timestamptz IS NULL OR tl.created_at > $3)
+    AND ($4::timestamptz IS NULL OR tl.created_at < $4)
+GROUP BY tl.id, tl.title, tl.created_at, tl.version
 ORDER BY
     CASE
         WHEN $5 = 'title' AND $6 = 'asc' THEN tl.title
@@ -98,35 +97,35 @@ ORDER BY
         WHEN $5 = 'title' AND $6 = 'desc' THEN tl.title
     END DESC,
     CASE
-        WHEN $5 = 'create_time' AND $6 = 'asc' THEN tl.create_time
-        WHEN ($5 IS NULL OR $5 = '') AND ($6 IS NULL OR $6 = '' OR $6 = 'asc') THEN tl.create_time
+        WHEN $5 = 'created_at' AND $6 = 'asc' THEN tl.created_at
+        WHEN ($5 IS NULL OR $5 = '') AND ($6 IS NULL OR $6 = '' OR $6 = 'asc') THEN tl.created_at
     END ASC,
     CASE
-        WHEN $5 = 'create_time' AND $6 = 'desc' THEN tl.create_time
-        WHEN ($5 IS NULL OR $5 = '') AND $6 = 'desc' THEN tl.create_time
+        WHEN $5 = 'created_at' AND $6 = 'desc' THEN tl.created_at
+        WHEN ($5 IS NULL OR $5 = '') AND $6 = 'desc' THEN tl.created_at
     END DESC
 LIMIT $8
 OFFSET $7
 `
 
 type FindTodoListsWithFiltersParams struct {
-	UndoneStatuses   []string           `json:"undone_statuses"`
-	TitleContains    string             `json:"title_contains"`
-	CreateTimeAfter  pgtype.Timestamptz `json:"create_time_after"`
-	CreateTimeBefore pgtype.Timestamptz `json:"create_time_before"`
-	OrderBy          interface{}        `json:"order_by"`
-	OrderDir         interface{}        `json:"order_dir"`
-	PageOffset       int32              `json:"page_offset"`
-	PageLimit        int32              `json:"page_limit"`
+	UndoneStatuses  []string           `json:"undone_statuses"`
+	TitleContains   string             `json:"title_contains"`
+	CreatedAtAfter  pgtype.Timestamptz `json:"created_at_after"`
+	CreatedAtBefore pgtype.Timestamptz `json:"created_at_before"`
+	OrderBy         interface{}        `json:"order_by"`
+	OrderDir        interface{}        `json:"order_dir"`
+	PageOffset      int32              `json:"page_offset"`
+	PageLimit       int32              `json:"page_limit"`
 }
 
 type FindTodoListsWithFiltersRow struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	CreateTime  time.Time `json:"create_time"`
-	Version     int32     `json:"version"`
-	TotalItems  int32     `json:"total_items"`
-	UndoneItems int32     `json:"undone_items"`
+	ID          string             `json:"id"`
+	Title       string             `json:"title"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Version     int32              `json:"version"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
 }
 
 // Advanced list query with filtering, sorting, and pagination.
@@ -134,9 +133,9 @@ type FindTodoListsWithFiltersRow struct {
 //
 // Parameters use nullable types for optional filters:
 //   - title_contains: Filters by title substring (case-insensitive)
-//   - create_time_after: Filters lists created after this time
-//   - create_time_before: Filters lists created before this time
-//   - order_by: Column to sort by ("create_time" or "title")
+//   - created_at_after: Filters lists created after this time
+//   - created_at_before: Filters lists created before this time
+//   - order_by: Column to sort by ("created_at" or "title")
 //   - order_dir: Sort direction ("asc" or "desc")
 //   - page_limit: Maximum number of results to return
 //   - page_offset: Number of results to skip
@@ -144,8 +143,8 @@ func (q *Queries) FindTodoListsWithFilters(ctx context.Context, arg FindTodoList
 	rows, err := q.db.Query(ctx, findTodoListsWithFilters,
 		arg.UndoneStatuses,
 		arg.TitleContains,
-		arg.CreateTimeAfter,
-		arg.CreateTimeBefore,
+		arg.CreatedAtAfter,
+		arg.CreatedAtBefore,
 		arg.OrderBy,
 		arg.OrderDir,
 		arg.PageOffset,
@@ -161,7 +160,7 @@ func (q *Queries) FindTodoListsWithFilters(ctx context.Context, arg FindTodoList
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
-			&i.CreateTime,
+			&i.CreatedAt,
 			&i.Version,
 			&i.TotalItems,
 			&i.UndoneItems,
@@ -177,7 +176,7 @@ func (q *Queries) FindTodoListsWithFilters(ctx context.Context, arg FindTodoList
 }
 
 const getTodoList = `-- name: GetTodoList :one
-SELECT id, title, create_time, version FROM todo_lists
+SELECT id, title, created_at, version FROM todo_lists
 WHERE id = $1
 `
 
@@ -187,7 +186,7 @@ func (q *Queries) GetTodoList(ctx context.Context, id string) (TodoList, error) 
 	err := row.Scan(
 		&i.ID,
 		&i.Title,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.Version,
 	)
 	return i, err
@@ -197,14 +196,14 @@ const getTodoListWithCounts = `-- name: GetTodoListWithCounts :one
 SELECT
     tl.id,
     tl.title,
-    tl.create_time,
+    tl.created_at,
     tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
 WHERE tl.id = $2
-GROUP BY tl.id, tl.title, tl.create_time, tl.version
+GROUP BY tl.id, tl.title, tl.created_at, tl.version
 `
 
 type GetTodoListWithCountsParams struct {
@@ -213,12 +212,12 @@ type GetTodoListWithCountsParams struct {
 }
 
 type GetTodoListWithCountsRow struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	CreateTime  time.Time `json:"create_time"`
-	Version     int32     `json:"version"`
-	TotalItems  int32     `json:"total_items"`
-	UndoneItems int32     `json:"undone_items"`
+	ID          string             `json:"id"`
+	Title       string             `json:"title"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Version     int32              `json:"version"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
 }
 
 // Returns a single list by ID with item counts (for detail view).
@@ -229,7 +228,7 @@ func (q *Queries) GetTodoListWithCounts(ctx context.Context, arg GetTodoListWith
 	err := row.Scan(
 		&i.ID,
 		&i.Title,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.Version,
 		&i.TotalItems,
 		&i.UndoneItems,
@@ -238,8 +237,8 @@ func (q *Queries) GetTodoListWithCounts(ctx context.Context, arg GetTodoListWith
 }
 
 const listTodoLists = `-- name: ListTodoLists :many
-SELECT id, title, create_time, version FROM todo_lists
-ORDER BY create_time DESC
+SELECT id, title, created_at, version FROM todo_lists
+ORDER BY created_at DESC
 `
 
 // Legacy query: Returns all lists without items (use ListTodoListsWithCounts for list views).
@@ -255,7 +254,7 @@ func (q *Queries) ListTodoLists(ctx context.Context) ([]TodoList, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
-			&i.CreateTime,
+			&i.CreatedAt,
 			&i.Version,
 		); err != nil {
 			return nil, err
@@ -272,23 +271,23 @@ const listTodoListsWithCounts = `-- name: ListTodoListsWithCounts :many
 SELECT
     tl.id,
     tl.title,
-    tl.create_time,
+    tl.created_at,
     tl.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM todo_lists tl
 LEFT JOIN todo_items ti ON tl.id = ti.list_id
-GROUP BY tl.id, tl.title, tl.create_time, tl.version
-ORDER BY tl.create_time DESC
+GROUP BY tl.id, tl.title, tl.created_at, tl.version
+ORDER BY tl.created_at DESC
 `
 
 type ListTodoListsWithCountsRow struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	CreateTime  time.Time `json:"create_time"`
-	Version     int32     `json:"version"`
-	TotalItems  int32     `json:"total_items"`
-	UndoneItems int32     `json:"undone_items"`
+	ID          string             `json:"id"`
+	Title       string             `json:"title"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	Version     int32              `json:"version"`
+	TotalItems  int32              `json:"total_items"`
+	UndoneItems int32              `json:"undone_items"`
 }
 
 // Optimized for LIST VIEW access pattern: Returns list metadata with item counts.
@@ -313,7 +312,7 @@ func (q *Queries) ListTodoListsWithCounts(ctx context.Context, undoneStatuses []
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
-			&i.CreateTime,
+			&i.CreatedAt,
 			&i.Version,
 			&i.TotalItems,
 			&i.UndoneItems,
@@ -335,18 +334,18 @@ WITH updated AS (
         version = tl.version + 1
     WHERE tl.id = $4
       AND ($5::integer IS NULL OR tl.version = $5::integer)
-    RETURNING id, title, create_time, version
+    RETURNING id, title, created_at, version
 )
 SELECT
     u.id,
     u.title,
-    u.create_time,
+    u.created_at,
     u.version,
     COALESCE(COUNT(ti.id), 0)::int AS total_items,
     COALESCE(COUNT(ti.id) FILTER (WHERE ti.status = ANY($1::text[])), 0)::int AS undone_items
 FROM updated u
 LEFT JOIN todo_items ti ON u.id = ti.list_id
-GROUP BY u.id, u.title, u.create_time, u.version
+GROUP BY u.id, u.title, u.created_at, u.version
 `
 
 type UpdateTodoListParams struct {
@@ -360,7 +359,7 @@ type UpdateTodoListParams struct {
 type UpdateTodoListRow struct {
 	ID          pgtype.UUID        `json:"id"`
 	Title       string             `json:"title"`
-	CreateTime  pgtype.Timestamptz `json:"create_time"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	Version     int32              `json:"version"`
 	TotalItems  int32              `json:"total_items"`
 	UndoneItems int32              `json:"undone_items"`
@@ -387,7 +386,7 @@ func (q *Queries) UpdateTodoList(ctx context.Context, arg UpdateTodoListParams) 
 	err := row.Scan(
 		&i.ID,
 		&i.Title,
-		&i.CreateTime,
+		&i.CreatedAt,
 		&i.Version,
 		&i.TotalItems,
 		&i.UndoneItems,
