@@ -774,27 +774,27 @@ func (s *Service) isPatternChange(params domain.UpdateRecurringTemplateParams) b
 	return false
 }
 
-// shouldCreateException checks if the update mask contains content fields that require
-// creating an exception for recurring items (but keeping the template link).
-func shouldCreateException(updateMask []string) bool {
+// containsAnyField checks if updateMask contains any field from the given set.
+func containsAnyField(updateMask []string, fields []string) bool {
 	for _, field := range updateMask {
-		if slices.Contains(exceptionFields, field) {
+		if slices.Contains(fields, field) {
 			return true
 		}
 	}
 	return false
 }
 
+// shouldCreateException checks if the update mask contains content fields that require
+// creating an exception for recurring items (but keeping the template link).
+func shouldCreateException(updateMask []string) bool {
+	return containsAnyField(updateMask, exceptionFields)
+}
+
 // shouldDetachFromTemplate checks if the update mask contains schedule fields that require
 // detaching the item from its recurring template (and creating a rescheduled exception).
 // Status changes (completing, archiving) do NOT trigger detachment.
 func shouldDetachFromTemplate(updateMask []string) bool {
-	for _, field := range updateMask {
-		if slices.Contains(detachFields, field) {
-			return true
-		}
-	}
-	return false
+	return containsAnyField(updateMask, detachFields)
 }
 
 // updateTemplateWithRegeneration handles pattern changes by deleting future items and regenerating.
