@@ -129,9 +129,8 @@ type Repository interface {
 
 	// === Transaction Support ===
 
-	// Transaction executes a function within a database transaction.
-	// The function receives a Repository instance bound to the transaction.
-	// If the function returns an error, the transaction is rolled back.
-	// Otherwise, the transaction is committed.
+	// Transaction executes multiple repository operations atomically.
+	// All operations within fn succeed together or fail together.
+	// If fn returns an error, all operations are rolled back.
 	Transaction(ctx context.Context, fn func(tx Repository) error) error
 }
