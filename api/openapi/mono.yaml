@@ -544,6 +544,90 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /v1/admin/dead-letter-jobs:
+    get:
+      operationId: listDeadLetterJobs
+      summary: List pending dead letter jobs
+      tags: [Admin]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of jobs to return
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: List of dead letter jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDeadLetterJobsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/admin/dead-letter-jobs/{id}/retry:
+    post:
+      operationId: retryDeadLetterJob
+      summary: Retry a dead letter job
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Dead Letter Job ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job scheduled for retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetryDeadLetterJobResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/admin/dead-letter-jobs/{id}/discard:
+    post:
+      operationId: discardDeadLetterJob
+      summary: Discard a dead letter job
+      tags: [Admin]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Dead Letter Job ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  description: Reason for discarding
+      responses:
+        '204':
+          description: Job discarded successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   schemas:
     # Request schemas
@@ -924,6 +1008,51 @@ components:
           items:
             $ref: '#/components/schemas/RecurringTemplateException'
 
+    ListDeadLetterJobsResponse:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadLetterJob'
+
+    RetryDeadLetterJobResponse:
+      type: object
+      properties:
+        new_job_id:
+          type: string
+          format: uuid
+
+    DeadLetterJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        generate_from:
+          type: string
+          format: date-time
+        generate_until:
+          type: string
+          format: date-time
+        error_type:
+          type: string
+        error_message:
+          type: string
+        failed_at:
+          type: string
+          format: date-time
+        retry_count:
+          type: integer
+        last_worker_id:
+          type: string
+        original_job_id:
+          type: string
+          format: uuid
+        
     # Enums
     ItemStatus:
       type: string

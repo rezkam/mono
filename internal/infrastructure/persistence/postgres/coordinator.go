@@ -432,59 +432,16 @@ func (c *PostgresCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetter
 
 	qtx := c.queries.WithTx(tx)
 
-	// Get the dead letter job
-	dlID, err := uuid.Parse(deadLetterID)
+	newJobID, err = retryDeadLetterJobTx(ctx, qtx, deadLetterID, reviewedBy)
 	if err != nil {
-		return "", fmt.Errorf("invalid dead letter ID: %w", err)
-	}
-
-	dlJob, err := qtx.GetDeadLetterJob(ctx, pgtype.UUID{Bytes: dlID, Valid: true})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", domain.ErrDeadLetterNotFound
-		}
-		return "", fmt.Errorf("failed to get dead letter job: %w", err)
-	}
-
-	// Create new job from dead letter
-	newJobUUID, err := uuid.NewV7()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate job ID: %w", err)
-	}
-
-	newJob := sqlcgen.InsertGenerationJobParams{
-		ID:            newJobUUID.String(),
-		TemplateID:    uuid.UUID(dlJob.TemplateID.Bytes).String(),
-		GenerateFrom:  timestamptzToTime(dlJob.GenerateFrom),
-		GenerateUntil: timestamptzToTime(dlJob.GenerateUntil),
-		ScheduledFor:  time.Now().UTC(),
-		Status:        "pending",
-		RetryCount:    0, // Reset retry count
-		CreatedAt:     time.Now().UTC(),
-	}
-
-	if err := qtx.InsertGenerationJob(ctx, newJob); err != nil {
-		return "", fmt.Errorf("failed to insert new job: %w", err)
-	}
-
-	// Mark dead letter as retried
-	markParams := sqlcgen.MarkDeadLetterAsRetriedParams{
-		ID:         pgtype.UUID{Bytes: dlID, Valid: true},
-		ReviewedBy: sql.Null[string]{V: reviewedBy, Valid: true},
-	}
-	rows, err := qtx.MarkDeadLetterAsRetried(ctx, markParams)
-	if err != nil {
-		return "", fmt.Errorf("failed to mark dead letter as retried: %w", err)
-	}
-	if rows == 0 {
-		return "", domain.ErrDeadLetterNotFound
+		return "", err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return newJobUUID.String(), nil
+	return newJobID, nil
 }
 
 func (c *PostgresCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {

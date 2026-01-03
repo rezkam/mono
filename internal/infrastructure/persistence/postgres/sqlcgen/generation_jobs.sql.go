@@ -95,20 +95,6 @@ func (q *Queries) CompleteJobWithOwnershipCheck(ctx context.Context, arg Complet
 	return result.RowsAffected(), nil
 }
 
-const deleteCompletedJobsOlderThan = `-- name: DeleteCompletedJobsOlderThan :execrows
-DELETE FROM recurring_generation_jobs
-WHERE status = 'completed' AND completed_at < $1
-`
-
-// Cleanup old completed jobs for housekeeping.
-func (q *Queries) DeleteCompletedJobsOlderThan(ctx context.Context, completedAt sql.Null[time.Time]) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteCompletedJobsOlderThan, completedAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const discardJobAfterMaxRetries = `-- name: DiscardJobAfterMaxRetries :execrows
 UPDATE recurring_generation_jobs
 SET status = 'discarded',
@@ -210,6 +196,23 @@ func (q *Queries) GetGenerationJob(ctx context.Context, id string) (RecurringGen
 		&i.RetryCount,
 	)
 	return i, err
+}
+
+const hasPendingOrRunningJob = `-- name: HasPendingOrRunningJob :one
+SELECT EXISTS (
+    SELECT 1 FROM recurring_generation_jobs
+    WHERE template_id = $1
+      AND status IN ('pending', 'scheduled', 'running')
+)
+`
+
+// Check if a template has any pending, running, or scheduled job.
+// Used to prevent duplicate job creation.
+func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingOrRunningJob, templateID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const insertGenerationJob = `-- name: InsertGenerationJob :exec

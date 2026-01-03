@@ -5,10 +5,7 @@
 package sqlcgen
 
 import (
-	"time"
-
 	"context"
-	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -57,8 +54,6 @@ type Querier interface {
 	// :execrows returns (int64, error) - Repository checks rowsAffected == 0 → domain.ErrNotFound
 	// Soft delete with existence detection in single operation
 	DeactivateRecurringTemplate(ctx context.Context, arg DeactivateRecurringTemplateParams) (int64, error)
-	// Cleanup old completed jobs for housekeeping.
-	DeleteCompletedJobsOlderThan(ctx context.Context, completedAt sql.Null[time.Time]) (int64, error)
 	DeleteException(ctx context.Context, arg DeleteExceptionParams) error
 	// Delete future pending items for a template (used before regeneration)
 	DeleteFuturePendingItems(ctx context.Context, arg DeleteFuturePendingItemsParams) (int64, error)
@@ -123,6 +118,9 @@ type Querier interface {
 	// Returns a single list by ID with item counts (for detail view).
 	// undone_statuses parameter: domain layer defines which statuses count as "undone".
 	GetTodoListWithCounts(ctx context.Context, arg GetTodoListWithCountsParams) (GetTodoListWithCountsRow, error)
+	// Check if a template has any pending, running, or scheduled job.
+	// Used to prevent duplicate job creation.
+	HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error)
 	// Move a failed job to the dead letter queue for admin review.
 	InsertDeadLetterJob(ctx context.Context, arg InsertDeadLetterJobParams) error
 	// Generation Job Queue - Timestamp Fields Explained

@@ -139,6 +139,10 @@ func (w *GenerationWorker) processJob(ctx context.Context, job *domain.Generatio
 		// Check for context cancellation between batches
 		select {
 		case <-ctx.Done():
+			// The heartbeat context will be cancelled when parent ctx is done,
+			// or when processing completes.
+			// But if the PARENT context is done (timeout/shutdown), we should stop.
+			// If it's just the heartbeat context, that's fine (it shares the same parent).
 			return ctx.Err()
 		default:
 		}

@@ -158,6 +158,8 @@ func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		NotFound(w, "item")
 	case errors.Is(err, domain.ErrTemplateNotFound):
 		NotFound(w, "recurring template")
+	case errors.Is(err, domain.ErrDeadLetterNotFound):
+		NotFound(w, "dead letter job")
 	case errors.Is(err, domain.ErrNotFound):
 		NotFound(w, "resource")
 

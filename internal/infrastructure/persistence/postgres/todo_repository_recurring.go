@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rezkam/mono/internal/application/todo"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
@@ -419,6 +421,70 @@ func (s *Store) Transaction(ctx context.Context, fn func(tx todo.Repository) err
 	// Commit the transaction
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// === Dead Letter Queue Operations ===
+
+// ListDeadLetterJobs retrieves unresolved dead letter jobs for manual review.
+func (s *Store) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	rows, err := s.queries.ListPendingDeadLetterJobs(ctx, int32(limit))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list dead letter jobs: %w", err)
+	}
+
+	jobs := make([]*domain.DeadLetterJob, 0, len(rows))
+	for _, row := range rows {
+		job := sqlcDeadLetterToDomain(row)
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
+// RetryDeadLetterJob creates a new job from a dead letter entry and marks it as retried.
+func (s *Store) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := s.queries.WithTx(tx)
+
+	newJobID, err := retryDeadLetterJobTx(ctx, qtx, deadLetterID, reviewedBy)
+	if err != nil {
+		return "", err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return newJobID, nil
+}
+
+// DiscardDeadLetterJob marks a dead letter job as permanently discarded.
+func (s *Store) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+	dlID, err := uuid.Parse(deadLetterID)
+	if err != nil {
+		return fmt.Errorf("invalid dead letter ID: %w", err)
+	}
+
+	params := sqlcgen.MarkDeadLetterAsDiscardedParams{
+		ID:           pgtype.UUID{Bytes: dlID, Valid: true},
+		ReviewedBy:   sql.Null[string]{V: reviewedBy, Valid: true},
+		ReviewerNote: sql.Null[string]{V: note, Valid: true},
+	}
+
+	rows, err := s.queries.MarkDeadLetterAsDiscarded(ctx, params)
+	if err != nil {
+		return fmt.Errorf("failed to mark dead letter as discarded: %w", err)
+	}
+	if rows == 0 {
+		return domain.ErrDeadLetterNotFound
 	}
 
 	return nil

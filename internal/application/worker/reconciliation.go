@@ -235,8 +235,16 @@ func (w *ReconciliationWorker) reconcileOnce(ctx context.Context) error {
 			continue
 		}
 
+		// Update generation marker even if no items (advances the window)
 		if len(items) == 0 {
-			skipped++
+			if err := w.repo.SetGeneratedThrough(ctx, template.ID, generateUntil); err != nil {
+				slog.ErrorContext(ctx, "reconciliation: failed to update marker",
+					"template_id", template.ID,
+					"error", err)
+				failed++
+			} else {
+				reconciled++
+			}
 			continue
 		}
 

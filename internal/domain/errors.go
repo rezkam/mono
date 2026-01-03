@@ -16,6 +16,7 @@ var (
 
 	// Validation errors
 	ErrEmptyUpdateMask               = errors.New("update_mask cannot be empty")
+	ErrInvalidRequest                = errors.New("invalid request payload")
 	ErrUnknownField                  = errors.New("unknown field in update_mask")
 	ErrTitleRequired                 = errors.New("title is required")
 	ErrTitleTooLong                  = errors.New("title must be 255 characters or less")

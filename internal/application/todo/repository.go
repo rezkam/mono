@@ -188,4 +188,16 @@ type Repository interface {
 	// If fn returns an error, all operations are rolled back.
 	// DEPRECATED: Use composite operations instead (UpdateItemWithException, etc.)
 	Transaction(ctx context.Context, fn func(tx Repository) error) error
+
+	// === Dead Letter Queue Operations ===
+
+	// ListDeadLetterJobs retrieves unresolved dead letter jobs for manual review.
+	ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error)
+
+	// RetryDeadLetterJob creates a new job from a dead letter entry and marks it as retried.
+	// Returns the ID of the newly created job.
+	RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error)
+
+	// DiscardDeadLetterJob marks a dead letter job as permanently discarded.
+	DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error
 }

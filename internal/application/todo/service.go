@@ -939,3 +939,20 @@ func (s *Service) ListExceptions(ctx context.Context, listID, templateID string,
 
 	return s.repo.ListExceptions(ctx, templateID, from, until)
 }
+
+// === Dead Letter Job Operations ===
+
+// ListDeadLetterJobs retrieves dead letter jobs for manual review.
+func (s *Service) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	return s.repo.ListDeadLetterJobs(ctx, limit)
+}
+
+// RetryDeadLetterJob retries a dead letter job by creating a new job from it.
+func (s *Service) RetryDeadLetterJob(ctx context.Context, id, reviewedBy string) (string, error) {
+	return s.repo.RetryDeadLetterJob(ctx, id, reviewedBy)
+}
+
+// DiscardDeadLetterJob discards a dead letter job permanently.
+func (s *Service) DiscardDeadLetterJob(ctx context.Context, id, reviewedBy, note string) error {
+	return s.repo.DiscardDeadLetterJob(ctx, id, reviewedBy, note)
+}

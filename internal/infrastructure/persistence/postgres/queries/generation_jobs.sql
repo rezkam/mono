@@ -135,7 +135,11 @@ SET status = 'cancelled',
     available_at = NULL
 WHERE id = $1 AND status = 'cancelling' AND claimed_by = $2;
 
--- name: DeleteCompletedJobsOlderThan :execrows
--- Cleanup old completed jobs for housekeeping.
-DELETE FROM recurring_generation_jobs
-WHERE status = 'completed' AND completed_at < $1;
+-- name: HasPendingOrRunningJob :one
+-- Check if a template has any pending, running, or scheduled job.
+-- Used to prevent duplicate job creation.
+SELECT EXISTS (
+    SELECT 1 FROM recurring_generation_jobs
+    WHERE template_id = $1
+      AND status IN ('pending', 'scheduled', 'running')
+);
