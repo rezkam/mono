@@ -167,6 +167,18 @@ func (m *mockRecurringRepo) UpdateTemplateWithRegeneration(ctx context.Context, 
 	panic("not used in these tests - see integration tests for coverage")
 }
 
+func (m *mockRecurringRepo) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
+	panic("not used in recurring template tests")
+}
+
+func (m *mockRecurringRepo) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+	panic("not used in recurring template tests")
+}
+
 // TestCreateRecurringTemplate_RejectsInvalidRecurrencePattern tests that
 // CreateRecurringTemplate validates recurrence_pattern against known values.
 func TestCreateRecurringTemplate_RejectsInvalidRecurrencePattern(t *testing.T) {

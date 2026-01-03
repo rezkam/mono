@@ -143,6 +143,18 @@ func (m *mockListListsRepo) UpdateTemplateWithRegeneration(ctx context.Context, 
 	panic("not used in these tests - see integration tests for coverage")
 }
 
+func (m *mockListListsRepo) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+	panic("not used in ListLists tests")
+}
+
 // mockUpdateItemRepo is a minimal mock for testing UpdateItem logic
 type mockUpdateItemRepo struct {
 	mockListListsRepo // embed for interface satisfaction

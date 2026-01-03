@@ -149,6 +149,18 @@ func (m *mockDeleteItemRepo) UpdateTemplateWithRegeneration(ctx context.Context,
 	panic("not used in these tests - see integration tests for coverage")
 }
 
+func (m *mockDeleteItemRepo) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	panic("not used")
+}
+
+func (m *mockDeleteItemRepo) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
+	panic("not used")
+}
+
+func (m *mockDeleteItemRepo) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+	panic("not used")
+}
+
 func TestDeleteItem_RecurringItem_CreatesException(t *testing.T) {
 	templateID := uuid.NewString()
 	occursAt := time.Now().UTC().Truncate(time.Second)

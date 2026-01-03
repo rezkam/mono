@@ -122,6 +122,18 @@ func (s *stubRepository) UpdateTemplateWithRegeneration(ctx context.Context, par
 	panic("not used in these tests - see integration tests for coverage")
 }
 
+func (s *stubRepository) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	panic("not implemented")
+}
+
+func (s *stubRepository) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
+	panic("not implemented")
+}
+
+func (s *stubRepository) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+	panic("not implemented")
+}
+
 // spyRepository captures what was passed to UpdateRecurringTemplate
 type spyRepository struct {
 	stubRepository

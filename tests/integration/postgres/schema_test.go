@@ -202,14 +202,18 @@ func TestTrigger_AutoUpdateTimestamp(t *testing.T) {
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
-	now := time.Now().UTC()
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (id, list_id, title, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, itemID, listID, "Test", "todo", now, now)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
+	`, itemID, listID, "Test", "todo")
 	require.NoError(t, err)
 
-	// Database trigger executes synchronously, no wait needed
+	// Read initial updated_at from database (avoid clock skew with time.Now())
+	var initialUpdatedAt time.Time
+	err = db.QueryRowContext(ctx, `
+		SELECT updated_at FROM todo_items WHERE id = $1
+	`, itemID).Scan(&initialUpdatedAt)
+	require.NoError(t, err)
 
 	// Update - trigger should auto-update updated_at
 	_, err = db.ExecContext(ctx, `
@@ -217,13 +221,14 @@ func TestTrigger_AutoUpdateTimestamp(t *testing.T) {
 	`, "Updated", itemID)
 	require.NoError(t, err)
 
-	var updatedAt time.Time
+	var finalUpdatedAt time.Time
 	err = db.QueryRowContext(ctx, `
 		SELECT updated_at FROM todo_items WHERE id = $1
-	`, itemID).Scan(&updatedAt)
+	`, itemID).Scan(&finalUpdatedAt)
 	require.NoError(t, err)
 
-	assert.True(t, updatedAt.After(now), "updated_at should be newer")
+	// Compare DB timestamps only (both from PostgreSQL NOW())
+	assert.True(t, finalUpdatedAt.After(initialUpdatedAt), "updated_at should be newer after update")
 }
 
 func TestTrigger_StatusHistory(t *testing.T) {

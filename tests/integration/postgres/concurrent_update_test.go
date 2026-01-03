@@ -51,12 +51,17 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	_, err = store.CreateItem(ctx, listID, item)
 	require.NoError(t, err)
 
+	// CRITICAL: Read initial state from database to avoid clock skew
+	// Go's time.Now() and PostgreSQL's NOW() can differ by milliseconds
+	initialItem, err := store.FindItemByID(ctx, itemID)
+	require.NoError(t, err)
+	initialUpdatedAt := initialItem.UpdatedAt
+
 	// Run concurrent updates
 	const numGoroutines = 10
 	var wg sync.WaitGroup
 
 	errors := make(chan error, numGoroutines)
-	startTime := time.Now().UTC()
 
 	for goroutineID := range numGoroutines {
 		wg.Go(func() {
@@ -88,7 +93,9 @@ func TestConcurrentUpdateItem_MultipleGoroutines(t *testing.T) {
 	finalItem, err := store.FindItemByID(ctx, itemID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, finalItem.Title, "Title should be set")
-	assert.True(t, finalItem.UpdatedAt.After(startTime), "UpdatedAt should be after start time")
+	// Compare DB timestamp vs DB timestamp (no clock skew)
+	assert.True(t, finalItem.UpdatedAt.After(initialUpdatedAt) || finalItem.UpdatedAt.Equal(initialUpdatedAt),
+		"UpdatedAt should be at or after initial database timestamp")
 
 	t.Logf("Final item title: %s, status: %s", finalItem.Title, finalItem.Status)
 }
@@ -416,13 +423,14 @@ func TestConcurrentUpdateItem_UpdatedAtTimestamp(t *testing.T) {
 	require.NoError(t, err)
 
 	// Compare database timestamps only (both from PostgreSQL NOW())
-	assert.True(t, finalItem.UpdatedAt.After(createTime),
-		"UpdatedAt should be after create time")
+	// Use initialItem.CreatedAt instead of Go's createTime to avoid clock skew
+	assert.True(t, finalItem.UpdatedAt.After(initialItem.CreatedAt) || finalItem.UpdatedAt.Equal(initialItem.CreatedAt),
+		"UpdatedAt should be at or after create time from database")
 	assert.True(t, finalItem.UpdatedAt.After(initialUpdatedAt) || finalItem.UpdatedAt.Equal(initialUpdatedAt),
 		"UpdatedAt should be at or after the initial updated_at from database")
 
-	t.Logf("CreatedAt: %s, InitialUpdatedAt: %s, FinalUpdatedAt: %s",
-		createTime.Format(time.RFC3339Nano),
+	t.Logf("CreatedAt (DB): %s, InitialUpdatedAt: %s, FinalUpdatedAt: %s",
+		initialItem.CreatedAt.Format(time.RFC3339Nano),
 		initialUpdatedAt.Format(time.RFC3339Nano),
 		finalItem.UpdatedAt.Format(time.RFC3339Nano))
 }
