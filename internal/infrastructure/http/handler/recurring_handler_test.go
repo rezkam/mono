@@ -155,8 +155,12 @@ func (s *spyRepository) CreateGenerationJob(ctx context.Context, job *domain.Gen
 // generation_window_days is actually updated when included in update_mask.
 func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	now := time.Now().UTC()
-	templateID := uuid.New().String()
-	listID := uuid.New().String()
+	templateIDObj, err := uuid.NewV7()
+	require.NoError(t, err)
+	templateID := templateIDObj.String()
+	listIDObj, err := uuid.NewV7()
+	require.NoError(t, err)
+	listID := listIDObj.String()
 
 	existingTemplate := &domain.RecurringTemplate{
 		ID:                    templateID,
@@ -214,7 +218,9 @@ func TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest(t *testing.T) 
 	service := todo.NewService(repo, generator, todo.Config{})
 	srv := NewTodoHandler(service)
 
-	listID := types.UUID(uuid.New())
+	listIDObj, err := uuid.NewV7()
+	require.NoError(t, err)
+	listID := types.UUID(listIDObj)
 
 	tests := []struct {
 		name              string
