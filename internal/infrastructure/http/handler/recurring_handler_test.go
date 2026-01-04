@@ -62,10 +62,10 @@ func (c *stubCoordinator) MoveToDeadLetter(ctx context.Context, job *domain.Gene
 func (c *stubCoordinator) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
 	return nil, nil
 }
-func (c *stubCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (string, error) {
+func (c *stubCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetterID string) (string, error) {
 	return "", nil
 }
-func (c *stubCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+func (c *stubCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLetterID, note string) error {
 	return nil
 }
 func (c *stubCoordinator) TryAcquireExclusiveRun(ctx context.Context, runType string, holderID string, leaseDuration time.Duration) (func(), bool, error) {
@@ -94,6 +94,9 @@ func (s *stubRepository) UpdateItem(ctx context.Context, params domain.UpdateIte
 	panic("not implemented")
 }
 func (s *stubRepository) FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error) {
+	panic("not implemented")
+}
+func (s *stubRepository) DeleteItem(ctx context.Context, id string) error {
 	panic("not implemented")
 }
 func (s *stubRepository) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {

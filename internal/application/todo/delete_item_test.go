@@ -79,6 +79,10 @@ func (m *mockDeleteItemRepo) FindItems(ctx context.Context, params domain.ListTa
 	panic("not used")
 }
 
+func (m *mockDeleteItemRepo) DeleteItem(ctx context.Context, id string) error {
+	panic("not used")
+}
+
 func (m *mockDeleteItemRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	panic("not used")
 }

@@ -423,7 +423,7 @@ func (c *PostgresCoordinator) ListDeadLetterJobs(ctx context.Context, limit int)
 	return jobs, nil
 }
 
-func (c *PostgresCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
+func (c *PostgresCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetterID string) (newJobID string, err error) {
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to begin transaction: %w", err)
@@ -432,7 +432,7 @@ func (c *PostgresCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetter
 
 	qtx := c.queries.WithTx(tx)
 
-	newJobID, err = retryDeadLetterJobTx(ctx, qtx, deadLetterID, reviewedBy)
+	newJobID, err = retryDeadLetterJobTx(ctx, qtx, deadLetterID)
 	if err != nil {
 		return "", err
 	}
@@ -444,7 +444,7 @@ func (c *PostgresCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetter
 	return newJobID, nil
 }
 
-func (c *PostgresCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+func (c *PostgresCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLetterID, note string) error {
 	dlID, err := uuid.Parse(deadLetterID)
 	if err != nil {
 		return fmt.Errorf("invalid dead letter ID: %w", err)
@@ -452,8 +452,8 @@ func (c *PostgresCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLett
 
 	params := sqlcgen.MarkDeadLetterAsDiscardedParams{
 		ID:           pgtype.UUID{Bytes: dlID, Valid: true},
-		ReviewedBy:   sql.Null[string]{V: reviewedBy, Valid: true},
-		ReviewerNote: sql.Null[string]{V: note, Valid: true},
+		ReviewedBy:   sql.Null[string]{Valid: false},
+		ReviewerNote: sql.Null[string]{V: note, Valid: note != ""},
 	}
 
 	rows, err := c.queries.MarkDeadLetterAsDiscarded(ctx, params)

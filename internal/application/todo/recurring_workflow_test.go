@@ -173,6 +173,10 @@ func (m *workflowMockRepo) FindItems(ctx context.Context, params domain.ListTask
 	panic("not used in workflow tests")
 }
 
+func (m *workflowMockRepo) DeleteItem(ctx context.Context, id string) error {
+	panic("not used in workflow tests")
+}
+
 func (m *workflowMockRepo) DeleteRecurringTemplate(ctx context.Context, id string) error {
 	panic("not used in workflow tests")
 }

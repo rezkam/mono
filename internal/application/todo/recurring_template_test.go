@@ -67,6 +67,10 @@ func (m *mockRecurringRepo) FindItems(ctx context.Context, params domain.ListTas
 	panic("not used in recurring template tests")
 }
 
+func (m *mockRecurringRepo) DeleteItem(ctx context.Context, id string) error {
+	panic("not used in recurring template tests")
+}
+
 func (m *mockRecurringRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	if m.createTemplateFn != nil {
 		return m.createTemplateFn(ctx, template)

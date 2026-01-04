@@ -100,3 +100,58 @@ func TestUpdateItem_ListMismatchReturnsNotFound(t *testing.T) {
 	require.NotNil(t, resp.Error.Code)
 	assert.Equal(t, "NOT_FOUND", *resp.Error.Code)
 }
+
+func TestDeleteItem_Returns204AndRemovesItem(t *testing.T) {
+	ts := SetupTestServer(t)
+	defer ts.Cleanup()
+
+	ctx := context.Background()
+	list, err := ts.TodoService.CreateList(ctx, "HTTP Delete List")
+	require.NoError(t, err)
+
+	item, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
+		Title: "Item To Delete",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/lists/%s/items/%s", list.ID, item.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+	w := httptest.NewRecorder()
+	ts.Router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+
+	_, err = ts.TodoService.GetItem(ctx, item.ID)
+	assert.ErrorIs(t, err, domain.ErrItemNotFound)
+}
+
+func TestDeleteItem_ListMismatchReturnsNotFound(t *testing.T) {
+	ts := SetupTestServer(t)
+	defer ts.Cleanup()
+
+	ctx := context.Background()
+	sourceList, err := ts.TodoService.CreateList(ctx, "HTTP Delete Source")
+	require.NoError(t, err)
+	otherList, err := ts.TodoService.CreateList(ctx, "HTTP Delete Other")
+	require.NoError(t, err)
+
+	item, err := ts.TodoService.CreateItem(ctx, sourceList.ID, &domain.TodoItem{
+		Title: "Item On Source List",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/lists/%s/items/%s", otherList.ID, item.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+	w := httptest.NewRecorder()
+	ts.Router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	var resp openapi.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Error)
+	require.NotNil(t, resp.Error.Code)
+	assert.Equal(t, "NOT_FOUND", *resp.Error.Code)
+}

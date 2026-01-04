@@ -402,8 +402,8 @@ func (s *Service) DeleteItem(ctx context.Context, listID, itemID string) error {
 		})
 	}
 
-	// Non-recurring item - TODO: implement hard delete
-	return domain.ErrHardDeleteNotImplemented
+	// Non-recurring item - hard delete
+	return s.repo.DeleteItem(ctx, itemID)
 }
 
 // ListItems searches for items with filtering, sorting, and pagination.

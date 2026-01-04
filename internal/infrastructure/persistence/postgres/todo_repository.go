@@ -418,6 +418,21 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 	return &domainItem, nil
 }
 
+// DeleteItem deletes a todo item by ID.
+// Returns domain.ErrItemNotFound if item doesn't exist.
+func (s *Store) DeleteItem(ctx context.Context, id string) error {
+	rowsAffected, err := s.queries.DeleteTodoItem(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete item: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("%w: item %s", domain.ErrItemNotFound, id)
+	}
+
+	return nil
+}
+
 // parseEtagToVersion extracts the version number from an etag string.
 // Assumes etag is already validated by the service layer.
 // Etag format: numeric string like "1", "2", "42"

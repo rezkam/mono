@@ -73,11 +73,11 @@ type GenerationCoordinator interface {
 	// RetryDeadLetterJob creates a new job from a dead letter entry and marks it as retried.
 	// Returns the ID of the newly created job.
 	// Returns domain.ErrDeadLetterNotFound if the dead letter entry doesn't exist.
-	RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error)
+	RetryDeadLetterJob(ctx context.Context, deadLetterID string) (newJobID string, err error)
 
 	// DiscardDeadLetterJob marks a dead letter job as permanently discarded.
 	// Returns domain.ErrDeadLetterNotFound if the dead letter entry doesn't exist.
-	DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error
+	DiscardDeadLetterJob(ctx context.Context, deadLetterID, note string) error
 
 	// === Exclusive Execution ===
 

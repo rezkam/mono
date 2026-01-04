@@ -176,9 +176,12 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 // DeleteItem implements ServerInterface.DeleteItem.
 // DELETE /v1/lists/{list_id}/items/{item_id}
 func (h *TodoHandler) DeleteItem(w http.ResponseWriter, r *http.Request, listID types.UUID, itemID types.UUID) {
-	// TODO: Implement delete item
-	// For now, return 501 Not Implemented
-	w.WriteHeader(http.StatusNotImplemented)
+	if err := h.todoService.DeleteItem(r.Context(), listID.String(), itemID.String()); err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
+
+	response.NoContent(w)
 }
 
 // ListItems implements ServerInterface.ListItems.

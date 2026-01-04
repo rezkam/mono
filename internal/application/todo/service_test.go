@@ -57,6 +57,10 @@ func (m *mockListListsRepo) FindItems(ctx context.Context, params domain.ListTas
 	panic("not used in ListLists tests")
 }
 
+func (m *mockListListsRepo) DeleteItem(ctx context.Context, id string) error {
+	panic("not used in ListLists tests")
+}
+
 func (m *mockListListsRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	panic("not used in ListLists tests")
 }

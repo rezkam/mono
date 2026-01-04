@@ -16,7 +16,7 @@ import (
 
 // retryDeadLetterJobTx implements the retry logic within a transaction.
 // Shared by both Store and PostgresCoordinator to avoid duplication.
-func retryDeadLetterJobTx(ctx context.Context, qtx *sqlcgen.Queries, deadLetterID, reviewedBy string) (string, error) {
+func retryDeadLetterJobTx(ctx context.Context, qtx *sqlcgen.Queries, deadLetterID string) (string, error) {
 	// Get the dead letter job
 	dlID, err := uuid.Parse(deadLetterID)
 	if err != nil {
@@ -55,7 +55,7 @@ func retryDeadLetterJobTx(ctx context.Context, qtx *sqlcgen.Queries, deadLetterI
 	// Mark dead letter as retried
 	markParams := sqlcgen.MarkDeadLetterAsRetriedParams{
 		ID:         pgtype.UUID{Bytes: dlID, Valid: true},
-		ReviewedBy: sql.Null[string]{V: reviewedBy, Valid: true},
+		ReviewedBy: sql.Null[string]{Valid: false},
 	}
 	rows, err := qtx.MarkDeadLetterAsRetried(ctx, markParams)
 	if err != nil {

@@ -32,10 +32,7 @@ func (h *TodoHandler) ListDeadLetterJobs(w http.ResponseWriter, r *http.Request,
 
 // RetryDeadLetterJob retries a dead letter job.
 func (h *TodoHandler) RetryDeadLetterJob(w http.ResponseWriter, r *http.Request, id types.UUID) {
-	// TODO: Get reviewer ID from auth context
-	reviewedBy := "admin"
-
-	newJobID, err := h.coordinator.RetryDeadLetterJob(r.Context(), id.String(), reviewedBy)
+	newJobID, err := h.coordinator.RetryDeadLetterJob(r.Context(), id.String())
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -60,14 +57,12 @@ func (h *TodoHandler) DiscardDeadLetterJob(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// TODO: Get reviewer ID from auth context
-	reviewedBy := "admin"
 	note := ""
 	if req.Note != nil {
 		note = *req.Note
 	}
 
-	err := h.coordinator.DiscardDeadLetterJob(r.Context(), id.String(), reviewedBy, note)
+	err := h.coordinator.DiscardDeadLetterJob(r.Context(), id.String(), note)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

@@ -53,6 +53,10 @@ type Repository interface {
 	// excludedStatuses is provided by service layer based on business rules.
 	FindItems(ctx context.Context, params domain.ListTasksParams, excludedStatuses []domain.TaskStatus) (*domain.PagedResult, error)
 
+	// DeleteItem deletes a todo item.
+	// Returns domain.ErrItemNotFound if item doesn't exist.
+	DeleteItem(ctx context.Context, id string) error
+
 	// === Recurring Template Operations ===
 
 	// CreateRecurringTemplate creates a new recurring task template.
