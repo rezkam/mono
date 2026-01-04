@@ -153,8 +153,8 @@ func (w *ReconciliationWorker) reconcileOnce(ctx context.Context) error {
 	// - Templates with pending/running generation jobs
 	// - Templates updated within grace period
 	// - Templates already generated through their horizon
-	targetDate := time.Now().UTC().UTC().AddDate(0, 0, w.cfg.GenerationHorizonDays)
-	gracePeriodCutoff := time.Now().UTC().UTC().Add(-w.cfg.TemplateGracePeriod)
+	targetDate := time.Now().UTC().AddDate(0, 0, w.cfg.GenerationHorizonDays)
+	gracePeriodCutoff := time.Now().UTC().Add(-w.cfg.TemplateGracePeriod)
 
 	templates, err := w.repo.FindStaleTemplatesForReconciliation(ctx, FindStaleParams{
 		TargetDate:     targetDate,
@@ -200,7 +200,7 @@ func (w *ReconciliationWorker) reconcileOnce(ctx context.Context) error {
 		}
 
 		// Calculate desired state
-		generateUntil := time.Now().UTC().UTC().AddDate(0, 0, template.GenerationHorizonDays)
+		generateUntil := time.Now().UTC().AddDate(0, 0, template.GenerationHorizonDays)
 
 		// Already at desired state?
 		if !template.GeneratedThrough.Before(generateUntil) {
