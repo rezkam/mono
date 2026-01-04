@@ -62,9 +62,21 @@ type TodoItem struct {
 	OccursAt  *time.Time     // Exact timestamp for recurring instances (supports intra-day patterns)
 	DueOffset *time.Duration // Duration from StartsAt to calculate DueAt
 
-	// Timezone for due_at interpretation
-	// nil = floating time (9am stays 9am in user's current timezone)
-	// non-nil = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
+	// Timezone controls how task-related times (StartsAt, OccursAt, DueAt) are interpreted.
+	// This field does NOT affect operational times (CreatedAt, UpdatedAt) which are always UTC.
+	//
+	// Two modes:
+	//   nil = Floating time
+	//     - Time values stay constant across timezones
+	//     - 9am is always 9am regardless of user's location
+	//     - Example: "Wake up at 9am" (9am local time wherever you are)
+	//
+	//   non-nil = Fixed timezone (IANA timezone like 'Europe/Stockholm')
+	//     - Time is anchored to a specific timezone
+	//     - Represents an absolute UTC moment
+	//     - Example: "Stockholm office meeting at 9am" → 08:00 UTC (Stockholm is UTC+1)
+	//     - Viewing in Helsinki (UTC+2): displays as 10am
+	//     - Viewing in New York (UTC-5): displays as 4am
 	Timezone *string
 
 	// Optimistic locking version for concurrent update protection

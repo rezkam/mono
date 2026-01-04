@@ -10,7 +10,6 @@ CREATE TABLE todo_lists (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     title TEXT NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-    -- Optimistic locking version - incremented on each update to detect concurrent modifications
     version INTEGER NOT NULL DEFAULT 1
 );
 
@@ -56,14 +55,20 @@ CREATE TABLE todo_items (
     -- If nil: due_at is set directly
     due_offset INTERVAL,
 
-    -- Timezone for due_time interpretation
-    -- NULL = floating time (9am stays 9am regardless of user's location)
-    -- Non-NULL = fixed timezone (absolute moment in IANA timezone like 'Europe/Stockholm')
+    -- Timezone controls interpretation of task times (starts_at, occurs_at, due_at)
+    -- Does NOT affect operational times (created_at, updated_at) which are always UTC
+    --
+    -- NULL (floating time):
+    --   Time value stays constant across timezones (9am is always 9am)
+    --   Use for location-independent tasks ("wake up at 9am")
+    --
+    -- Non-NULL (fixed timezone, IANA format like 'Europe/Stockholm'):
+    --   Time anchored to specific timezone, represents absolute UTC moment
+    --   9am Stockholm (UTC+1) = 08:00 UTC = 10am Helsinki (UTC+2) = 4am New York (UTC-5)
+    --   Use for location-specific tasks ("Stockholm office meeting at 9am")
     timezone TEXT,
 
-    -- Optimistic locking version - incremented on each update to detect concurrent modifications
     version INTEGER NOT NULL DEFAULT 1,
-
     FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
 );
 

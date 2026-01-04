@@ -209,7 +209,11 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 		item.Status = domain.TaskStatusTodo
 	}
 
-	// Validate timezone if provided
+	// Validate timezone if provided (IANA timezone format required).
+	// Timezone affects interpretation of task times (StartsAt, OccursAt, DueAt):
+	//   - nil: floating time (9am local time, like "wake up at 9am")
+	//   - non-nil: fixed timezone (9am Stockholm = specific UTC moment)
+	// Does NOT affect operational times (CreatedAt, UpdatedAt) which are always UTC.
 	if item.Timezone != nil && *item.Timezone != "" {
 		if _, err := time.LoadLocation(*item.Timezone); err != nil {
 			return nil, fmt.Errorf("invalid timezone: %w", err)
@@ -288,7 +292,9 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 		}
 	}
 
-	// Validate timezone if being updated
+	// Validate timezone if being updated (IANA timezone format required).
+	// Changing timezone changes how task times are interpreted but does NOT trigger
+	// exception creation for recurring items (timezone is presentation-layer concern).
 	if params.Timezone != nil && *params.Timezone != "" {
 		if _, err := time.LoadLocation(*params.Timezone); err != nil {
 			return nil, fmt.Errorf("invalid timezone: %w", err)
