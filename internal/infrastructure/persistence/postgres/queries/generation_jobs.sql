@@ -128,11 +128,12 @@ WHERE id = $1 AND status = 'running';
 
 -- name: MarkJobAsCancelled :execrows
 -- Final cancellation by worker after cooperative shutdown.
+-- Note: available_at is set to NOW() since NOT NULL constraint prevents NULL.
 UPDATE recurring_generation_jobs
 SET status = 'cancelled',
     claimed_by = NULL,
     claimed_at = NULL,
-    available_at = NULL
+    available_at = NOW()
 WHERE id = $1 AND status = 'cancelling' AND claimed_by = $2;
 
 -- name: HasPendingOrRunningJob :one

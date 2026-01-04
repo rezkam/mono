@@ -53,6 +53,12 @@ func (c *stubCoordinator) FailJob(ctx context.Context, jobID, workerID, errMsg s
 func (c *stubCoordinator) CancelJob(ctx context.Context, jobID string) error {
 	return nil
 }
+func (c *stubCoordinator) RequestCancellation(ctx context.Context, jobID string) (int64, error) {
+	return 0, nil
+}
+func (c *stubCoordinator) MarkJobAsCancelled(ctx context.Context, jobID, workerID string) (int64, error) {
+	return 0, nil
+}
 func (c *stubCoordinator) SubscribeToCancellations(ctx context.Context) (<-chan string, error) {
 	return nil, nil
 }

@@ -216,6 +216,7 @@ type Querier interface {
 	// Mark a dead letter job as retried by admin.
 	MarkDeadLetterAsRetried(ctx context.Context, arg MarkDeadLetterAsRetriedParams) (int64, error)
 	// Final cancellation by worker after cooperative shutdown.
+	// Note: available_at is set to NOW() since NOT NULL constraint prevents NULL.
 	MarkJobAsCancelled(ctx context.Context, arg MarkJobAsCancelledParams) (int64, error)
 	// Mark a claimed job as running with worker ownership and availability timeout.
 	// Returns 0 rows if job doesn't exist or was already claimed by another worker.

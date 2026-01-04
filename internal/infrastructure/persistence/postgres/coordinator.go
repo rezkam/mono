@@ -262,6 +262,26 @@ func (c *PostgresCoordinator) CancelJob(ctx context.Context, jobID string) error
 	return nil
 }
 
+func (c *PostgresCoordinator) RequestCancellation(ctx context.Context, jobID string) (int64, error) {
+	rows, err := c.queries.RequestCancellationForRunningJob(ctx, jobID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to request cancellation: %w", err)
+	}
+	return rows, nil
+}
+
+func (c *PostgresCoordinator) MarkJobAsCancelled(ctx context.Context, jobID, workerID string) (int64, error) {
+	params := sqlcgen.MarkJobAsCancelledParams{
+		ID:        jobID,
+		ClaimedBy: sql.Null[string]{V: workerID, Valid: true},
+	}
+	rows, err := c.queries.MarkJobAsCancelled(ctx, params)
+	if err != nil {
+		return 0, fmt.Errorf("failed to mark job as cancelled: %w", err)
+	}
+	return rows, nil
+}
+
 func (c *PostgresCoordinator) SubscribeToCancellations(ctx context.Context) (<-chan string, error) {
 	// Acquire a dedicated connection for LISTEN/NOTIFY
 	conn, err := c.pool.Acquire(ctx)

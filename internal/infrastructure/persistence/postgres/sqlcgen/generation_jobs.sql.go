@@ -277,7 +277,7 @@ UPDATE recurring_generation_jobs
 SET status = 'cancelled',
     claimed_by = NULL,
     claimed_at = NULL,
-    available_at = NULL
+    available_at = NOW()
 WHERE id = $1 AND status = 'cancelling' AND claimed_by = $2
 `
 
@@ -287,6 +287,7 @@ type MarkJobAsCancelledParams struct {
 }
 
 // Final cancellation by worker after cooperative shutdown.
+// Note: available_at is set to NOW() since NOT NULL constraint prevents NULL.
 func (q *Queries) MarkJobAsCancelled(ctx context.Context, arg MarkJobAsCancelledParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markJobAsCancelled, arg.ID, arg.ClaimedBy)
 	if err != nil {

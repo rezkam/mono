@@ -53,6 +53,16 @@ type GenerationCoordinator interface {
 	// Returns domain.ErrJobNotCancellable if job is already completed or failed.
 	CancelJob(ctx context.Context, jobID string) error
 
+	// RequestCancellation requests cancellation for a running job.
+	// Sets status to 'cancelling' to signal worker to stop cooperatively.
+	// Returns rows affected (0 if job not in 'running' state).
+	RequestCancellation(ctx context.Context, jobID string) (int64, error)
+
+	// MarkJobAsCancelled finalizes cancellation after worker cooperative shutdown.
+	// Only succeeds if job is in 'cancelling' state and owned by specified worker.
+	// Returns rows affected (0 if ownership check fails).
+	MarkJobAsCancelled(ctx context.Context, jobID, workerID string) (int64, error)
+
 	// SubscribeToCancellations returns a channel that receives cancelled job IDs.
 	// Workers should select on this channel to handle cooperative cancellation.
 	// The channel is closed when the provided context is cancelled.

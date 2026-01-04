@@ -327,3 +327,71 @@ func TestWorker_MultipleTemplates_IndependentDuplicatePrevention(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, pendingJobs, "Should still have exactly 2 pending jobs")
 }
+
+// TestStore_HasPendingOrRunningJob_ScheduledStatus verifies that HasPendingOrRunningJob
+// detects jobs in 'scheduled' status, not just 'pending' and 'running'.
+func TestStore_HasPendingOrRunningJob_ScheduledStatus(t *testing.T) {
+	pgURL := GetTestStorageDSN(t)
+
+	ctx := context.Background()
+	store, err := postgres.NewPostgresStore(ctx, pgURL)
+	require.NoError(t, err)
+	defer store.Close()
+
+	_, err = store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	require.NoError(t, err)
+
+	defer func() {
+		store.Pool().Exec(ctx, "TRUNCATE TABLE todo_items, todo_lists, task_status_history, recurring_task_templates, recurring_generation_jobs, api_keys CASCADE")
+	}()
+
+	// Create test list
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	listID := listUUID.String()
+	list := &domain.TodoList{
+		ID:        listID,
+		Title:     "Scheduled Status Test",
+		CreatedAt: time.Now().UTC(),
+	}
+	_, err = store.CreateList(ctx, list)
+	require.NoError(t, err)
+
+	// Create a template
+	templateUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	templateID := templateUUID.String()
+	template := &domain.RecurringTemplate{
+		ID:                    templateID,
+		ListID:                listID,
+		Title:                 "Future Task",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
+		IsActive:              true,
+		CreatedAt:             time.Now().UTC(),
+		UpdatedAt:             time.Now().UTC(),
+	}
+	_, err = store.CreateRecurringTemplate(ctx, template)
+	require.NoError(t, err)
+
+	// Create a job with 'scheduled' status
+	jobUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	jobID := jobUUID.String()
+	futureTime := time.Now().UTC().Add(24 * time.Hour)
+
+	_, err = store.Pool().Exec(ctx, `
+		INSERT INTO recurring_generation_jobs (
+			id, template_id, generate_from, generate_until,
+			scheduled_for, status, retry_count, created_at
+		) VALUES ($1, $2, $3, $4, $5, 'scheduled', 0, NOW())
+	`, jobID, templateID, time.Now().UTC(), futureTime, futureTime)
+	require.NoError(t, err)
+
+	// HasPendingOrRunningJob SHOULD detect scheduled jobs
+	hasJob, err := store.HasPendingOrRunningJob(ctx, templateID)
+	require.NoError(t, err)
+	assert.True(t, hasJob, "HasPendingOrRunningJob should return true for 'scheduled' jobs")
+}
