@@ -2,7 +2,6 @@ package todo
 
 import (
 	"context"
-	"time"
 
 	"github.com/rezkam/mono/internal/domain"
 )
@@ -79,31 +78,11 @@ type Repository interface {
 	// FindRecurringTemplates lists all templates for a list, optionally filtered by active status.
 	FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error)
 
-	// FindExceptions retrieves exceptions for a template in a date range.
-	// Used for displaying edited/deleted occurrences to users.
-	// Returns domain.ErrTemplateNotFound if template doesn't exist.
-	FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
-
 	// CreateException creates a new recurring template exception.
+	// INTERNAL USE ONLY: Called within UpdateItem/DeleteItem transactions.
+	// Not exposed via HTTP API - exceptions are created automatically when users modify recurring task instances.
 	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
 	CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error)
-
-	// DeleteFuturePendingItems deletes all pending items for a template that occur after the specified date.
-	// Used during template updates to remove items that shouldn't exist beyond the template's generated_through marker.
-	// Returns count of deleted items.
-	DeleteFuturePendingItems(ctx context.Context, templateID string, after time.Time) (int64, error)
-
-	// BatchInsertItemsIgnoreConflict inserts items in batch with conflict handling.
-	// Duplicates based on (recurring_template_id, occurs_at) are silently ignored.
-	// Returns count of successfully inserted items.
-	BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error)
-
-	// SetGeneratedThrough updates the generated_through marker after generation.
-	SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error
-
-	// CreateGenerationJob creates a new background job for generating recurring tasks.
-	// Must be called within an Atomic transaction to ensure atomicity with data operations.
-	CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error
 
 	// === Atomic Operations ===
 
@@ -112,4 +91,17 @@ type Repository interface {
 	// The callback receives a Repository instance that operates within the transaction.
 	// Commits the transaction if callback returns nil, rolls back if callback returns an error.
 	Atomic(ctx context.Context, fn func(repo Repository) error) error
+
+	// AtomicRecurring executes a callback for recurring template operations in a transaction.
+	// Used when creating/updating templates with sync task generation and job scheduling.
+	//
+	// The callback receives RecurringOperations which extends Repository with minimal
+	// provisioning operations (batch insert, generation markers, job scheduling).
+	//
+	// Use cases:
+	// - Creating recurring templates with immediate task generation
+	// - Updating templates with task regeneration
+	//
+	// For pure todo operations, use Atomic instead.
+	AtomicRecurring(ctx context.Context, fn func(ops RecurringOperations) error) error
 }

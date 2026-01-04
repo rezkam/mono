@@ -103,7 +103,13 @@ func (s *stubRepository) FindRecurringTemplateByID(ctx context.Context, id strin
 	panic("should not be called")
 }
 func (s *stubRepository) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
-	panic("not implemented")
+	// Return a minimal template for tests that update
+	return &domain.RecurringTemplate{
+		ID:                    params.TemplateID,
+		ListID:                params.ListID,
+		GenerationHorizonDays: 365,
+		SyncHorizonDays:       14,
+	}, nil
 }
 func (s *stubRepository) DeleteRecurringTemplate(ctx context.Context, id string) error {
 	panic("not implemented")
@@ -112,16 +118,16 @@ func (s *stubRepository) FindRecurringTemplates(ctx context.Context, listID stri
 	panic("not implemented")
 }
 func (s *stubRepository) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
-	panic("not implemented")
+	return len(items), nil // Return success
 }
 func (s *stubRepository) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
-	panic("not implemented")
+	return 0, nil // Return success
 }
 func (s *stubRepository) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
-	panic("not implemented")
+	return nil // Return success
 }
 func (s *stubRepository) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
 	panic("not implemented")
@@ -150,6 +156,15 @@ func (s *stubRepository) Atomic(ctx context.Context, fn func(todo.Repository) er
 	return fn(s)
 }
 
+// AtomicRecurring executes callback without transaction (tests don't need real transactions)
+func (s *stubRepository) AtomicRecurring(ctx context.Context, fn func(todo.RecurringOperations) error) error {
+	return fn(s)
+}
+
+func (s *stubRepository) ScheduleGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
+	return "job-123", nil // Return mock job ID
+}
+
 // spyRepository captures what was passed to UpdateRecurringTemplate
 type spyRepository struct {
 	stubRepository
@@ -176,6 +191,11 @@ func (s *spyRepository) UpdateRecurringTemplate(ctx context.Context, params doma
 
 // Atomic executes the function and delegates calls back to the spyRepository
 func (s *spyRepository) Atomic(ctx context.Context, fn func(todo.Repository) error) error {
+	return fn(s)
+}
+
+// AtomicRecurring executes the function and delegates calls back to the spyRepository
+func (s *spyRepository) AtomicRecurring(ctx context.Context, fn func(todo.RecurringOperations) error) error {
 	return fn(s)
 }
 

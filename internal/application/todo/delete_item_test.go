@@ -48,6 +48,12 @@ func (m *mockDeleteItemRepo) Atomic(ctx context.Context, fn func(tx Repository) 
 	return fn(m)
 }
 
+// AtomicRecurring executes callback without transaction (tests don't need real transactions)
+func (m *mockDeleteItemRepo) AtomicRecurring(ctx context.Context, fn func(ops RecurringOperations) error) error {
+	// Not used in delete item tests
+	panic("AtomicRecurring not used in delete item tests")
+}
+
 // Stub all other methods
 func (m *mockDeleteItemRepo) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
 	panic("not used")
@@ -90,42 +96,6 @@ func (m *mockDeleteItemRepo) DeleteRecurringTemplate(ctx context.Context, id str
 }
 
 func (m *mockDeleteItemRepo) FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) DeleteException(ctx context.Context, templateID string, occursAt time.Time) error {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
 	panic("not used")
 }
 

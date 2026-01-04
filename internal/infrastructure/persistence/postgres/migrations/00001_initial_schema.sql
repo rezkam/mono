@@ -2,28 +2,6 @@
 -- +goose StatementBegin
 
 -- ============================================================================
--- Enable Extensions
--- ============================================================================
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- ============================================================================
--- UUID v7 Function (RFC 9562)
--- ============================================================================
--- Generates time-ordered UUIDs with millisecond precision timestamp
--- Format: xxxxxxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx
---         |------| |--| ||
---         timestamp  ver random
-CREATE OR REPLACE FUNCTION uuidv7() RETURNS uuid
-AS $$
-SELECT encode(
-  substring(int8send(floor(extract(epoch from clock_timestamp()) * 1000)::bigint) from 3) ||
-  gen_random_bytes(10),
-  'hex')::uuid
-$$
-LANGUAGE sql
-VOLATILE;
-
--- ============================================================================
 -- Core Tables
 -- ============================================================================
 
@@ -32,7 +10,6 @@ CREATE TABLE todo_lists (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     title TEXT NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-
     -- Optimistic locking version - incremented on each update to detect concurrent modifications
     version INTEGER NOT NULL DEFAULT 1
 );

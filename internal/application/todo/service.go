@@ -494,50 +494,42 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		return nil, fmt.Errorf("failed to generate sync items: %w", err)
 	}
 
-	// Prepare ASYNC job for remaining days (if needed)
-	var asyncJob *domain.GenerationJob
-	asyncEnd := now.AddDate(0, 0, template.GenerationHorizonDays)
-	if syncEnd.Before(asyncEnd) {
-		// Generate job ID
-		jobIDObj, err := uuid.NewV7()
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate job ID: %w", err)
-		}
+	var created *domain.RecurringTemplate
 
-		asyncJob = &domain.GenerationJob{
-			ID:            jobIDObj.String(),
-			TemplateID:    template.ID,
-			GenerateFrom:  syncEnd,
-			GenerateUntil: asyncEnd,
-			ScheduledFor:  now,
-			CreatedAt:     now,
-			RetryCount:    0,
-		}
-	}
+	// Use AtomicRecurring: template + items + generation marker + job all succeed/fail together
+	err = s.repo.AtomicRecurring(ctx, func(ops RecurringOperations) error {
+		var err error
 
-	// Use atomic operation: template + items + generation marker + job all succeed/fail together
-	err = s.repo.Atomic(ctx, func(repo Repository) error {
 		// 1. Create template
-		if _, err := repo.CreateRecurringTemplate(ctx, template); err != nil {
+		created, err = ops.CreateRecurringTemplate(ctx, template)
+		if err != nil {
 			return fmt.Errorf("failed to create template: %w", err)
 		}
 
 		// 2. Insert sync horizon items
 		if len(syncItems) > 0 {
-			if _, err = repo.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
+			if _, err = ops.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
 				return fmt.Errorf("failed to insert sync items: %w", err)
 			}
 		}
 
 		// 3. Update generation marker
-		if err := repo.SetGeneratedThrough(ctx, template.ID, syncEnd); err != nil {
+		if err := ops.SetGeneratedThrough(ctx, created.ID, syncEnd); err != nil {
 			return fmt.Errorf("failed to update generation marker: %w", err)
 		}
 
-		// 4. Create async generation job (if needed)
-		if asyncJob != nil {
-			if err := repo.CreateGenerationJob(ctx, asyncJob); err != nil {
-				return fmt.Errorf("failed to create generation job: %w", err)
+		// 4. Schedule async generation job if needed
+		asyncEnd := now.AddDate(0, 0, created.GenerationHorizonDays)
+		if syncEnd.Before(asyncEnd) {
+			_, err := ops.ScheduleGenerationJob(
+				ctx,
+				created.ID,
+				time.Time{}, // immediate
+				syncEnd,
+				asyncEnd,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to schedule generation job: %w", err)
 			}
 		}
 
@@ -547,8 +539,7 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		return nil, err
 	}
 
-	// Refetch template to get updated generated_through
-	return s.repo.FindRecurringTemplateByID(ctx, template.ID)
+	return created, nil
 }
 
 // FindRecurringTemplateByID retrieves a recurring template by ID.
@@ -664,70 +655,65 @@ func shouldCreateException(updateMask []string) bool {
 func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *domain.RecurringTemplate, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	now := time.Now().UTC()
 
-	syncHorizon := existing.SyncHorizonDays
-	if syncHorizon == 0 {
-		syncHorizon = 14
-	}
-	syncEnd := now.AddDate(0, 0, syncHorizon)
+	var updated *domain.RecurringTemplate
 
-	syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, existing, now, syncEnd, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate sync items: %w", err)
-	}
+	// Use AtomicRecurring: update template + regenerate items + generation marker + job all succeed/fail together
+	err := s.repo.AtomicRecurring(ctx, func(ops RecurringOperations) error {
+		var err error
 
-	// Prepare async job for remaining generation horizon (if needed)
-	var asyncJob *domain.GenerationJob
-	generationHorizon := existing.GenerationHorizonDays
-	if generationHorizon == 0 {
-		generationHorizon = 365
-	}
-	asyncEnd := now.AddDate(0, 0, generationHorizon)
-
-	if syncEnd.Before(asyncEnd) {
-		jobIDObj, err := uuid.NewV7()
+		// 1. Update template FIRST to get new pattern/horizons
+		updated, err = ops.UpdateRecurringTemplate(ctx, params)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate job ID: %w", err)
-		}
-
-		asyncJob = &domain.GenerationJob{
-			ID:            jobIDObj.String(),
-			TemplateID:    params.TemplateID,
-			GenerateFrom:  syncEnd,
-			GenerateUntil: asyncEnd,
-			ScheduledFor:  now,
-			CreatedAt:     now,
-			RetryCount:    0,
-		}
-	}
-
-	// Use atomic operation: update template + regenerate items + generation marker + job all succeed/fail together
-	err = s.repo.Atomic(ctx, func(repo Repository) error {
-		// 1. Update template
-		if _, err := repo.UpdateRecurringTemplate(ctx, params); err != nil {
 			return fmt.Errorf("failed to update template: %w", err)
 		}
 
-		// 2. Delete future pending items
-		if _, err := repo.DeleteFuturePendingItems(ctx, params.TemplateID, now); err != nil {
+		// 2. Delete future pending items (before regenerating with new pattern)
+		if _, err := ops.DeleteFuturePendingItems(ctx, params.TemplateID, now); err != nil {
 			return fmt.Errorf("failed to delete future items: %w", err)
 		}
 
-		// 3. Insert regenerated items
+		// 3. Calculate sync horizon from UPDATED template
+		syncHorizon := updated.SyncHorizonDays
+		if syncHorizon == 0 {
+			syncHorizon = 14
+		}
+		syncEnd := now.AddDate(0, 0, syncHorizon)
+
+		// 4. Generate tasks with UPDATED template (new pattern/horizons)
+		syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, updated, now, syncEnd, nil)
+		if err != nil {
+			return fmt.Errorf("failed to generate sync items: %w", err)
+		}
+
+		// 5. Insert regenerated items
 		if len(syncItems) > 0 {
-			if _, err := repo.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
+			if _, err := ops.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
 				return fmt.Errorf("failed to insert regenerated items: %w", err)
 			}
 		}
 
-		// 4. Update generation marker
-		if err := repo.SetGeneratedThrough(ctx, params.TemplateID, syncEnd); err != nil {
+		// 6. Update generation marker
+		if err := ops.SetGeneratedThrough(ctx, params.TemplateID, syncEnd); err != nil {
 			return fmt.Errorf("failed to update generation marker: %w", err)
 		}
 
-		// 5. Create async generation job (if needed)
-		if asyncJob != nil {
-			if err := repo.CreateGenerationJob(ctx, asyncJob); err != nil {
-				return fmt.Errorf("failed to create generation job: %w", err)
+		// 7. Schedule async generation job if needed
+		generationHorizon := updated.GenerationHorizonDays
+		if generationHorizon == 0 {
+			generationHorizon = 365
+		}
+		asyncEnd := now.AddDate(0, 0, generationHorizon)
+
+		if syncEnd.Before(asyncEnd) {
+			_, err := ops.ScheduleGenerationJob(
+				ctx,
+				updated.ID,
+				time.Time{}, // immediate
+				syncEnd,
+				asyncEnd,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to schedule generation job: %w", err)
 			}
 		}
 
@@ -737,8 +723,7 @@ func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *
 		return nil, err
 	}
 
-	// Refetch template to get updated generated_through
-	return s.repo.FindRecurringTemplateByID(ctx, params.TemplateID)
+	return updated, nil
 }
 
 // DeleteRecurringTemplate deletes a recurring template.
@@ -776,26 +761,4 @@ func (s *Service) ListRecurringTemplates(ctx context.Context, listID string, act
 	}
 
 	return templates, nil
-}
-
-// FindExceptions retrieves exceptions for a recurring template.
-// Validates that the template belongs to the specified list.
-func (s *Service) FindExceptions(ctx context.Context, listID, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
-	if listID == "" {
-		return nil, domain.ErrListNotFound
-	}
-	if templateID == "" {
-		return nil, domain.ErrTemplateNotFound
-	}
-
-	// Verify template belongs to list
-	template, err := s.repo.FindRecurringTemplateByID(ctx, templateID)
-	if err != nil {
-		return nil, err
-	}
-	if template.ListID != listID {
-		return nil, domain.ErrTemplateNotFound
-	}
-
-	return s.repo.FindExceptions(ctx, templateID, from, until)
 }

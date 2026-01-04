@@ -497,53 +497,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /v1/lists/{list_id}/recurring-templates/{template_id}/exceptions:
-    get:
-      operationId: listRecurringTemplateExceptions
-      summary: List exceptions for a recurring template
-      description: Returns instances that were deleted, rescheduled, or customized
-      tags: [RecurringTemplates]
-      parameters:
-        - name: list_id
-          in: path
-          required: true
-          description: List ID
-          schema:
-            type: string
-            format: uuid
-        - name: template_id
-          in: path
-          required: true
-          description: Template ID
-          schema:
-            type: string
-            format: uuid
-        - name: from_date
-          in: query
-          description: Start of date range (defaults to 1 month ago)
-          schema:
-            type: string
-            format: date-time
-        - name: to_date
-          in: query
-          description: End of date range (defaults to 1 month ahead)
-          schema:
-            type: string
-            format: date-time
-      responses:
-        '200':
-          description: List of exceptions
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListRecurringTemplateExceptionsResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /v1/admin/dead-letter-jobs:
     get:
       operationId: listDeadLetterJobs
@@ -970,43 +923,6 @@ components:
           minimum: 30
           maximum: 730
           description: Total generation horizon in days (ASYNC layer)
-
-    RecurringTemplateException:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        template_id:
-          type: string
-          format: uuid
-        occurs_at:
-          type: string
-          format: date-time
-          description: Exact timestamp when this instance would have occurred
-        exception_type:
-          type: string
-          enum: [deleted, rescheduled, edited]
-          description: |
-            - deleted: Instance was soft-deleted
-            - rescheduled: Instance was moved to different time (detached from template)
-            - edited: Instance was customized (keeps template link but excluded from updates)
-        item_id:
-          type: string
-          format: uuid
-          nullable: true
-          description: ID of the affected item (for audit trail)
-        created_at:
-          type: string
-          format: date-time
-
-    ListRecurringTemplateExceptionsResponse:
-      type: object
-      properties:
-        exceptions:
-          type: array
-          items:
-            $ref: '#/components/schemas/RecurringTemplateException'
 
     ListDeadLetterJobsResponse:
       type: object

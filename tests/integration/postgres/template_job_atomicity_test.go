@@ -62,7 +62,6 @@ func TestTemplateJobAtomicity_CommitsAtomically(t *testing.T) {
 
 	// Prepare template and job
 	templateID := uuid.Must(uuid.NewV7()).String()
-	jobID := uuid.Must(uuid.NewV7()).String()
 
 	template := &domain.RecurringTemplate{
 		ID:                templateID,
@@ -76,22 +75,18 @@ func TestTemplateJobAtomicity_CommitsAtomically(t *testing.T) {
 		GeneratedThrough:  time.Now().UTC(),
 	}
 
-	job := &domain.GenerationJob{
-		ID:            jobID,
-		TemplateID:    templateID,
-		GenerateFrom:  time.Now().UTC(),
-		GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-		ScheduledFor:  time.Now().UTC(),
-		CreatedAt:     time.Now().UTC(),
-	}
+	now := time.Now().UTC()
+	var createdJobID string
 
 	// Execute transaction - both should commit together
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
-		_, err := tx.CreateRecurringTemplate(ctx, template)
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
+		_, err := ops.CreateRecurringTemplate(ctx, template)
 		if err != nil {
 			return err
 		}
-		return tx.CreateGenerationJob(ctx, job)
+		// Capture the job ID returned by ScheduleGenerationJob
+		createdJobID, err = ops.ScheduleGenerationJob(ctx, templateID, now, now, now.AddDate(0, 0, 7))
+		return err
 	})
 	require.NoError(t, err)
 
@@ -102,7 +97,7 @@ func TestTemplateJobAtomicity_CommitsAtomically(t *testing.T) {
 
 	var jobStatus string
 	err = store.Pool().QueryRow(ctx,
-		"SELECT status FROM recurring_generation_jobs WHERE id = $1", jobID).Scan(&jobStatus)
+		"SELECT status FROM recurring_generation_jobs WHERE id = $1", createdJobID).Scan(&jobStatus)
 	require.NoError(t, err)
 	assert.Equal(t, "pending", jobStatus)
 }
@@ -118,9 +113,8 @@ func TestTemplateJobAtomicity_RollsBackOnError(t *testing.T) {
 	// Create a list first
 	listID := createListForAtomicityTest(t, store, "Test List")
 
-	// Prepare template and job
+	// Prepare template
 	templateID := uuid.Must(uuid.NewV7()).String()
-	jobID := uuid.Must(uuid.NewV7()).String()
 
 	template := &domain.RecurringTemplate{
 		ID:                templateID,
@@ -134,23 +128,16 @@ func TestTemplateJobAtomicity_RollsBackOnError(t *testing.T) {
 		GeneratedThrough:  time.Now().UTC(),
 	}
 
-	job := &domain.GenerationJob{
-		ID:            jobID,
-		TemplateID:    templateID,
-		GenerateFrom:  time.Now().UTC(),
-		GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-		ScheduledFor:  time.Now().UTC(),
-		CreatedAt:     time.Now().UTC(),
-	}
+	now := time.Now().UTC()
 
 	// Execute transaction - return error after both inserts
 	testErr := errors.New("simulated failure")
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
-		_, err := tx.CreateRecurringTemplate(ctx, template)
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
+		_, err := ops.CreateRecurringTemplate(ctx, template)
 		if err != nil {
 			return err
 		}
-		if err := tx.CreateGenerationJob(ctx, job); err != nil {
+		if _, err := ops.ScheduleGenerationJob(ctx, templateID, now, now, now.AddDate(0, 0, 7)); err != nil {
 			return err
 		}
 		return testErr // Simulate failure after inserts
@@ -163,7 +150,7 @@ func TestTemplateJobAtomicity_RollsBackOnError(t *testing.T) {
 
 	var count int
 	err = store.Pool().QueryRow(ctx,
-		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE id = $1", jobID).Scan(&count)
+		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id = $1", templateID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "Job should NOT exist after rollback")
 }
@@ -179,9 +166,8 @@ func TestTemplateJobAtomicity_RollsBackOnPanic(t *testing.T) {
 	// Create a list first
 	listID := createListForAtomicityTest(t, store, "Test List")
 
-	// Prepare template and job
+	// Prepare template
 	templateID := uuid.Must(uuid.NewV7()).String()
-	jobID := uuid.Must(uuid.NewV7()).String()
 
 	template := &domain.RecurringTemplate{
 		ID:                templateID,
@@ -195,23 +181,16 @@ func TestTemplateJobAtomicity_RollsBackOnPanic(t *testing.T) {
 		GeneratedThrough:  time.Now().UTC(),
 	}
 
-	job := &domain.GenerationJob{
-		ID:            jobID,
-		TemplateID:    templateID,
-		GenerateFrom:  time.Now().UTC(),
-		GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-		ScheduledFor:  time.Now().UTC(),
-		CreatedAt:     time.Now().UTC(),
-	}
+	now := time.Now().UTC()
 
 	// Execute transaction with panic - should be caught and rolled back
 	assert.Panics(t, func() {
-		_ = store.Atomic(ctx, func(tx todo.Repository) error {
-			_, err := tx.CreateRecurringTemplate(ctx, template)
+		_ = store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
+			_, err := ops.CreateRecurringTemplate(ctx, template)
 			if err != nil {
 				return err
 			}
-			if err := tx.CreateGenerationJob(ctx, job); err != nil {
+			if _, err := ops.ScheduleGenerationJob(ctx, templateID, now, now, now.AddDate(0, 0, 7)); err != nil {
 				return err
 			}
 			panic("simulated panic")
@@ -224,7 +203,7 @@ func TestTemplateJobAtomicity_RollsBackOnPanic(t *testing.T) {
 
 	var count int
 	err = store.Pool().QueryRow(ctx,
-		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE id = $1", jobID).Scan(&count)
+		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id = $1", templateID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "Job should NOT exist after panic rollback")
 }
@@ -266,12 +245,13 @@ func TestTemplateJobAtomicity_PartialInsertRollback(t *testing.T) {
 	}
 
 	// Execute transaction - job insert should fail, rolling back template
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
-		_, err := tx.CreateRecurringTemplate(ctx, template)
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
+		_, err := ops.CreateRecurringTemplate(ctx, template)
 		if err != nil {
 			return err
 		}
-		return tx.CreateGenerationJob(ctx, invalidJob)
+		_, err = ops.ScheduleGenerationJob(ctx, invalidJob.TemplateID, invalidJob.ScheduledFor, invalidJob.GenerateFrom, invalidJob.GenerateUntil)
+		return err
 	})
 	require.Error(t, err, "Should fail due to invalid job template ID")
 
@@ -291,17 +271,15 @@ func TestTemplateJobAtomicity_NestedOperations(t *testing.T) {
 	// Create a list first
 	listID := createListForAtomicityTest(t, store, "Test List")
 
-	// Prepare multiple templates and jobs
+	// Prepare multiple templates
 	template1ID := uuid.Must(uuid.NewV7()).String()
 	template2ID := uuid.Must(uuid.NewV7()).String()
-	job1ID := uuid.Must(uuid.NewV7()).String()
-	job2ID := uuid.Must(uuid.NewV7()).String()
 
 	// Execute transaction with multiple operations, then fail
 	testErr := errors.New("simulated failure after multiple inserts")
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
 		// Create first template and job
-		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_, err := ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                template1ID,
 			ListID:            listID,
 			Title:             "Template 1",
@@ -316,19 +294,13 @@ func TestTemplateJobAtomicity_NestedOperations(t *testing.T) {
 			return err
 		}
 
-		if err := tx.CreateGenerationJob(ctx, &domain.GenerationJob{
-			ID:            job1ID,
-			TemplateID:    template1ID,
-			GenerateFrom:  time.Now().UTC(),
-			GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-			ScheduledFor:  time.Now().UTC(),
-			CreatedAt:     time.Now().UTC(),
-		}); err != nil {
+		now1 := time.Now().UTC()
+		if _, err := ops.ScheduleGenerationJob(ctx, template1ID, now1, now1, now1.AddDate(0, 0, 7)); err != nil {
 			return err
 		}
 
 		// Create second template and job
-		_, err = tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_, err = ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                template2ID,
 			ListID:            listID,
 			Title:             "Template 2",
@@ -343,14 +315,8 @@ func TestTemplateJobAtomicity_NestedOperations(t *testing.T) {
 			return err
 		}
 
-		if err := tx.CreateGenerationJob(ctx, &domain.GenerationJob{
-			ID:            job2ID,
-			TemplateID:    template2ID,
-			GenerateFrom:  time.Now().UTC(),
-			GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-			ScheduledFor:  time.Now().UTC(),
-			CreatedAt:     time.Now().UTC(),
-		}); err != nil {
+		now2 := time.Now().UTC()
+		if _, err := ops.ScheduleGenerationJob(ctx, template2ID, now2, now2, now2.AddDate(0, 0, 7)); err != nil {
 			return err
 		}
 
@@ -367,7 +333,7 @@ func TestTemplateJobAtomicity_NestedOperations(t *testing.T) {
 
 	var count int
 	err = store.Pool().QueryRow(ctx,
-		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE id IN ($1, $2)", job1ID, job2ID).Scan(&count)
+		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id IN ($1, $2)", template1ID, template2ID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "Neither job should exist after rollback")
 }
@@ -383,13 +349,12 @@ func TestTemplateJobAtomicity_FirstOperationFails(t *testing.T) {
 	// Use non-existent list ID to cause template creation to fail
 	nonExistentListID := uuid.Must(uuid.NewV7()).String()
 	templateID := uuid.Must(uuid.NewV7()).String()
-	jobID := uuid.Must(uuid.NewV7()).String()
 
 	jobCreationAttempted := false
 
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
 		// Template with invalid list ID - should fail
-		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_, err := ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                templateID,
 			ListID:            nonExistentListID, // FK violation
 			Title:             "Daily Task",
@@ -406,14 +371,9 @@ func TestTemplateJobAtomicity_FirstOperationFails(t *testing.T) {
 
 		// This should never execute
 		jobCreationAttempted = true
-		return tx.CreateGenerationJob(ctx, &domain.GenerationJob{
-			ID:            jobID,
-			TemplateID:    templateID,
-			GenerateFrom:  time.Now().UTC(),
-			GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-			ScheduledFor:  time.Now().UTC(),
-			CreatedAt:     time.Now().UTC(),
-		})
+		now := time.Now().UTC()
+		_, err = ops.ScheduleGenerationJob(ctx, templateID, now, now, now.AddDate(0, 0, 7))
+		return err
 	})
 
 	require.Error(t, err, "Transaction should fail due to FK constraint")
@@ -425,7 +385,7 @@ func TestTemplateJobAtomicity_FirstOperationFails(t *testing.T) {
 
 	var count int
 	err = store.Pool().QueryRow(ctx,
-		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE id = $1", jobID).Scan(&count)
+		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id = $1", templateID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }
@@ -455,12 +415,11 @@ func TestTemplateJobAtomicity_DuplicateTemplateID(t *testing.T) {
 	require.NoError(t, err)
 
 	newTemplateID := uuid.Must(uuid.NewV7()).String()
-	jobID := uuid.Must(uuid.NewV7()).String()
 
 	// Try to create template with duplicate ID in transaction
-	err = store.Atomic(ctx, func(tx todo.Repository) error {
+	err = store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
 		// First create a new valid template
-		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_, err := ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                newTemplateID,
 			ListID:            listID,
 			Title:             "New Template",
@@ -476,7 +435,7 @@ func TestTemplateJobAtomicity_DuplicateTemplateID(t *testing.T) {
 		}
 
 		// Then try to create duplicate - should fail
-		_, err = tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_, err = ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                existingTemplateID, // Duplicate!
 			ListID:            listID,
 			Title:             "Duplicate Template",
@@ -491,14 +450,9 @@ func TestTemplateJobAtomicity_DuplicateTemplateID(t *testing.T) {
 			return err
 		}
 
-		return tx.CreateGenerationJob(ctx, &domain.GenerationJob{
-			ID:            jobID,
-			TemplateID:    newTemplateID,
-			GenerateFrom:  time.Now().UTC(),
-			GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-			ScheduledFor:  time.Now().UTC(),
-			CreatedAt:     time.Now().UTC(),
-		})
+		now := time.Now().UTC()
+		_, err = ops.ScheduleGenerationJob(ctx, newTemplateID, now, now, now.AddDate(0, 0, 7))
+		return err
 	})
 	require.Error(t, err, "Transaction should fail due to duplicate template ID")
 
@@ -523,8 +477,8 @@ func TestTemplateJobAtomicity_ContextCancellation(t *testing.T) {
 	// Create cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
-		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
+		_, err := ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                templateID,
 			ListID:            listID,
 			Title:             "Daily Task",
@@ -543,14 +497,9 @@ func TestTemplateJobAtomicity_ContextCancellation(t *testing.T) {
 		cancel()
 
 		// Try to create job with cancelled context - should fail
-		return tx.CreateGenerationJob(ctx, &domain.GenerationJob{
-			ID:            uuid.Must(uuid.NewV7()).String(),
-			TemplateID:    templateID,
-			GenerateFrom:  time.Now().UTC(),
-			GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-			ScheduledFor:  time.Now().UTC(),
-			CreatedAt:     time.Now().UTC(),
-		})
+		now := time.Now().UTC()
+		_, err = ops.ScheduleGenerationJob(ctx, templateID, now, now, now.AddDate(0, 0, 7))
+		return err
 	})
 
 	require.Error(t, err, "Transaction should fail due to context cancellation")
@@ -579,8 +528,8 @@ func TestTemplateJobAtomicity_TransactionIsolation(t *testing.T) {
 
 	// Start transaction that creates template but doesn't commit yet
 	go func() {
-		_ = store.Atomic(ctx, func(tx todo.Repository) error {
-			_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_ = store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
+			_, err := ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 				ID:                templateID,
 				ListID:            listID,
 				Title:             "Daily Task",
@@ -632,11 +581,10 @@ func TestTemplateJobAtomicity_JobReferencesNonExistentTemplate(t *testing.T) {
 
 	templateID := uuid.Must(uuid.NewV7()).String()
 	nonExistentTemplateID := uuid.Must(uuid.NewV7()).String() // Valid UUID but not in DB
-	jobID := uuid.Must(uuid.NewV7()).String()
 
-	err := store.Atomic(ctx, func(tx todo.Repository) error {
+	err := store.AtomicRecurring(ctx, func(ops todo.RecurringOperations) error {
 		// Create valid template first
-		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+		_, err := ops.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                templateID,
 			ListID:            listID,
 			Title:             "Daily Task",
@@ -652,14 +600,9 @@ func TestTemplateJobAtomicity_JobReferencesNonExistentTemplate(t *testing.T) {
 		}
 
 		// Try to create job referencing non-existent template
-		return tx.CreateGenerationJob(ctx, &domain.GenerationJob{
-			ID:            jobID,
-			TemplateID:    nonExistentTemplateID, // Valid UUID but doesn't exist
-			GenerateFrom:  time.Now().UTC(),
-			GenerateUntil: time.Now().UTC().AddDate(0, 0, 7),
-			ScheduledFor:  time.Now().UTC(),
-			CreatedAt:     time.Now().UTC(),
-		})
+		now := time.Now().UTC()
+		_, err = ops.ScheduleGenerationJob(ctx, nonExistentTemplateID, now, now, now.AddDate(0, 0, 7))
+		return err
 	})
 
 	require.Error(t, err, "Transaction should fail due to FK constraint")
@@ -672,7 +615,7 @@ func TestTemplateJobAtomicity_JobReferencesNonExistentTemplate(t *testing.T) {
 	// Verify job doesn't exist
 	var count int
 	err = store.Pool().QueryRow(ctx,
-		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE id = $1", jobID).Scan(&count)
+		"SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id = $1", nonExistentTemplateID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }

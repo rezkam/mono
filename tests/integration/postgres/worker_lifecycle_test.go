@@ -307,7 +307,7 @@ type faultyRepo struct {
 	panicWith any
 }
 
-func (r *faultyRepo) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (r *faultyRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	if r.panicWith != nil {
 		panic(r.panicWith)
 	}

@@ -77,43 +77,7 @@ func (m *mockListListsRepo) FindRecurringTemplates(ctx context.Context, listID s
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
-	panic("not used in ListLists tests")
-}
-
 func (m *mockListListsRepo) CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) DeleteException(ctx context.Context, templateID string, occursAt time.Time) error {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
 	panic("not used in ListLists tests")
 }
 
@@ -121,6 +85,29 @@ func (m *mockListListsRepo) ListAllExceptionsByTemplate(ctx context.Context, tem
 func (m *mockListListsRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	// Execute the function with the same mock (no actual transaction needed for validation tests)
 	return fn(m)
+}
+
+// AtomicRecurring executes callback without transaction (tests don't need real transactions)
+func (m *mockListListsRepo) AtomicRecurring(ctx context.Context, fn func(ops RecurringOperations) error) error {
+	// Execute the function with the same mock (no actual transaction needed for validation tests)
+	return fn(m)
+}
+
+// RecurringOperations methods (not used in these tests)
+func (m *mockListListsRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, from time.Time) (int64, error) {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	panic("not used in ListLists tests")
+}
+
+func (m *mockListListsRepo) ScheduleGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
+	panic("not used in ListLists tests")
 }
 
 // mockUpdateItemRepo is a minimal mock for testing UpdateItem logic

@@ -141,22 +141,3 @@ func MapTemplateToDTO(template *domain.RecurringTemplate) openapi.RecurringItemT
 
 	return dto
 }
-
-// MapExceptionToDTO converts domain.RecurringTemplateException to openapi.RecurringTemplateException.
-func MapExceptionToDTO(exc *domain.RecurringTemplateException) openapi.RecurringTemplateException {
-	excType := openapi.RecurringTemplateExceptionExceptionType(exc.ExceptionType)
-
-	dto := openapi.RecurringTemplateException{
-		Id:            ptrUUID(exc.ID),
-		TemplateId:    ptrUUID(exc.TemplateID),
-		OccursAt:      ptrTime(exc.OccursAt),
-		ExceptionType: &excType,
-		CreatedAt:     ptrTime(exc.CreatedAt),
-	}
-
-	if exc.ItemID != nil {
-		dto.ItemId = ptrUUID(*exc.ItemID)
-	}
-
-	return dto
-}

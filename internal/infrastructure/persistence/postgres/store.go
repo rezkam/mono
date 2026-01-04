@@ -28,9 +28,10 @@ type Store struct {
 
 // Compile-time verification that Store implements all repository interfaces.
 var (
-	_ auth.Repository   = (*Store)(nil)
-	_ todo.Repository   = (*Store)(nil)
-	_ worker.Repository = (*Store)(nil)
+	_ auth.Repository          = (*Store)(nil)
+	_ todo.Repository          = (*Store)(nil)
+	_ worker.Repository        = (*Store)(nil)
+	_ todo.RecurringOperations = (*Store)(nil) // Verify Store implements RecurringOperations
 )
 
 // NewStore creates a new PostgreSQL store with the given connection pool.
@@ -88,6 +89,41 @@ func (s *Store) Atomic(ctx context.Context, fn func(repo todo.Repository) error)
 	}
 
 	// Execute callback with transactional repository
+	err = fn(txStore)
+	return
+}
+
+// AtomicRecurring executes a callback with recurring template operations in a transaction.
+func (s *Store) AtomicRecurring(ctx context.Context, fn func(ops todo.RecurringOperations) error) (err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer func() {
+		// Handle panics by rolling back and re-panicking
+		if p := recover(); p != nil {
+			_ = tx.Rollback(ctx)
+			panic(p)
+		}
+
+		if err != nil {
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				err = fmt.Errorf("transaction failed: %w (rollback error: %v)", err, rbErr)
+			}
+		} else {
+			err = tx.Commit(ctx)
+		}
+	}()
+
+	// Create transactional store
+	txStore := &Store{
+		pool:    s.pool,
+		queries: s.queries.WithTx(tx),
+	}
+
+	// txStore implements todo.Repository and worker.Repository (which provides the 4 methods),
+	// so it satisfies todo.RecurringOperations
 	err = fn(txStore)
 	return
 }

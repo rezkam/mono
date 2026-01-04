@@ -96,48 +96,7 @@ func (m *mockRecurringRepo) FindRecurringTemplates(ctx context.Context, listID s
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
-	// For validation tests, return the count of items
-	return len(items), nil
-}
-
-func (m *mockRecurringRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
-	// For validation tests, we don't need to actually update this
-	return nil
-}
-
-func (m *mockRecurringRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error) {
-	// For validation tests, return 0 items deleted
-	return 0, nil
-}
-
-func (m *mockRecurringRepo) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
-	// For validation tests, return empty list
-	return nil, nil
-}
-
-func (m *mockRecurringRepo) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
-	// For validation tests, just accept the job
-	return nil
-}
-
 func (m *mockRecurringRepo) CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error) {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) DeleteException(ctx context.Context, templateID string, occursAt time.Time) error {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
 	panic("not used in recurring template tests")
 }
 
@@ -145,6 +104,29 @@ func (m *mockRecurringRepo) ListAllExceptionsByTemplate(ctx context.Context, tem
 func (m *mockRecurringRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	// Execute the function with the same mock (no actual transaction needed for validation tests)
 	return fn(m)
+}
+
+// AtomicRecurring executes callback without transaction (tests don't need real transactions)
+func (m *mockRecurringRepo) AtomicRecurring(ctx context.Context, fn func(ops RecurringOperations) error) error {
+	// Execute the function with the same mock (no actual transaction needed for validation tests)
+	return fn(m)
+}
+
+// RecurringOperations methods (stub implementations for AtomicRecurring callbacks)
+func (m *mockRecurringRepo) BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error) {
+	return len(items), nil // Return success
+}
+
+func (m *mockRecurringRepo) DeleteFuturePendingItems(ctx context.Context, templateID string, from time.Time) (int64, error) {
+	return 0, nil // Return success
+}
+
+func (m *mockRecurringRepo) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
+	return nil // Return success
+}
+
+func (m *mockRecurringRepo) ScheduleGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
+	return "job-123", nil // Return mock job ID
 }
 
 // TestCreateRecurringTemplate_RejectsInvalidRecurrencePattern tests that

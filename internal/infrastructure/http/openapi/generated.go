@@ -54,13 +54,6 @@ const (
 	Yearly    RecurrencePattern = "yearly"
 )
 
-// Defines values for RecurringTemplateExceptionExceptionType.
-const (
-	Deleted     RecurringTemplateExceptionExceptionType = "deleted"
-	Edited      RecurringTemplateExceptionExceptionType = "edited"
-	Rescheduled RecurringTemplateExceptionExceptionType = "rescheduled"
-)
-
 // Defines values for UpdateItemRequestUpdateMask.
 const (
 	UpdateItemRequestUpdateMaskActualDuration    UpdateItemRequestUpdateMask = "actual_duration"
@@ -248,11 +241,6 @@ type ListListsResponse struct {
 	NextPageToken *string     `json:"next_page_token,omitempty"`
 }
 
-// ListRecurringTemplateExceptionsResponse defines model for ListRecurringTemplateExceptionsResponse.
-type ListRecurringTemplateExceptionsResponse struct {
-	Exceptions *[]RecurringTemplateException `json:"exceptions,omitempty"`
-}
-
 // ListRecurringTemplatesResponse defines model for ListRecurringTemplatesResponse.
 type ListRecurringTemplatesResponse struct {
 	Templates *[]RecurringItemTemplate `json:"templates,omitempty"`
@@ -289,29 +277,6 @@ type RecurringItemTemplate struct {
 	Title           *string    `json:"title,omitempty"`
 	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
 }
-
-// RecurringTemplateException defines model for RecurringTemplateException.
-type RecurringTemplateException struct {
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-
-	// ExceptionType - deleted: Instance was soft-deleted
-	// - rescheduled: Instance was moved to different time (detached from template)
-	// - edited: Instance was customized (keeps template link but excluded from updates)
-	ExceptionType *RecurringTemplateExceptionExceptionType `json:"exception_type,omitempty"`
-	Id            *openapi_types.UUID                      `json:"id,omitempty"`
-
-	// ItemId ID of the affected item (for audit trail)
-	ItemId *openapi_types.UUID `json:"item_id"`
-
-	// OccursAt Exact timestamp when this instance would have occurred
-	OccursAt   *time.Time          `json:"occurs_at,omitempty"`
-	TemplateId *openapi_types.UUID `json:"template_id,omitempty"`
-}
-
-// RecurringTemplateExceptionExceptionType - deleted: Instance was soft-deleted
-// - rescheduled: Instance was moved to different time (detached from template)
-// - edited: Instance was customized (keeps template link but excluded from updates)
-type RecurringTemplateExceptionExceptionType string
 
 // RetryDeadLetterJobResponse defines model for RetryDeadLetterJobResponse.
 type RetryDeadLetterJobResponse struct {
@@ -491,15 +456,6 @@ type ListRecurringTemplatesParams struct {
 	ActiveOnly *bool `form:"active_only,omitempty" json:"active_only,omitempty"`
 }
 
-// ListRecurringTemplateExceptionsParams defines parameters for ListRecurringTemplateExceptions.
-type ListRecurringTemplateExceptionsParams struct {
-	// FromDate Start of date range (defaults to 1 month ago)
-	FromDate *time.Time `form:"from_date,omitempty" json:"from_date,omitempty"`
-
-	// ToDate End of date range (defaults to 1 month ahead)
-	ToDate *time.Time `form:"to_date,omitempty" json:"to_date,omitempty"`
-}
-
 // DiscardDeadLetterJobJSONRequestBody defines body for DiscardDeadLetterJob for application/json ContentType.
 type DiscardDeadLetterJobJSONRequestBody DiscardDeadLetterJobJSONBody
 
@@ -565,9 +521,6 @@ type ServerInterface interface {
 	// Update a recurring template
 	// (PATCH /v1/lists/{list_id}/recurring-templates/{template_id})
 	UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID)
-	// List exceptions for a recurring template
-	// (GET /v1/lists/{list_id}/recurring-templates/{template_id}/exceptions)
-	ListRecurringTemplateExceptions(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID, params ListRecurringTemplateExceptionsParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -661,12 +614,6 @@ func (_ Unimplemented) GetRecurringTemplate(w http.ResponseWriter, r *http.Reque
 // Update a recurring template
 // (PATCH /v1/lists/{list_id}/recurring-templates/{template_id})
 func (_ Unimplemented) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// List exceptions for a recurring template
-// (GET /v1/lists/{list_id}/recurring-templates/{template_id}/exceptions)
-func (_ Unimplemented) ListRecurringTemplateExceptions(w http.ResponseWriter, r *http.Request, listId openapi_types.UUID, templateId openapi_types.UUID, params ListRecurringTemplateExceptionsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1300,65 +1247,6 @@ func (siw *ServerInterfaceWrapper) UpdateRecurringTemplate(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// ListRecurringTemplateExceptions operation middleware
-func (siw *ServerInterfaceWrapper) ListRecurringTemplateExceptions(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "list_id" -------------
-	var listId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "list_id", chi.URLParam(r, "list_id"), &listId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "list_id", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "template_id" -------------
-	var templateId openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "template_id", chi.URLParam(r, "template_id"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "template_id", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListRecurringTemplateExceptionsParams
-
-	// ------------- Optional query parameter "from_date" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "from_date", r.URL.Query(), &params.FromDate)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from_date", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "to_date" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "to_date", r.URL.Query(), &params.ToDate)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to_date", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRecurringTemplateExceptions(w, r, listId, templateId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1517,9 +1405,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}", wrapper.UpdateRecurringTemplate)
 	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/v1/lists/{list_id}/recurring-templates/{template_id}/exceptions", wrapper.ListRecurringTemplateExceptions)
-	})
 
 	return r
 }
@@ -1527,67 +1412,61 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"tnvW78daAAA=",
+	"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",
+	"8Xw4/38AAAD//4nMUfu9UgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
