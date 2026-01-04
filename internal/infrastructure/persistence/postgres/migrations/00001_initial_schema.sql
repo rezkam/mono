@@ -69,6 +69,7 @@ CREATE TABLE todo_items (
 
 -- Indexes for common query patterns
 CREATE INDEX idx_todo_items_list_id ON todo_items(list_id);
+CREATE INDEX idx_todo_items_list_created ON todo_items(list_id, created_at);
 
 CREATE INDEX idx_todo_items_status ON todo_items(status)
     WHERE status NOT IN ('archived', 'cancelled');
@@ -81,35 +82,22 @@ CREATE INDEX idx_todo_items_due_at ON todo_items(due_at)
 
 CREATE INDEX idx_todo_items_updated_at ON todo_items(updated_at DESC);
 
-CREATE INDEX idx_todo_items_estimated_duration ON todo_items(estimated_duration)
-    WHERE estimated_duration IS NOT NULL;
-
--- GIN index for JSONB tags (fast tag queries)
 CREATE INDEX idx_todo_items_tags_gin ON todo_items USING gin(tags)
     WHERE tags IS NOT NULL;
 
--- Timezone index for filtering tasks with fixed timezones
-CREATE INDEX idx_todo_items_timezone ON todo_items(timezone)
-    WHERE timezone IS NOT NULL;
-
--- Composite index for common query: active tasks by due date
 CREATE INDEX idx_todo_items_active_due ON todo_items(status, due_at)
     WHERE status IN ('todo', 'in_progress', 'blocked');
 
 CREATE INDEX idx_todo_items_recurring_template ON todo_items(recurring_template_id)
     WHERE recurring_template_id IS NOT NULL;
 
--- Ensure unique constraint for deduplication of recurring instances
--- Uses TIMESTAMPTZ to support intra-day recurring tasks (e.g., every 8 hours)
+CREATE INDEX idx_todo_items_recurring_cleanup ON todo_items(recurring_template_id, occurs_at, status)
+    WHERE recurring_template_id IS NOT NULL;
+
 CREATE UNIQUE INDEX idx_items_unique_recurring_instance
     ON todo_items(recurring_template_id, occurs_at)
     WHERE recurring_template_id IS NOT NULL;
 
--- Index for filtering by starts_at (common query pattern)
-CREATE INDEX idx_todo_items_starts_at ON todo_items(starts_at)
-    WHERE starts_at IS NOT NULL;
-
--- Composite index for active items by start date
 CREATE INDEX idx_todo_items_active_starts ON todo_items(status, starts_at)
     WHERE status IN ('todo', 'in_progress', 'blocked') AND starts_at IS NOT NULL;
 
@@ -132,9 +120,6 @@ CREATE TABLE task_status_history (
 );
 
 CREATE INDEX idx_status_history_task_time ON task_status_history(task_id, changed_at DESC);
-
-CREATE INDEX idx_status_history_in_progress ON task_status_history(task_id, to_status, changed_at)
-    WHERE to_status IN ('in_progress', 'blocked', 'done', 'cancelled');
 
 -- ============================================================================
 -- Recurring Tasks
@@ -203,8 +188,6 @@ CREATE INDEX idx_recurring_templates_active ON recurring_task_templates(is_activ
 
 CREATE INDEX idx_recurring_templates_list ON recurring_task_templates(list_id)
     WHERE is_active = true;
-
-CREATE INDEX idx_recurring_templates_config_gin ON recurring_task_templates USING gin(recurrence_config);
 
 -- ============================================================================
 -- Job Queue for Recurring Task Generation
@@ -373,16 +356,10 @@ CREATE TABLE api_keys (
     CONSTRAINT unique_short_token UNIQUE (short_token)
 );
 
--- Index on short_token for O(1) lookups (industry standard pattern)
 CREATE INDEX idx_api_keys_short_token ON api_keys(short_token)
     WHERE is_active = true;
 
--- Index on key_type for filtering different key types
-CREATE INDEX idx_api_keys_type ON api_keys(key_type)
-    WHERE is_active = true;
-
--- Index on version for filtering by API version
-CREATE INDEX idx_api_keys_version ON api_keys(version)
+CREATE INDEX idx_api_keys_active_created ON api_keys(created_at DESC)
     WHERE is_active = true;
 
 -- ============================================================================
