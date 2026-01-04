@@ -2,9 +2,7 @@ package todo
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strconv"
 	"time"
@@ -25,17 +23,14 @@ var (
 		domain.FieldGenerationHorizonDays,
 	}
 
-	// exceptionFields are content fields that require creating an exception for recurring items.
+	// exceptionFields are fields that require creating an exception for recurring items.
+	// Exceptions prevent the template from regenerating this occurrence.
 	exceptionFields = []string{
 		domain.FieldItemTitle,
 		domain.FieldItemTags,
 		domain.FieldItemPriority,
 		domain.FieldItemEstimatedDuration,
 		domain.FieldDueAt,
-	}
-
-	// detachFields are schedule fields that require detaching from the recurring template.
-	detachFields = []string{
 		domain.FieldStartsAt,
 		domain.FieldOccursAt,
 	}
@@ -313,40 +308,33 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 
 	// Check if this is a recurring item that needs exception handling
 	if existingItem.RecurringTemplateID != nil && existingItem.OccursAt != nil {
-		needsDetachment := shouldDetachFromTemplate(params.UpdateMask)
-		needsException := shouldCreateException(params.UpdateMask)
+		if shouldCreateException(params.UpdateMask) {
+			// Create exception to prevent template regeneration
+			// Keep template link for reference - exception prevents regeneration
+			excID, err := uuid.NewV7()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate exception id: %w", err)
+			}
 
-		if needsDetachment || needsException {
+			exception := &domain.RecurringTemplateException{
+				ID:            excID.String(),
+				TemplateID:    *existingItem.RecurringTemplateID,
+				OccursAt:      *existingItem.OccursAt,
+				ExceptionType: domain.ExceptionTypeEdited,
+				ItemID:        &existingItem.ID,
+				CreatedAt:     time.Now().UTC(),
+			}
+
+			// Use atomic operation to update item and create exception together
 			var updatedItem *domain.TodoItem
-			err := s.repo.Transaction(ctx, func(tx Repository) error {
-				// Create exception before modifying item
-				excID, err := uuid.NewV7()
+			err = s.repo.Atomic(ctx, func(repo Repository) error {
+				item, err := repo.UpdateItem(ctx, params)
 				if err != nil {
-					return fmt.Errorf("failed to generate exception id: %w", err)
-				}
-
-				excType := domain.ExceptionTypeEdited
-				if needsDetachment {
-					excType = domain.ExceptionTypeRescheduled
-					params.DetachFromTemplate = true
-				}
-
-				exception := &domain.RecurringTemplateException{
-					ID:            excID.String(),
-					TemplateID:    *existingItem.RecurringTemplateID,
-					OccursAt:      *existingItem.OccursAt,
-					ExceptionType: excType,
-					ItemID:        &existingItem.ID,
-					CreatedAt:     time.Now().UTC(),
-				}
-
-				_, err = tx.CreateException(ctx, exception)
-				if err != nil && !errors.Is(err, domain.ErrExceptionAlreadyExists) {
 					return err
 				}
+				updatedItem = item
 
-				// Update item
-				updatedItem, err = tx.UpdateItem(ctx, params)
+				_, err = repo.CreateException(ctx, exception)
 				return err
 			})
 			if err != nil {
@@ -378,38 +366,38 @@ func (s *Service) DeleteItem(ctx context.Context, listID, itemID string) error {
 	// Check if recurring item
 	if item.RecurringTemplateID != nil && item.OccursAt != nil {
 		// Recurring item - soft delete with exception
-		return s.repo.Transaction(ctx, func(tx Repository) error {
-			// Generate exception ID
-			excID, err := uuid.NewV7()
-			if err != nil {
-				return fmt.Errorf("failed to generate exception id: %w", err)
-			}
+		// Generate exception ID
+		excID, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("failed to generate exception id: %w", err)
+		}
 
-			// Create exception
-			exception := &domain.RecurringTemplateException{
-				ID:            excID.String(),
-				TemplateID:    *item.RecurringTemplateID,
-				OccursAt:      *item.OccursAt,
-				ExceptionType: domain.ExceptionTypeDeleted,
-				ItemID:        &item.ID,
-				CreatedAt:     time.Now().UTC(),
-			}
+		// Create exception
+		exception := &domain.RecurringTemplateException{
+			ID:            excID.String(),
+			TemplateID:    *item.RecurringTemplateID,
+			OccursAt:      *item.OccursAt,
+			ExceptionType: domain.ExceptionTypeDeleted,
+			ItemID:        &item.ID,
+			CreatedAt:     time.Now().UTC(),
+		}
 
-			_, err = tx.CreateException(ctx, exception)
-			if err != nil {
+		// Use atomic operation to create exception and archive item together
+		return s.repo.Atomic(ctx, func(repo Repository) error {
+			// Create exception first
+			if _, err := repo.CreateException(ctx, exception); err != nil {
 				return err
 			}
 
-			// Archive item
+			// Archive item (soft delete)
 			archived := domain.TaskStatusArchived
-			params := domain.UpdateItemParams{
+			updateParams := domain.UpdateItemParams{
 				ItemID:     itemID,
 				ListID:     listID,
 				UpdateMask: []string{"status"},
 				Status:     &archived,
 			}
-
-			_, err = tx.UpdateItem(ctx, params)
+			_, err := repo.UpdateItem(ctx, updateParams)
 			return err
 		})
 	}
@@ -435,16 +423,6 @@ func (s *Service) ListItems(ctx context.Context, params domain.ListTasksParams) 
 	// Enforce maximum page size
 	params.Limit = min(params.Limit, s.config.MaxPageSize)
 
-	// ON-DEMAND Generation: Fill gaps before querying
-	// This ensures users always see expected recurring tasks
-	if params.ListID != nil && *params.ListID != "" {
-		if err := s.ensureRecurringTasksGenerated(ctx, *params.ListID, params.DueAfter, params.DueBefore); err != nil {
-			// Log but don't fail the query - ON-DEMAND generation is best-effort
-			// The query will still return already-generated tasks
-			slog.WarnContext(ctx, "ON-DEMAND generation failed", "list_id", *params.ListID, "error", err)
-		}
-	}
-
 	// Business rule: when no explicit status filter, exclude archived and cancelled
 	excludedStatuses := []domain.TaskStatus{}
 	if !params.Filter.HasStatusFilter() {
@@ -457,118 +435,6 @@ func (s *Service) ListItems(ctx context.Context, params domain.ListTasksParams) 
 	}
 
 	return result, nil
-}
-
-// ensureRecurringTasksGenerated performs ON-DEMAND generation for a list's recurring templates.
-// This is the 3rd layer of the hybrid generation strategy (SYNC + ASYNC + ON-DEMAND).
-// If query parameters specify far-future dates, generates tasks for that range (up to generation_horizon_days).
-// Otherwise, generates tasks in the SYNC horizon. No background jobs are created.
-// Errors are non-fatal since the query can still return already-generated tasks.
-func (s *Service) ensureRecurringTasksGenerated(ctx context.Context, listID string, dueAfter, dueBefore *time.Time) error {
-	now := time.Now().UTC()
-
-	// Determine the generation target based on query parameters
-	// If querying far-future dates, generate for that range
-	// Otherwise, generate for SYNC horizon
-	targetEnd := now.AddDate(0, 0, domain.DefaultSyncHorizonDays)
-
-	if dueAfter != nil && dueAfter.After(targetEnd) {
-		// Query is for far-future dates - extend generation to cover query range
-		targetEnd = *dueAfter
-		if dueBefore != nil && dueBefore.After(*dueAfter) {
-			targetEnd = *dueBefore
-		}
-	} else if dueBefore != nil && dueBefore.After(targetEnd) {
-		// Query end extends beyond SYNC horizon
-		targetEnd = *dueBefore
-	}
-
-	// Find templates that need generation (generated_through < target_end)
-	staleTemplates, err := s.repo.FindStaleTemplates(ctx, listID, targetEnd)
-	if err != nil {
-		return fmt.Errorf("failed to find stale templates: %w", err)
-	}
-
-	if len(staleTemplates) == 0 {
-		return nil // No templates need generation
-	}
-
-	// Generate tasks for each stale template
-	for _, template := range staleTemplates {
-		// Skip inactive templates
-		if !template.IsActive {
-			continue
-		}
-
-		// Calculate generation window: from (generated_through OR now) to target_end
-		// But never exceed the template's generation_horizon_days limit
-		startDate := template.GeneratedThrough
-		if startDate.Before(now) {
-			startDate = now
-		}
-
-		// Respect the template's generation horizon limit
-		maxEnd := now.AddDate(0, 0, template.GenerationHorizonDays)
-		endDate := targetEnd
-		if endDate.After(maxEnd) {
-			endDate = maxEnd
-		}
-
-		// Fetch exceptions for this template in the generation range
-		exceptions, err := s.repo.ListExceptions(ctx, template.ID, startDate, endDate)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to fetch exceptions for template",
-				"template_id", template.ID,
-				"error", err)
-			// Continue without exceptions rather than failing completely
-			exceptions = nil
-		}
-
-		// Generate tasks for this template with exception filtering
-		tasks, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, template, startDate, endDate, exceptions)
-		if err != nil {
-			slog.WarnContext(ctx, "ON-DEMAND generation failed for template",
-				"template_id", template.ID,
-				"list_id", listID,
-				"error", err)
-			continue // Skip this template, try others
-		}
-
-		if len(tasks) == 0 {
-			// No tasks to insert, but update marker to prevent repeated checks
-			if err := s.repo.SetGeneratedThrough(ctx, template.ID, endDate); err != nil {
-				slog.WarnContext(ctx, "failed to update generated_through marker",
-					"template_id", template.ID,
-					"error", err)
-			}
-			continue
-		}
-
-		// Insert tasks (duplicates ignored)
-		inserted, err := s.repo.BatchInsertItemsIgnoreConflict(ctx, tasks)
-		if err != nil {
-			slog.WarnContext(ctx, "failed to insert ON-DEMAND tasks",
-				"template_id", template.ID,
-				"tasks_count", len(tasks),
-				"error", err)
-			continue
-		}
-
-		// Update generation marker
-		if err := s.repo.SetGeneratedThrough(ctx, template.ID, endDate); err != nil {
-			slog.WarnContext(ctx, "failed to update generated_through marker",
-				"template_id", template.ID,
-				"inserted_count", inserted,
-				"error", err)
-		}
-
-		slog.DebugContext(ctx, "ON-DEMAND generation completed",
-			"template_id", template.ID,
-			"inserted_count", inserted,
-			"total_tasks", len(tasks))
-	}
-
-	return nil
 }
 
 // CreateRecurringTemplate creates a new recurring task template.
@@ -620,65 +486,69 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		return nil, err
 	}
 
-	// Use transaction to ensure atomicity: template + SYNC items + ASYNC job all commit/rollback together
-	var createdTemplate *domain.RecurringTemplate
-	if err := s.repo.Transaction(ctx, func(tx Repository) error {
-		// 1. Create template
-		created, err := tx.CreateRecurringTemplate(ctx, template)
+	// Prepare SYNC items: generate next N days immediately
+	syncEnd := now.AddDate(0, 0, template.SyncHorizonDays)
+	// No exceptions for newly created template
+	syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, template, now, syncEnd, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate sync items: %w", err)
+	}
+
+	// Prepare ASYNC job for remaining days (if needed)
+	var asyncJob *domain.GenerationJob
+	asyncEnd := now.AddDate(0, 0, template.GenerationHorizonDays)
+	if syncEnd.Before(asyncEnd) {
+		// Generate job ID
+		jobIDObj, err := uuid.NewV7()
 		if err != nil {
+			return nil, fmt.Errorf("failed to generate job ID: %w", err)
+		}
+
+		asyncJob = &domain.GenerationJob{
+			ID:            jobIDObj.String(),
+			TemplateID:    template.ID,
+			GenerateFrom:  syncEnd,
+			GenerateUntil: asyncEnd,
+			ScheduledFor:  now,
+			CreatedAt:     now,
+			RetryCount:    0,
+		}
+	}
+
+	// Use atomic operation: template + items + generation marker + job all succeed/fail together
+	err = s.repo.Atomic(ctx, func(repo Repository) error {
+		// 1. Create template
+		if _, err := repo.CreateRecurringTemplate(ctx, template); err != nil {
 			return fmt.Errorf("failed to create template: %w", err)
 		}
-		createdTemplate = created
 
-		// 2. SYNC: Generate next N days immediately (in same transaction)
-		syncEnd := now.AddDate(0, 0, template.SyncHorizonDays)
-		// No exceptions for newly created template
-		syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, template, now, syncEnd, nil)
-		if err != nil {
-			return fmt.Errorf("failed to generate sync items: %w", err)
-		}
-
+		// 2. Insert sync horizon items
 		if len(syncItems) > 0 {
-			if _, err := tx.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
+			if _, err = repo.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
 				return fmt.Errorf("failed to insert sync items: %w", err)
 			}
 		}
 
 		// 3. Update generation marker
-		if err := tx.SetGeneratedThrough(ctx, template.ID, syncEnd); err != nil {
+		if err := repo.SetGeneratedThrough(ctx, template.ID, syncEnd); err != nil {
 			return fmt.Errorf("failed to update generation marker: %w", err)
 		}
 
-		// 4. ASYNC: Queue background job for remaining days (in same transaction)
-		asyncEnd := now.AddDate(0, 0, template.GenerationHorizonDays)
-		if syncEnd.Before(asyncEnd) {
-			job := &domain.GenerationJob{
-				TemplateID:    template.ID,
-				GenerateFrom:  syncEnd,
-				GenerateUntil: asyncEnd,
-				ScheduledFor:  now,
-				CreatedAt:     now,
-				RetryCount:    0,
-			}
-
-			// Generate job ID
-			jobIDObj, err := uuid.NewV7()
-			if err != nil {
-				return fmt.Errorf("failed to generate job ID: %w", err)
-			}
-			job.ID = jobIDObj.String()
-
-			if err := tx.CreateGenerationJob(ctx, job); err != nil {
+		// 4. Create async generation job (if needed)
+		if asyncJob != nil {
+			if err := repo.CreateGenerationJob(ctx, asyncJob); err != nil {
 				return fmt.Errorf("failed to create generation job: %w", err)
 			}
 		}
 
-		return nil // Commit - template + items + job all visible together
-	}); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	return createdTemplate, nil
+	// Refetch template to get updated generated_through
+	return s.repo.FindRecurringTemplate(ctx, template.ID)
 }
 
 // GetRecurringTemplate retrieves a recurring template by ID.
@@ -790,101 +660,85 @@ func shouldCreateException(updateMask []string) bool {
 	return containsAnyField(updateMask, exceptionFields)
 }
 
-// shouldDetachFromTemplate checks if the update mask contains schedule fields that require
-// detaching the item from its recurring template (and creating a rescheduled exception).
-// Status changes (completing, archiving) do NOT trigger detachment.
-func shouldDetachFromTemplate(updateMask []string) bool {
-	return containsAnyField(updateMask, detachFields)
-}
-
 // updateTemplateWithRegeneration handles pattern changes by deleting future items and regenerating.
 func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *domain.RecurringTemplate, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
-	var updatedTemplate *domain.RecurringTemplate
 	now := time.Now().UTC()
 
-	err := s.repo.Transaction(ctx, func(tx Repository) error {
-		// 1. Update the template pattern
-		updated, err := tx.UpdateRecurringTemplate(ctx, params)
+	syncHorizon := existing.SyncHorizonDays
+	if syncHorizon == 0 {
+		syncHorizon = 14
+	}
+	syncEnd := now.AddDate(0, 0, syncHorizon)
+
+	syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, existing, now, syncEnd, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate sync items: %w", err)
+	}
+
+	// Prepare async job for remaining generation horizon (if needed)
+	var asyncJob *domain.GenerationJob
+	generationHorizon := existing.GenerationHorizonDays
+	if generationHorizon == 0 {
+		generationHorizon = 365
+	}
+	asyncEnd := now.AddDate(0, 0, generationHorizon)
+
+	if syncEnd.Before(asyncEnd) {
+		jobIDObj, err := uuid.NewV7()
 		if err != nil {
+			return nil, fmt.Errorf("failed to generate job ID: %w", err)
+		}
+
+		asyncJob = &domain.GenerationJob{
+			ID:            jobIDObj.String(),
+			TemplateID:    params.TemplateID,
+			GenerateFrom:  syncEnd,
+			GenerateUntil: asyncEnd,
+			ScheduledFor:  now,
+			CreatedAt:     now,
+			RetryCount:    0,
+		}
+	}
+
+	// Use atomic operation: update template + regenerate items + generation marker + job all succeed/fail together
+	err = s.repo.Atomic(ctx, func(repo Repository) error {
+		// 1. Update template
+		if _, err := repo.UpdateRecurringTemplate(ctx, params); err != nil {
 			return fmt.Errorf("failed to update template: %w", err)
 		}
-		updatedTemplate = updated
 
-		// 2. Delete future pending items (they'll be regenerated with new pattern)
-		if _, err := tx.DeleteFuturePendingItems(ctx, params.TemplateID, now); err != nil {
+		// 2. Delete future pending items
+		if _, err := repo.DeleteFuturePendingItems(ctx, params.TemplateID, now); err != nil {
 			return fmt.Errorf("failed to delete future items: %w", err)
 		}
 
-		// 3. SYNC: Regenerate next N days immediately
-		syncHorizon := updated.SyncHorizonDays
-		if syncHorizon == 0 {
-			syncHorizon = 14 // Fallback to default
-		}
-		syncEnd := now.AddDate(0, 0, syncHorizon)
-
-		// Fetch exceptions for filtering during regeneration
-		exceptions, err := tx.ListExceptions(ctx, updated.ID, now, syncEnd)
-		if err != nil {
-			// Log but continue - better to generate with duplicates than fail
-			slog.WarnContext(ctx, "failed to fetch exceptions during regeneration",
-				"template_id", updated.ID,
-				"error", err)
-			exceptions = nil
-		}
-
-		syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, updated, now, syncEnd, exceptions)
-		if err != nil {
-			return fmt.Errorf("failed to generate sync items: %w", err)
-		}
-
+		// 3. Insert regenerated items
 		if len(syncItems) > 0 {
-			if _, err := tx.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
-				return fmt.Errorf("failed to insert sync items: %w", err)
+			if _, err := repo.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
+				return fmt.Errorf("failed to insert regenerated items: %w", err)
 			}
 		}
 
 		// 4. Update generation marker
-		if err := tx.SetGeneratedThrough(ctx, params.TemplateID, syncEnd); err != nil {
+		if err := repo.SetGeneratedThrough(ctx, params.TemplateID, syncEnd); err != nil {
 			return fmt.Errorf("failed to update generation marker: %w", err)
 		}
 
-		// 5. ASYNC: Queue background job for remaining horizon
-		generationHorizon := updated.GenerationHorizonDays
-		if generationHorizon == 0 {
-			generationHorizon = 365 // Fallback to default
-		}
-		asyncEnd := now.AddDate(0, 0, generationHorizon)
-
-		if syncEnd.Before(asyncEnd) {
-			job := &domain.GenerationJob{
-				TemplateID:    params.TemplateID,
-				GenerateFrom:  syncEnd,
-				GenerateUntil: asyncEnd,
-				ScheduledFor:  now,
-				CreatedAt:     now,
-				RetryCount:    0,
-			}
-
-			// Generate job ID
-			jobIDObj, err := uuid.NewV7()
-			if err != nil {
-				return fmt.Errorf("failed to generate job ID: %w", err)
-			}
-			job.ID = jobIDObj.String()
-
-			if err := tx.CreateGenerationJob(ctx, job); err != nil {
+		// 5. Create async generation job (if needed)
+		if asyncJob != nil {
+			if err := repo.CreateGenerationJob(ctx, asyncJob); err != nil {
 				return fmt.Errorf("failed to create generation job: %w", err)
 			}
 		}
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
-	return updatedTemplate, nil
+	// Refetch template to get updated generated_through
+	return s.repo.FindRecurringTemplate(ctx, params.TemplateID)
 }
 
 // DeleteRecurringTemplate deletes a recurring template.
@@ -924,35 +778,24 @@ func (s *Service) ListRecurringTemplates(ctx context.Context, listID string, act
 	return templates, nil
 }
 
-// ListExceptions retrieves exceptions for a recurring template in a date range.
-// Returns exceptions that mark deleted, rescheduled, or edited instances.
+// ListExceptions retrieves exceptions for a recurring template.
+// Validates that the template belongs to the specified list.
 func (s *Service) ListExceptions(ctx context.Context, listID, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
-	// Verify template exists and belongs to list
+	if listID == "" {
+		return nil, domain.ErrListNotFound
+	}
+	if templateID == "" {
+		return nil, domain.ErrTemplateNotFound
+	}
+
+	// Verify template belongs to list
 	template, err := s.repo.FindRecurringTemplate(ctx, templateID)
 	if err != nil {
 		return nil, err
 	}
-
 	if template.ListID != listID {
 		return nil, domain.ErrTemplateNotFound
 	}
 
 	return s.repo.ListExceptions(ctx, templateID, from, until)
-}
-
-// === Dead Letter Job Operations ===
-
-// ListDeadLetterJobs retrieves dead letter jobs for manual review.
-func (s *Service) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
-	return s.repo.ListDeadLetterJobs(ctx, limit)
-}
-
-// RetryDeadLetterJob retries a dead letter job by creating a new job from it.
-func (s *Service) RetryDeadLetterJob(ctx context.Context, id, reviewedBy string) (string, error) {
-	return s.repo.RetryDeadLetterJob(ctx, id, reviewedBy)
-}
-
-// DiscardDeadLetterJob discards a dead letter job permanently.
-func (s *Service) DiscardDeadLetterJob(ctx context.Context, id, reviewedBy, note string) error {
-	return s.repo.DiscardDeadLetterJob(ctx, id, reviewedBy, note)
 }

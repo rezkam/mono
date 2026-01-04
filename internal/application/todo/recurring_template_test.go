@@ -141,42 +141,10 @@ func (m *mockRecurringRepo) ListAllExceptionsByTemplate(ctx context.Context, tem
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) Transaction(ctx context.Context, fn func(tx Repository) error) error {
+// Atomic executes callback without transaction (tests don't need real transactions)
+func (m *mockRecurringRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	// Execute the function with the same mock (no actual transaction needed for validation tests)
 	return fn(m)
-}
-
-// === Composite Operations (stub implementations) ===
-// These tests don't exercise composite operations, so we provide stubs.
-// Integration tests in tests/integration/postgres/composite_operations_test.go
-// provide comprehensive coverage of these operations.
-
-func (m *mockRecurringRepo) UpdateItemWithException(ctx context.Context, params domain.UpdateItemParams, exception *domain.RecurringTemplateException) (*domain.TodoItem, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockRecurringRepo) DeleteItemWithException(ctx context.Context, listID string, itemID string, exception *domain.RecurringTemplateException) error {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockRecurringRepo) CreateTemplateWithInitialGeneration(ctx context.Context, template *domain.RecurringTemplate, syncItems []*domain.TodoItem, syncEnd time.Time, asyncJob *domain.GenerationJob) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockRecurringRepo) UpdateTemplateWithRegeneration(ctx context.Context, params domain.UpdateRecurringTemplateParams, deleteFrom time.Time, syncItems []*domain.TodoItem, syncEnd time.Time) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockRecurringRepo) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
-	panic("not used in recurring template tests")
-}
-
-func (m *mockRecurringRepo) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
-	panic("not used in recurring template tests")
 }
 
 // TestCreateRecurringTemplate_RejectsInvalidRecurrencePattern tests that
@@ -215,7 +183,19 @@ func TestCreateRecurringTemplate_AcceptsValidRecurrencePatterns(t *testing.T) {
 
 	for _, pattern := range validPatterns {
 		t.Run(string(pattern), func(t *testing.T) {
-			repo := &mockRecurringRepo{}
+			var createdTemplate *domain.RecurringTemplate
+			repo := &mockRecurringRepo{
+				createTemplateFn: func(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
+					createdTemplate = template
+					return template, nil
+				},
+				findTemplateFn: func(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+					if createdTemplate != nil && createdTemplate.ID == id {
+						return createdTemplate, nil
+					}
+					return nil, domain.ErrTemplateNotFound
+				},
+			}
 			generator := &mockTaskGenerator{}
 			service := NewService(repo, generator, Config{})
 

@@ -86,7 +86,7 @@ func TestTemplateJobAtomicity_CommitsAtomically(t *testing.T) {
 	}
 
 	// Execute transaction - both should commit together
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		_, err := tx.CreateRecurringTemplate(ctx, template)
 		if err != nil {
 			return err
@@ -145,7 +145,7 @@ func TestTemplateJobAtomicity_RollsBackOnError(t *testing.T) {
 
 	// Execute transaction - return error after both inserts
 	testErr := errors.New("simulated failure")
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		_, err := tx.CreateRecurringTemplate(ctx, template)
 		if err != nil {
 			return err
@@ -206,7 +206,7 @@ func TestTemplateJobAtomicity_RollsBackOnPanic(t *testing.T) {
 
 	// Execute transaction with panic - should be caught and rolled back
 	assert.Panics(t, func() {
-		_ = store.Transaction(ctx, func(tx todo.Repository) error {
+		_ = store.Atomic(ctx, func(tx todo.Repository) error {
 			_, err := tx.CreateRecurringTemplate(ctx, template)
 			if err != nil {
 				return err
@@ -266,7 +266,7 @@ func TestTemplateJobAtomicity_PartialInsertRollback(t *testing.T) {
 	}
 
 	// Execute transaction - job insert should fail, rolling back template
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		_, err := tx.CreateRecurringTemplate(ctx, template)
 		if err != nil {
 			return err
@@ -299,7 +299,7 @@ func TestTemplateJobAtomicity_NestedOperations(t *testing.T) {
 
 	// Execute transaction with multiple operations, then fail
 	testErr := errors.New("simulated failure after multiple inserts")
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		// Create first template and job
 		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                template1ID,
@@ -387,7 +387,7 @@ func TestTemplateJobAtomicity_FirstOperationFails(t *testing.T) {
 
 	jobCreationAttempted := false
 
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		// Template with invalid list ID - should fail
 		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                templateID,
@@ -458,7 +458,7 @@ func TestTemplateJobAtomicity_DuplicateTemplateID(t *testing.T) {
 	jobID := uuid.Must(uuid.NewV7()).String()
 
 	// Try to create template with duplicate ID in transaction
-	err = store.Transaction(ctx, func(tx todo.Repository) error {
+	err = store.Atomic(ctx, func(tx todo.Repository) error {
 		// First create a new valid template
 		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                newTemplateID,
@@ -523,7 +523,7 @@ func TestTemplateJobAtomicity_ContextCancellation(t *testing.T) {
 	// Create cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                templateID,
 			ListID:            listID,
@@ -579,7 +579,7 @@ func TestTemplateJobAtomicity_TransactionIsolation(t *testing.T) {
 
 	// Start transaction that creates template but doesn't commit yet
 	go func() {
-		_ = store.Transaction(ctx, func(tx todo.Repository) error {
+		_ = store.Atomic(ctx, func(tx todo.Repository) error {
 			_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 				ID:                templateID,
 				ListID:            listID,
@@ -634,7 +634,7 @@ func TestTemplateJobAtomicity_JobReferencesNonExistentTemplate(t *testing.T) {
 	nonExistentTemplateID := uuid.Must(uuid.NewV7()).String() // Valid UUID but not in DB
 	jobID := uuid.Must(uuid.NewV7()).String()
 
-	err := store.Transaction(ctx, func(tx todo.Repository) error {
+	err := store.Atomic(ctx, func(tx todo.Repository) error {
 		// Create valid template first
 		_, err := tx.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
 			ID:                templateID,

@@ -52,6 +52,7 @@ func TestMain(m *testing.M) {
 	// Create services
 	generator := recurring.NewDomainGenerator()
 	todoService := todo.NewService(store, generator, todo.Config{})
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Generate API key using the standard apikey tool (tests the tool itself)
@@ -61,7 +62,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Create API handler with OpenAPI validation (reuses production logic)
-	apiHandler, err := handler.NewOpenAPIRouter(todoService)
+	apiHandler, err := handler.NewOpenAPIRouter(todoService, coordinator)
 	if err != nil {
 		panic(fmt.Errorf("failed to create API handler: %w", err))
 	}

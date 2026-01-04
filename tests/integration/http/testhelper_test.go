@@ -21,6 +21,7 @@ type TestServer struct {
 	Router        http.Handler
 	Store         *postgres.Store
 	TodoService   *todo.Service
+	Coordinator   *postgres.PostgresCoordinator
 	Authenticator *auth.Authenticator
 	APIKey        string
 	Cleanup       func()
@@ -49,10 +50,11 @@ func SetupTestServer(t *testing.T) *TestServer {
 	// Create services
 	generator := recurring.NewDomainGenerator()
 	todoService := todo.NewService(store, generator, todo.Config{})
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
 
 	// Create API handler with OpenAPI validation (reuses production logic)
-	apiHandler, err := handler.NewOpenAPIRouter(todoService)
+	apiHandler, err := handler.NewOpenAPIRouter(todoService, coordinator)
 	if err != nil {
 		cancel()
 		_ = store.Close()
@@ -94,6 +96,7 @@ func SetupTestServer(t *testing.T) *TestServer {
 		Router:        router,
 		Store:         store,
 		TodoService:   todoService,
+		Coordinator:   coordinator,
 		Authenticator: authenticator,
 		APIKey:        apiKey,
 		Cleanup:       cleanup,

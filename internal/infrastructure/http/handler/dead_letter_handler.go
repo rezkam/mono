@@ -19,7 +19,7 @@ func (h *TodoHandler) ListDeadLetterJobs(w http.ResponseWriter, r *http.Request,
 		limit = *params.Limit
 	}
 
-	jobs, err := h.todoService.ListDeadLetterJobs(r.Context(), limit)
+	jobs, err := h.coordinator.ListDeadLetterJobs(r.Context(), limit)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -35,7 +35,7 @@ func (h *TodoHandler) RetryDeadLetterJob(w http.ResponseWriter, r *http.Request,
 	// TODO: Get reviewer ID from auth context
 	reviewedBy := "admin"
 
-	newJobID, err := h.todoService.RetryDeadLetterJob(r.Context(), id.String(), reviewedBy)
+	newJobID, err := h.coordinator.RetryDeadLetterJob(r.Context(), id.String(), reviewedBy)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -67,7 +67,7 @@ func (h *TodoHandler) DiscardDeadLetterJob(w http.ResponseWriter, r *http.Reques
 		note = *req.Note
 	}
 
-	err := h.todoService.DiscardDeadLetterJob(r.Context(), id.String(), reviewedBy, note)
+	err := h.coordinator.DiscardDeadLetterJob(r.Context(), id.String(), reviewedBy, note)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

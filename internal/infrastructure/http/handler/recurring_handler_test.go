@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oapi-codegen/runtime/types"
 	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/application/worker"
 	"github.com/rezkam/mono/internal/domain"
 	openapi "github.com/rezkam/mono/internal/infrastructure/http/openapi"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,49 @@ type stubGenerator struct{}
 
 func (g *stubGenerator) GenerateTasksForTemplateWithExceptions(ctx context.Context, template *domain.RecurringTemplate, from, until time.Time, exceptions []*domain.RecurringTemplateException) ([]*domain.TodoItem, error) {
 	return nil, nil // Return empty slice for tests that need generator support
+}
+
+// stubCoordinator implements worker.GenerationCoordinator for tests that don't need coordinator.
+type stubCoordinator struct{}
+
+func (c *stubCoordinator) InsertJob(ctx context.Context, job *domain.GenerationJob) error {
+	return nil
+}
+func (c *stubCoordinator) InsertMany(ctx context.Context, jobs []*domain.GenerationJob) error {
+	return nil
+}
+func (c *stubCoordinator) ClaimNextJob(ctx context.Context, workerID string, availabilityTimeout time.Duration) (*domain.GenerationJob, error) {
+	return nil, nil
+}
+func (c *stubCoordinator) ExtendAvailability(ctx context.Context, jobID, workerID string, extension time.Duration) error {
+	return nil
+}
+func (c *stubCoordinator) CompleteJob(ctx context.Context, jobID, workerID string) error {
+	return nil
+}
+func (c *stubCoordinator) FailJob(ctx context.Context, jobID, workerID, errMsg string, cfg worker.RetryConfig) (bool, error) {
+	return false, nil
+}
+func (c *stubCoordinator) CancelJob(ctx context.Context, jobID string) error {
+	return nil
+}
+func (c *stubCoordinator) SubscribeToCancellations(ctx context.Context) (<-chan string, error) {
+	return nil, nil
+}
+func (c *stubCoordinator) MoveToDeadLetter(ctx context.Context, job *domain.GenerationJob, workerID, errType, errMsg string, stackTrace *string) error {
+	return nil
+}
+func (c *stubCoordinator) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
+	return nil, nil
+}
+func (c *stubCoordinator) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (string, error) {
+	return "", nil
+}
+func (c *stubCoordinator) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
+	return nil
+}
+func (c *stubCoordinator) TryAcquireExclusiveRun(ctx context.Context, runType string, holderID string, leaseDuration time.Duration) (func(), bool, error) {
+	return nil, false, nil
 }
 
 func (s *stubRepository) CreateList(ctx context.Context, list *domain.TodoList) (*domain.TodoList, error) {
@@ -101,37 +145,9 @@ func (s *stubRepository) ListAllExceptionsByTemplate(ctx context.Context, templa
 	panic("not implemented")
 }
 
-// === Composite Operations (stub implementations) ===
-// These tests don't exercise composite operations, so we provide stubs.
-// Integration tests in tests/integration/postgres/composite_operations_test.go
-// provide comprehensive coverage of these operations.
-
-func (s *stubRepository) UpdateItemWithException(ctx context.Context, params domain.UpdateItemParams, exception *domain.RecurringTemplateException) (*domain.TodoItem, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (s *stubRepository) DeleteItemWithException(ctx context.Context, listID string, itemID string, exception *domain.RecurringTemplateException) error {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (s *stubRepository) CreateTemplateWithInitialGeneration(ctx context.Context, template *domain.RecurringTemplate, syncItems []*domain.TodoItem, syncEnd time.Time, asyncJob *domain.GenerationJob) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (s *stubRepository) UpdateTemplateWithRegeneration(ctx context.Context, params domain.UpdateRecurringTemplateParams, deleteFrom time.Time, syncItems []*domain.TodoItem, syncEnd time.Time) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (s *stubRepository) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
-	panic("not implemented")
-}
-
-func (s *stubRepository) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
-	panic("not implemented")
-}
-
-func (s *stubRepository) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
-	panic("not implemented")
+// Atomic executes callback without transaction (tests don't need real transactions)
+func (s *stubRepository) Atomic(ctx context.Context, fn func(todo.Repository) error) error {
+	return fn(s)
 }
 
 // spyRepository captures what was passed to UpdateRecurringTemplate
@@ -158,8 +174,8 @@ func (s *spyRepository) UpdateRecurringTemplate(ctx context.Context, params doma
 	return &result, nil
 }
 
-// Transaction executes the function and delegates calls back to the spyRepository
-func (s *spyRepository) Transaction(ctx context.Context, fn func(todo.Repository) error) error {
+// Atomic executes the function and delegates calls back to the spyRepository
+func (s *spyRepository) Atomic(ctx context.Context, fn func(todo.Repository) error) error {
 	return fn(s)
 }
 
@@ -214,7 +230,8 @@ func TestUpdateRecurringTemplate_UpdatesGenerationWindowDays(t *testing.T) {
 	}
 	generator := &stubGenerator{}
 	service := todo.NewService(repo, generator, todo.Config{})
-	srv := NewTodoHandler(service)
+	coordinator := &stubCoordinator{}
+	srv := NewTodoHandler(service, coordinator)
 
 	listUUID := types.UUID(uuid.MustParse(listID))
 	templateUUID := types.UUID(uuid.MustParse(templateID))
@@ -249,7 +266,8 @@ func TestCreateRecurringTemplate_InvalidDurationReturnsBadRequest(t *testing.T) 
 	repo := &stubRepository{}
 	generator := &stubGenerator{}
 	service := todo.NewService(repo, generator, todo.Config{})
-	srv := NewTodoHandler(service)
+	coordinator := &stubCoordinator{}
+	srv := NewTodoHandler(service, coordinator)
 
 	listIDObj, err := uuid.NewV7()
 	require.NoError(t, err)

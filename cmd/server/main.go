@@ -120,6 +120,9 @@ func initializeAPIServer(store *postgres.Store, cfg *config.ServerConfig) (*http
 		MaxPageSize:     cfg.Todo.MaxPageSize,
 	})
 
+	// Initialize coordinator for job management (DLQ operations)
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
+
 	// Initialize authenticator
 	authenticator := auth.NewAuthenticator(store, auth.Config{
 		OperationTimeout: cfg.Auth.OperationTimeout,
@@ -136,7 +139,7 @@ func initializeAPIServer(store *postgres.Store, cfg *config.ServerConfig) (*http
 	}
 
 	// Build API handler with OpenAPI routing and validation
-	apiHandler, err := handler.NewOpenAPIRouter(todoService)
+	apiHandler, err := handler.NewOpenAPIRouter(todoService, coordinator)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create API handler: %w", err)
 	}

@@ -39,7 +39,8 @@ func (m *mockDeleteItemRepo) UpdateItem(ctx context.Context, params domain.Updat
 	panic("UpdateItem not implemented")
 }
 
-func (m *mockDeleteItemRepo) Transaction(ctx context.Context, fn func(tx Repository) error) error {
+// Atomic executes callback without transaction (tests don't need real transactions)
+func (m *mockDeleteItemRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	if m.transactionFn != nil {
 		return m.transactionFn(ctx, fn)
 	}
@@ -125,39 +126,6 @@ func (m *mockDeleteItemRepo) DeleteException(ctx context.Context, templateID str
 }
 
 func (m *mockDeleteItemRepo) ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error) {
-	panic("not used")
-}
-
-// === Composite Operations (stub implementations) ===
-// These tests don't exercise composite operations, so we provide stubs.
-// Integration tests in tests/integration/postgres/composite_operations_test.go
-// provide comprehensive coverage of these operations.
-
-func (m *mockDeleteItemRepo) UpdateItemWithException(ctx context.Context, params domain.UpdateItemParams, exception *domain.RecurringTemplateException) (*domain.TodoItem, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockDeleteItemRepo) DeleteItemWithException(ctx context.Context, listID string, itemID string, exception *domain.RecurringTemplateException) error {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockDeleteItemRepo) CreateTemplateWithInitialGeneration(ctx context.Context, template *domain.RecurringTemplate, syncItems []*domain.TodoItem, syncEnd time.Time, asyncJob *domain.GenerationJob) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockDeleteItemRepo) UpdateTemplateWithRegeneration(ctx context.Context, params domain.UpdateRecurringTemplateParams, deleteFrom time.Time, syncItems []*domain.TodoItem, syncEnd time.Time) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockDeleteItemRepo) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
-	panic("not used")
-}
-
-func (m *mockDeleteItemRepo) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
 	panic("not used")
 }
 

@@ -1,6 +1,9 @@
 package postgres
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
@@ -54,4 +57,37 @@ func (s *Store) Queries() *sqlcgen.Queries {
 func (s *Store) Close() error {
 	s.pool.Close()
 	return nil
+}
+
+// Atomic executes a callback function within a database transaction.
+// All operations inside the callback succeed together or fail together.
+// The callback receives a Repository instance that operates within the transaction.
+// Commits the transaction if callback returns nil, rolls back if callback returns an error.
+func (s *Store) Atomic(ctx context.Context, fn func(repo todo.Repository) error) (err error) {
+	// Begin transaction
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Ensure transaction is closed
+	defer func() {
+		if err != nil {
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				err = fmt.Errorf("transaction failed: %w (rollback error: %v)", err, rbErr)
+			}
+		} else {
+			err = tx.Commit(ctx)
+		}
+	}()
+
+	// Create a new store instance with the transaction
+	txStore := &Store{
+		pool:    s.pool,
+		queries: s.queries.WithTx(tx),
+	}
+
+	// Execute callback with transactional repository
+	err = fn(txStore)
+	return
 }

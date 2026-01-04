@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/rezkam/mono/internal/application/todo"
+	"github.com/rezkam/mono/internal/application/worker"
 	mw "github.com/rezkam/mono/internal/infrastructure/http/middleware"
 	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
 )
@@ -15,21 +16,23 @@ import (
 // It adapts HTTP requests to application service calls.
 type TodoHandler struct {
 	todoService *todo.Service
+	coordinator worker.GenerationCoordinator
 }
 
 // NewTodoHandler creates a new HTTP API handler.
-func NewTodoHandler(todoService *todo.Service) *TodoHandler {
+func NewTodoHandler(todoService *todo.Service, coordinator worker.GenerationCoordinator) *TodoHandler {
 	return &TodoHandler{
 		todoService: todoService,
+		coordinator: coordinator,
 	}
 }
 
 // NewOpenAPIRouter creates an HTTP handler with OpenAPI validation and route mounting.
 // This router includes request validation against the OpenAPI spec and mounts all API routes.
 // Both production code and tests should use this function to ensure identical behavior.
-func NewOpenAPIRouter(todoService *todo.Service) (http.Handler, error) {
+func NewOpenAPIRouter(todoService *todo.Service, coordinator worker.GenerationCoordinator) (http.Handler, error) {
 	// Create handler that implements OpenAPI ServerInterface
-	h := NewTodoHandler(todoService)
+	h := NewTodoHandler(todoService, coordinator)
 
 	// Get embedded OpenAPI spec for request validation
 	spec, err := openapi.GetSwagger()

@@ -79,125 +79,37 @@ type Repository interface {
 	// FindRecurringTemplates lists all templates for a list, optionally filtered by active status.
 	FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error)
 
-	// === Recurring Instance Operations ===
+	// ListExceptions retrieves exceptions for a template in a date range.
+	// Used for displaying edited/deleted occurrences to users.
+	// Returns domain.ErrTemplateNotFound if template doesn't exist.
+	ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
+
+	// CreateException creates a new recurring template exception.
+	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
+	CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error)
+
+	// DeleteFuturePendingItems deletes all pending items for a template that occur after the specified date.
+	// Used during template updates to remove items that shouldn't exist beyond the template's generated_through marker.
+	// Returns count of deleted items.
+	DeleteFuturePendingItems(ctx context.Context, templateID string, after time.Time) (int64, error)
 
 	// BatchInsertItemsIgnoreConflict inserts items in batch with conflict handling.
 	// Duplicates based on (recurring_template_id, occurs_at) are silently ignored.
 	// Returns count of successfully inserted items.
 	BatchInsertItemsIgnoreConflict(ctx context.Context, items []*domain.TodoItem) (int, error)
 
-	// DeleteFuturePendingItems deletes future pending items for a template.
-	// Used before regeneration when pattern changes.
-	// Returns count of deleted items.
-	DeleteFuturePendingItems(ctx context.Context, templateID string, fromDate time.Time) (int64, error)
-
-	// === Template Generation Tracking ===
-
-	// FindStaleTemplates finds templates needing generation.
-	// Returns templates where generated_through < target date.
-	FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error)
-
 	// SetGeneratedThrough updates the generated_through marker after generation.
 	SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error
 
-	// === Generation Job Operations ===
-
-	// CreateGenerationJob creates a background generation job.
-	// Used for async generation of future recurring instances.
+	// CreateGenerationJob creates a new background job for generating recurring tasks.
+	// Must be called within an Atomic transaction to ensure atomicity with data operations.
 	CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error
 
-	// === Recurring Template Exception Operations ===
+	// === Atomic Operations ===
 
-	// CreateException creates an exception to prevent regeneration or mark customization.
-	// Returns domain.ErrExceptionAlreadyExists if exception for this occurrence exists.
-	CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error)
-
-	// ListExceptions retrieves exceptions for a template in date range.
-	// Returns exceptions ordered by occurs_at.
-	ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
-
-	// FindExceptionByOccurrence checks if exception exists for specific occurrence.
-	// Returns domain.ErrExceptionNotFound if not exists.
-	FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error)
-
-	// DeleteException removes an exception (allows regeneration or template updates).
-	// Returns domain.ErrExceptionNotFound if not exists.
-	DeleteException(ctx context.Context, templateID string, occursAt time.Time) error
-
-	// ListAllExceptionsByTemplate retrieves all exceptions for a template.
-	ListAllExceptionsByTemplate(ctx context.Context, templateID string) ([]*domain.RecurringTemplateException, error)
-
-	// === Composite Operations ===
-	// These operations execute multiple steps atomically.
-	// Implementation handles atomicity (e.g., database transactions, locks, etc.).
-
-	// UpdateItemWithException atomically updates a recurring item and creates an exception.
-	// This prevents the template from regenerating over the customized occurrence.
-	// Returns domain.ErrItemNotFound if item doesn't exist.
-	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
-	UpdateItemWithException(
-		ctx context.Context,
-		params domain.UpdateItemParams,
-		exception *domain.RecurringTemplateException,
-	) (*domain.TodoItem, error)
-
-	// DeleteItemWithException atomically archives an item and creates a deletion exception.
-	// This prevents the template from regenerating the occurrence.
-	// Returns domain.ErrItemNotFound if item doesn't exist.
-	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
-	DeleteItemWithException(
-		ctx context.Context,
-		listID string,
-		itemID string,
-		exception *domain.RecurringTemplateException,
-	) error
-
-	// CreateTemplateWithInitialGeneration atomically creates a template and generates initial items.
-	// Generates items up to template.SyncHorizonDays and schedules async job for remaining days.
-	// All operations succeed together or fail together (template, items, generation marker, job).
-	// Returns the created template with generation markers set.
-	// Returns domain.ErrListNotFound if list doesn't exist.
-	CreateTemplateWithInitialGeneration(
-		ctx context.Context,
-		template *domain.RecurringTemplate,
-		syncItems []*domain.TodoItem,
-		syncEnd time.Time,
-		asyncJob *domain.GenerationJob,
-	) (*domain.RecurringTemplate, error)
-
-	// UpdateTemplateWithRegeneration atomically updates template and regenerates future items.
-	// Steps: updates template, deletes future pending items, regenerates with new pattern.
-	// Uses exceptions to filter already-customized occurrences.
-	// All operations succeed together or fail together.
-	// Returns the updated template with new generation markers.
-	// Returns domain.ErrTemplateNotFound if template doesn't exist.
-	// Returns domain.ErrVersionConflict if etag doesn't match current version.
-	UpdateTemplateWithRegeneration(
-		ctx context.Context,
-		params domain.UpdateRecurringTemplateParams,
-		deleteFrom time.Time,
-		syncItems []*domain.TodoItem,
-		syncEnd time.Time,
-	) (*domain.RecurringTemplate, error)
-
-	// === Transaction Support (DEPRECATED) ===
-	// TODO: Remove after migrating to composite operations above.
-
-	// Transaction executes multiple repository operations atomically.
-	// All operations within fn succeed together or fail together.
-	// If fn returns an error, all operations are rolled back.
-	// DEPRECATED: Use composite operations instead (UpdateItemWithException, etc.)
-	Transaction(ctx context.Context, fn func(tx Repository) error) error
-
-	// === Dead Letter Queue Operations ===
-
-	// ListDeadLetterJobs retrieves unresolved dead letter jobs for manual review.
-	ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error)
-
-	// RetryDeadLetterJob creates a new job from a dead letter entry and marks it as retried.
-	// Returns the ID of the newly created job.
-	RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error)
-
-	// DiscardDeadLetterJob marks a dead letter job as permanently discarded.
-	DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error
+	// Atomic executes a callback function within a database transaction.
+	// All operations inside the callback succeed together or fail together.
+	// The callback receives a Repository instance that operates within the transaction.
+	// Commits the transaction if callback returns nil, rolls back if callback returns an error.
+	Atomic(ctx context.Context, fn func(repo Repository) error) error
 }

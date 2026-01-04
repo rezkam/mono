@@ -40,6 +40,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 		DefaultPageSize: 25,
 		MaxPageSize:     100,
 	})
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
 
 	// Create HTTP router for presentation layer tests
 	authenticator := auth.NewAuthenticator(store, auth.Config{OperationTimeout: 5 * time.Second})
@@ -61,7 +62,7 @@ func TestTimezoneConsistency_ThreeLayerArchitecture(t *testing.T) {
 	}()
 
 	// Create API handler with OpenAPI validation (reuses production logic)
-	apiHandler, err := handler.NewOpenAPIRouter(service)
+	apiHandler, err := handler.NewOpenAPIRouter(service, coordinator)
 	require.NoError(t, err)
 
 	// Create server with default 1MB body limit for tests

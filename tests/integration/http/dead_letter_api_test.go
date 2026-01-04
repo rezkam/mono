@@ -109,7 +109,7 @@ func TestDeadLetterAPI(t *testing.T) {
 
 	t.Run("RetryDeadLetterJob", func(t *testing.T) {
 		// First get the job ID
-		jobs, err := ts.TodoService.ListDeadLetterJobs(ctx, 10)
+		jobs, err := ts.Coordinator.ListDeadLetterJobs(ctx, 10)
 		require.NoError(t, err)
 		require.Len(t, jobs, 1)
 		dlID := jobs[0].ID
@@ -130,7 +130,7 @@ func TestDeadLetterAPI(t *testing.T) {
 		assert.NotEmpty(t, result.NewJobID)
 
 		// Verify DLQ entry is resolved (should be empty now)
-		updatedJobs, err := ts.TodoService.ListDeadLetterJobs(ctx, 10)
+		updatedJobs, err := ts.Coordinator.ListDeadLetterJobs(ctx, 10)
 		require.NoError(t, err)
 		assert.Empty(t, updatedJobs, "Should have no pending DLQ jobs")
 	})
@@ -169,7 +169,7 @@ func TestDeadLetterAPI(t *testing.T) {
 		require.NoError(t, err)
 
 		// Get its ID
-		jobs, err := ts.TodoService.ListDeadLetterJobs(ctx, 10)
+		jobs, err := ts.Coordinator.ListDeadLetterJobs(ctx, 10)
 		require.NoError(t, err)
 		require.Len(t, jobs, 1)
 		dlID := jobs[0].ID
@@ -186,9 +186,59 @@ func TestDeadLetterAPI(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, w.Code)
 
 		// Verify DLQ entry is resolved
-		updatedJobs, err := ts.TodoService.ListDeadLetterJobs(ctx, 10)
+		updatedJobs, err := ts.Coordinator.ListDeadLetterJobs(ctx, 10)
 		require.NoError(t, err)
 		assert.Empty(t, updatedJobs, "Should have no pending DLQ jobs")
+	})
+
+	t.Run("RetryNonExistentDeadLetterJob_Returns404", func(t *testing.T) {
+		nonExistentID := uuid.New().String()
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/admin/dead-letter-jobs/%s/retry", nonExistentID), nil)
+		req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+		w := httptest.NewRecorder()
+
+		ts.Router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code, "Expected 404 for non-existent dead letter job")
+
+		var errResp struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		err := json.NewDecoder(w.Body).Decode(&errResp)
+		require.NoError(t, err)
+
+		assert.Equal(t, "NOT_FOUND", errResp.Error.Code)
+		assert.Contains(t, errResp.Error.Message, "dead letter job not found")
+	})
+
+	t.Run("DiscardNonExistentDeadLetterJob_Returns404", func(t *testing.T) {
+		nonExistentID := uuid.New().String()
+
+		body := bytes.NewBufferString(`{"note": "Test"}`)
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/admin/dead-letter-jobs/%s/discard", nonExistentID), body)
+		req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		ts.Router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code, "Expected 404 for non-existent dead letter job")
+
+		var errResp struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		err := json.NewDecoder(w.Body).Decode(&errResp)
+		require.NoError(t, err)
+
+		assert.Equal(t, "NOT_FOUND", errResp.Error.Code)
+		assert.Contains(t, errResp.Error.Message, "dead letter job not found")
 	})
 }
 

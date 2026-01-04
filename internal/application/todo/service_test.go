@@ -117,42 +117,10 @@ func (m *mockListListsRepo) ListAllExceptionsByTemplate(ctx context.Context, tem
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) Transaction(ctx context.Context, fn func(tx Repository) error) error {
+// Atomic executes callback without transaction (tests don't need real transactions)
+func (m *mockListListsRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	// Execute the function with the same mock (no actual transaction needed for validation tests)
 	return fn(m)
-}
-
-// === Composite Operations (stub implementations) ===
-// These tests don't exercise composite operations, so we provide stubs.
-// Integration tests in tests/integration/postgres/composite_operations_test.go
-// provide comprehensive coverage of these operations.
-
-func (m *mockListListsRepo) UpdateItemWithException(ctx context.Context, params domain.UpdateItemParams, exception *domain.RecurringTemplateException) (*domain.TodoItem, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockListListsRepo) DeleteItemWithException(ctx context.Context, listID string, itemID string, exception *domain.RecurringTemplateException) error {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockListListsRepo) CreateTemplateWithInitialGeneration(ctx context.Context, template *domain.RecurringTemplate, syncItems []*domain.TodoItem, syncEnd time.Time, asyncJob *domain.GenerationJob) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockListListsRepo) UpdateTemplateWithRegeneration(ctx context.Context, params domain.UpdateRecurringTemplateParams, deleteFrom time.Time, syncItems []*domain.TodoItem, syncEnd time.Time) (*domain.RecurringTemplate, error) {
-	panic("not used in these tests - see integration tests for coverage")
-}
-
-func (m *mockListListsRepo) ListDeadLetterJobs(ctx context.Context, limit int) ([]*domain.DeadLetterJob, error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) RetryDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy string) (newJobID string, err error) {
-	panic("not used in ListLists tests")
-}
-
-func (m *mockListListsRepo) DiscardDeadLetterJob(ctx context.Context, deadLetterID, reviewedBy, note string) error {
-	panic("not used in ListLists tests")
 }
 
 // mockUpdateItemRepo is a minimal mock for testing UpdateItem logic
