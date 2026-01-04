@@ -9,6 +9,22 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mono_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - uses: actions/checkout@v4
 
@@ -38,34 +54,21 @@ jobs:
           make gen-sqlc
           git diff --exit-code internal/infrastructure/persistence/postgres/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: latest
-          args: --timeout=5m
+      - name: Run Linters
+        run: make lint
 
-      - name: Build Custom Timezone Linter
-        run: make build-timeutc-linter
-
-      - name: Run Custom Timezone Linter
-        run: ./timeutc ./...
-
-      - name: Run Tests (without SQL integration)
+      - name: Run Unit Tests
         run: make test
 
-      - name: Start PostgreSQL for Integration Tests
-        run: |
-          docker compose up -d postgres
-          echo "Waiting for PostgreSQL to be ready..."
-          sleep 10
+      - name: Apply Database Migrations
+        run: make db-migrate-up
+        env:
+          DB_URL: "postgres://postgres:postgres@localhost:5432/mono_test?sslmode=disable"
 
-      - name: Run PostgreSQL Integration Tests
+      - name: Run Integration Tests
         run: make test-integration-run
         env:
-          MONO_STORAGE_DSN: "postgres://mono:mono_password@localhost:5432/mono_db?sslmode=disable"
-
-      - name: Stop PostgreSQL
-        run: docker compose down
+          MONO_STORAGE_DSN: "postgres://postgres:postgres@localhost:5432/mono_test?sslmode=disable"
 
       - name: Build Binary
         run: make build
