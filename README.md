@@ -4,10 +4,13 @@ Mono is a simple task management service providing an HTTP/REST API with recurri
 
 ## Features
 
-- **REST API**: HTTP/JSON API
+- **REST API**: HTTP/JSON API with filtering, pagination, and sorting
 - **Database Storage**: ACID-compliant with optimized connection pooling
 - **Recurring Tasks**: Template-based task generation with flexible patterns
 - **Background Jobs**: Distributed job queue with concurrent processing
+- **Dead Letter Queue**: Failed job management with retry and discard workflows
+- **Task Exceptions**: Delete or reschedule individual recurring task instances
+- **Time Tracking**: Automatic status history and duration calculation
 - **API Key Authentication**: Secure authentication with HTTP middleware
 - **Observability**: Tracing, metrics, and structured logging
 - **Auto Migrations**: Automatic database schema management
@@ -119,18 +122,48 @@ Mono supports flexible recurring task patterns:
 
 ### Supported Patterns
 
-- **DAILY**: Every day
-- **WEEKLY**: Every week (same day of week)
+- **DAILY**: Every day at a specific time
+- **WEEKLY**: Every week on the same day
 - **BIWEEKLY**: Every 2 weeks
-- **MONTHLY**: Every month (same day of month)
+- **MONTHLY**: Every month on the same day
 - **QUARTERLY**: Every 3 months
-- **YEARLY**: Every year
+- **YEARLY**: Every year on the same date
 - **WEEKDAYS**: Monday through Friday
+- **INTERVAL**: Intra-day recurrence (e.g., every 8 hours)
 
 ### How It Works
 
-1. **Create Template**: Define a recurring task template with pattern
-2. **Background Worker**: Processes templates hourly
-3. **Job Queue**: Creates generation jobs for templates
-4. **Task Generation**: Worker claims jobs and creates actual tasks
+1. **Create Template**: Define a recurring task template with pattern and configuration
+2. **Background Worker**: Processes templates on a schedule
+3. **Job Queue**: Creates generation jobs for templates needing updates
+4. **Task Generation**: Worker claims jobs and creates actual task instances
 5. **Window Management**: Tracks generation window to avoid duplicates
+6. **Exception Handling**: Deleted or rescheduled instances are tracked to prevent regeneration
+7. **Dead Letter Queue**: Failed jobs are moved to DLQ for manual intervention
+
+### Task Exceptions
+
+Individual recurring task instances can be modified without affecting the template:
+
+- **Delete**: Remove a specific occurrence (e.g., skip vacation day)
+- **Reschedule**: Move a specific instance to a different date
+- **Edit**: Modify fields like title or priority for one occurrence
+
+Exceptions prevent the template from regenerating deleted or modified instances.
+
+### Dead Letter Queue
+
+Failed recurring task generation jobs are moved to the Dead Letter Queue for administrative review:
+
+- **Automatic Capture**: Jobs failing after max retries or with permanent errors
+- **Manual Review**: Admin interface to inspect error details and stack traces
+- **Retry or Discard**: Failed jobs can be retried with fixes or permanently discarded
+- **Audit Trail**: Full context preserved for debugging and compliance
+
+### Time Tracking
+
+Automatic tracking of task status changes and work duration:
+
+- **Status History**: Every status transition is recorded with timestamps
+- **Duration Calculation**: Automatically calculates time spent in "in progress" status
+- **Audit Trail**: Complete history of state changes for reporting and analysis
