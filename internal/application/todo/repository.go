@@ -21,9 +21,9 @@ type Repository interface {
 	// Returns domain.ErrListNotFound if list doesn't exist.
 	FindListByID(ctx context.Context, id string) (*domain.TodoList, error)
 
-	// ListLists retrieves todo lists with filtering, sorting, and pagination.
+	// FindLists retrieves todo lists with filtering, sorting, and pagination.
 	// Items are fetched separately via FindItems to support pagination.
-	ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error)
+	FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error)
 
 	// UpdateList updates a list using field mask.
 	// Only updates fields specified in UpdateMask.
@@ -61,9 +61,9 @@ type Repository interface {
 	// Returns domain.ErrListNotFound if list doesn't exist.
 	CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error)
 
-	// FindRecurringTemplate retrieves a template by ID.
+	// FindRecurringTemplateByID retrieves a template by ID.
 	// Returns domain.ErrTemplateNotFound if template doesn't exist.
-	FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error)
+	FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error)
 
 	// UpdateRecurringTemplate updates a template using field mask.
 	// Only updates fields specified in UpdateMask.
@@ -79,10 +79,10 @@ type Repository interface {
 	// FindRecurringTemplates lists all templates for a list, optionally filtered by active status.
 	FindRecurringTemplates(ctx context.Context, listID string, activeOnly bool) ([]*domain.RecurringTemplate, error)
 
-	// ListExceptions retrieves exceptions for a template in a date range.
+	// FindExceptions retrieves exceptions for a template in a date range.
 	// Used for displaying edited/deleted occurrences to users.
 	// Returns domain.ErrTemplateNotFound if template doesn't exist.
-	ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
+	FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
 
 	// CreateException creates a new recurring template exception.
 	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.

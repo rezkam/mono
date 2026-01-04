@@ -169,14 +169,14 @@ func (q *Queries) ExtendJobAvailability(ctx context.Context, arg ExtendJobAvaila
 	return result.RowsAffected(), nil
 }
 
-const getGenerationJob = `-- name: GetGenerationJob :one
+const findGenerationJobByID = `-- name: FindGenerationJobByID :one
 SELECT id, template_id, status, available_at, claimed_by, claimed_at, generate_from, generate_until, scheduled_for, created_at, started_at, completed_at, failed_at, error_message, retry_count FROM recurring_generation_jobs
 WHERE id = $1
 `
 
 // Retrieve a generation job by ID
-func (q *Queries) GetGenerationJob(ctx context.Context, id string) (RecurringGenerationJob, error) {
-	row := q.db.QueryRow(ctx, getGenerationJob, id)
+func (q *Queries) FindGenerationJobByID(ctx context.Context, id string) (RecurringGenerationJob, error) {
+	row := q.db.QueryRow(ctx, findGenerationJobByID, id)
 	var i RecurringGenerationJob
 	err := row.Scan(
 		&i.ID,

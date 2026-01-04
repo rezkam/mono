@@ -62,13 +62,13 @@ func (s *Store) CreateException(ctx context.Context, exception *domain.Recurring
 	return dbExceptionToDomain(dbException)
 }
 
-func (s *Store) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (s *Store) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	templateUUID, err := uuid.Parse(templateID)
 	if err != nil {
 		return nil, err
 	}
 
-	dbExceptions, err := s.queries.ListExceptions(ctx, sqlcgen.ListExceptionsParams{
+	dbExceptions, err := s.queries.FindExceptions(ctx, sqlcgen.FindExceptionsParams{
 		TemplateID: pgtype.UUID{Bytes: templateUUID, Valid: true},
 		OccursAt:   timeToTimestamptz(from),
 		OccursAt_2: timeToTimestamptz(until),

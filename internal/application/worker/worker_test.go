@@ -27,14 +27,14 @@ type mockRepository struct {
 	batchCreateTodoItemsFunc func(ctx context.Context, listID string, items []domain.TodoItem) (int64, error)
 }
 
-func (m *mockRepository) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
+func (m *mockRepository) FindActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
 	if m.getActiveTemplatesFunc != nil {
 		return m.getActiveTemplatesFunc(ctx)
 	}
 	return nil, nil
 }
 
-func (m *mockRepository) GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (m *mockRepository) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	if m.getRecurringTemplateFunc != nil {
 		return m.getRecurringTemplateFunc(ctx, id)
 	}
@@ -55,7 +55,7 @@ func (m *mockRepository) ScheduleGenerationJob(ctx context.Context, templateID s
 	return "job-id", nil
 }
 
-func (m *mockRepository) GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error) {
+func (m *mockRepository) FindGenerationJobByID(ctx context.Context, id string) (*domain.GenerationJob, error) {
 	if m.getGenerationJobFunc != nil {
 		return m.getGenerationJobFunc(ctx, id)
 	}
@@ -98,7 +98,7 @@ func (m *mockRepository) SetGeneratedThrough(ctx context.Context, templateID str
 	return nil
 }
 
-func (m *mockRepository) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (m *mockRepository) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	return nil, nil
 }
 

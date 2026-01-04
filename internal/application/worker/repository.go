@@ -11,12 +11,12 @@ import (
 type Repository interface {
 	// === Template Operations ===
 
-	// GetActiveTemplatesNeedingGeneration retrieves all active templates that need task generation.
-	GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error)
+	// FindActiveTemplatesNeedingGeneration retrieves all active templates that need task generation.
+	FindActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error)
 
-	// GetRecurringTemplate retrieves a single recurring template by ID.
+	// FindRecurringTemplateByID retrieves a single recurring template by ID.
 	// Returns error if template not found.
-	GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error)
+	FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error)
 
 	// UpdateRecurringTemplateGenerationWindow updates the last_generated_until timestamp.
 	// Returns error if template not found.
@@ -30,9 +30,9 @@ type Repository interface {
 	// Returns the created job ID or error if creation fails.
 	ScheduleGenerationJob(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error)
 
-	// GetGenerationJob retrieves job details by ID.
+	// FindGenerationJobByID retrieves job details by ID.
 	// Returns error if job not found.
-	GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error)
+	FindGenerationJobByID(ctx context.Context, id string) (*domain.GenerationJob, error)
 
 	// UpdateGenerationJobStatus updates job status and optionally records an error.
 	// status: "pending", "running", "completed", "failed"
@@ -63,9 +63,9 @@ type Repository interface {
 
 	// === Exception Operations ===
 
-	// ListExceptions retrieves exceptions for a template in date range.
+	// FindExceptions retrieves exceptions for a template in date range.
 	// Used during generation to filter out deleted/edited instances.
-	ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
+	FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error)
 
 	// === Reconciliation Operations ===
 

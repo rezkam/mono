@@ -109,7 +109,7 @@ func (w *GenerationWorker) executeWithRecovery(ctx context.Context, job *domain.
 // processJob does the actual generation work.
 // Generates tasks in batches with progressive marker updates.
 func (w *GenerationWorker) processJob(ctx context.Context, job *domain.GenerationJob) error {
-	template, err := w.repo.GetRecurringTemplate(ctx, job.TemplateID)
+	template, err := w.repo.FindRecurringTemplateByID(ctx, job.TemplateID)
 	if errors.Is(err, domain.ErrTemplateNotFound) {
 		// Template was deleted - cancel job permanently
 		return JobCancelled{Reason: "template no longer exists"}
@@ -126,7 +126,7 @@ func (w *GenerationWorker) processJob(ctx context.Context, job *domain.Generatio
 		"generate_until", job.GenerateUntil)
 
 	// Fetch exceptions for the entire generation range
-	exceptions, err := w.repo.ListExceptions(ctx, job.TemplateID, job.GenerateFrom, job.GenerateUntil)
+	exceptions, err := w.repo.FindExceptions(ctx, job.TemplateID, job.GenerateFrom, job.GenerateUntil)
 	if err != nil {
 		return Transient(err) // Database error - retry
 	}

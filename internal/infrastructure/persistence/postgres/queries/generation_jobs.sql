@@ -27,7 +27,7 @@ INSERT INTO recurring_generation_jobs (
     $5, $6, $7, $8
 );
 
--- name: GetGenerationJob :one
+-- name: FindGenerationJobByID :one
 -- Retrieve a generation job by ID
 SELECT * FROM recurring_generation_jobs
 WHERE id = $1;

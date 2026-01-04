@@ -96,7 +96,7 @@ func TestTemplateJobAtomicity_CommitsAtomically(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify both were committed
-	foundTemplate, err := store.FindRecurringTemplate(ctx, templateID)
+	foundTemplate, err := store.FindRecurringTemplateByID(ctx, templateID)
 	require.NoError(t, err)
 	assert.Equal(t, templateID, foundTemplate.ID)
 
@@ -158,7 +158,7 @@ func TestTemplateJobAtomicity_RollsBackOnError(t *testing.T) {
 	require.ErrorIs(t, err, testErr)
 
 	// Verify NEITHER was committed (rolled back)
-	_, err = store.FindRecurringTemplate(ctx, templateID)
+	_, err = store.FindRecurringTemplateByID(ctx, templateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "Template should NOT exist after rollback")
 
 	var count int
@@ -219,7 +219,7 @@ func TestTemplateJobAtomicity_RollsBackOnPanic(t *testing.T) {
 	})
 
 	// Verify NEITHER was committed (rolled back due to panic)
-	_, err := store.FindRecurringTemplate(ctx, templateID)
+	_, err := store.FindRecurringTemplateByID(ctx, templateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "Template should NOT exist after panic rollback")
 
 	var count int
@@ -276,7 +276,7 @@ func TestTemplateJobAtomicity_PartialInsertRollback(t *testing.T) {
 	require.Error(t, err, "Should fail due to invalid job template ID")
 
 	// Verify template was also rolled back
-	_, err = store.FindRecurringTemplate(ctx, templateID)
+	_, err = store.FindRecurringTemplateByID(ctx, templateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "Template should NOT exist after job insert failure")
 }
 
@@ -359,10 +359,10 @@ func TestTemplateJobAtomicity_NestedOperations(t *testing.T) {
 	require.ErrorIs(t, err, testErr)
 
 	// Verify ALL operations were rolled back
-	_, err = store.FindRecurringTemplate(ctx, template1ID)
+	_, err = store.FindRecurringTemplateByID(ctx, template1ID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "Template 1 should NOT exist")
 
-	_, err = store.FindRecurringTemplate(ctx, template2ID)
+	_, err = store.FindRecurringTemplateByID(ctx, template2ID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "Template 2 should NOT exist")
 
 	var count int
@@ -420,7 +420,7 @@ func TestTemplateJobAtomicity_FirstOperationFails(t *testing.T) {
 	assert.False(t, jobCreationAttempted, "Job creation should not be attempted after template fails")
 
 	// Verify neither exists
-	_, err = store.FindRecurringTemplate(ctx, templateID)
+	_, err = store.FindRecurringTemplateByID(ctx, templateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound)
 
 	var count int
@@ -503,11 +503,11 @@ func TestTemplateJobAtomicity_DuplicateTemplateID(t *testing.T) {
 	require.Error(t, err, "Transaction should fail due to duplicate template ID")
 
 	// Verify the new template was rolled back (only existing remains)
-	_, err = store.FindRecurringTemplate(ctx, newTemplateID)
+	_, err = store.FindRecurringTemplateByID(ctx, newTemplateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "New template should be rolled back")
 
 	// Existing template should still exist
-	_, err = store.FindRecurringTemplate(ctx, existingTemplateID)
+	_, err = store.FindRecurringTemplateByID(ctx, existingTemplateID)
 	assert.NoError(t, err, "Existing template should still exist")
 }
 
@@ -557,7 +557,7 @@ func TestTemplateJobAtomicity_ContextCancellation(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled, "Error should be context.Canceled")
 
 	// Verify template was rolled back
-	_, err = store.FindRecurringTemplate(context.Background(), templateID)
+	_, err = store.FindRecurringTemplateByID(context.Background(), templateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound, "Template should be rolled back after context cancellation")
 }
 
@@ -610,7 +610,7 @@ func TestTemplateJobAtomicity_TransactionIsolation(t *testing.T) {
 	<-templateCreated
 
 	// Try to read template from a different connection - should NOT be visible
-	_, isolationErr = store.FindRecurringTemplate(ctx, templateID)
+	_, isolationErr = store.FindRecurringTemplateByID(ctx, templateID)
 
 	// Signal that check is complete
 	close(checkComplete)
@@ -665,7 +665,7 @@ func TestTemplateJobAtomicity_JobReferencesNonExistentTemplate(t *testing.T) {
 	require.Error(t, err, "Transaction should fail due to FK constraint")
 
 	// Verify template was rolled back
-	_, err = store.FindRecurringTemplate(ctx, templateID)
+	_, err = store.FindRecurringTemplateByID(ctx, templateID)
 	assert.ErrorIs(t, err, domain.ErrTemplateNotFound,
 		"Template should be rolled back when job FK fails")
 

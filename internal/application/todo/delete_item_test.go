@@ -57,7 +57,7 @@ func (m *mockDeleteItemRepo) FindListByID(ctx context.Context, id string) (*doma
 	panic("not used")
 }
 
-func (m *mockDeleteItemRepo) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (m *mockDeleteItemRepo) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	panic("not used")
 }
 
@@ -77,7 +77,7 @@ func (m *mockDeleteItemRepo) CreateRecurringTemplate(ctx context.Context, templa
 	panic("not used")
 }
 
-func (m *mockDeleteItemRepo) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (m *mockDeleteItemRepo) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	panic("not used")
 }
 
@@ -113,7 +113,7 @@ func (m *mockDeleteItemRepo) CreateGenerationJob(ctx context.Context, job *domai
 	panic("not used")
 }
 
-func (m *mockDeleteItemRepo) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (m *mockDeleteItemRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	panic("not used")
 }
 

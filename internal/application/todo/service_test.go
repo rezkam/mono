@@ -24,7 +24,7 @@ func (m *mockListListsRepo) FindListByID(ctx context.Context, id string) (*domai
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (m *mockListListsRepo) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Capture params for assertion
 	m.capturedParams = params
 	if m.resultToReturn != nil {
@@ -61,7 +61,7 @@ func (m *mockListListsRepo) CreateRecurringTemplate(ctx context.Context, templat
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (m *mockListListsRepo) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	panic("not used in ListLists tests")
 }
 
@@ -101,7 +101,7 @@ func (m *mockListListsRepo) CreateException(ctx context.Context, exception *doma
 	panic("not used in ListLists tests")
 }
 
-func (m *mockListListsRepo) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (m *mockListListsRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	panic("not used in ListLists tests")
 }
 
@@ -197,7 +197,7 @@ func TestListLists_ClampsNegativeOffset(t *testing.T) {
 		Limit:  10,
 	}
 
-	_, err := service.ListLists(context.Background(), params)
+	_, err := service.FindLists(context.Background(), params)
 	require.NoError(t, err)
 
 	// Verify that the offset passed to the repository was clamped to 0
@@ -219,7 +219,7 @@ func TestListLists_UsesConfiguredDefaultPageSize(t *testing.T) {
 		Limit: 0, // Zero means "use default"
 	}
 
-	_, err := service.ListLists(context.Background(), params)
+	_, err := service.FindLists(context.Background(), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, customDefault, repo.capturedParams.Limit,
@@ -241,7 +241,7 @@ func TestListLists_UsesConfiguredMaxPageSize(t *testing.T) {
 		Limit: 1000, // Exceeds max
 	}
 
-	_, err := service.ListLists(context.Background(), params)
+	_, err := service.FindLists(context.Background(), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, customMax, repo.capturedParams.Limit,
@@ -258,7 +258,7 @@ func TestListLists_RespectsValidLimit(t *testing.T) {
 		Limit: 42, // Within valid range
 	}
 
-	_, err := service.ListLists(context.Background(), params)
+	_, err := service.FindLists(context.Background(), params)
 	require.NoError(t, err)
 
 	assert.Equal(t, 42, repo.capturedParams.Limit, "valid limit should be passed through unchanged")

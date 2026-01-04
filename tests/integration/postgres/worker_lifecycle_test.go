@@ -314,5 +314,5 @@ func (r *faultyRepo) ListExceptions(ctx context.Context, templateID string, from
 	if r.failWith != nil {
 		return nil, r.failWith
 	}
-	return r.Repository.ListExceptions(ctx, templateID, from, until)
+	return r.Repository.FindExceptions(ctx, templateID, from, until)
 }

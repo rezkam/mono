@@ -124,9 +124,9 @@ func (s *Service) GetList(ctx context.Context, id string) (*domain.TodoList, err
 	return list, nil
 }
 
-// ListLists retrieves todo lists with filtering, sorting, and pagination.
+// FindLists retrieves todo lists with filtering, sorting, and pagination.
 // Returns summaries with counts only (Items field will be empty).
-func (s *Service) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (s *Service) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Reject negative offsets to prevent database errors
 	if params.Offset < 0 {
 		params.Offset = 0
@@ -139,7 +139,7 @@ func (s *Service) ListLists(ctx context.Context, params domain.ListListsParams) 
 	// Enforce maximum page size
 	params.Limit = min(params.Limit, s.config.MaxPageSize)
 
-	result, err := s.repo.ListLists(ctx, params)
+	result, err := s.repo.FindLists(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list lists: %w", err)
 	}
@@ -548,17 +548,17 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 	}
 
 	// Refetch template to get updated generated_through
-	return s.repo.FindRecurringTemplate(ctx, template.ID)
+	return s.repo.FindRecurringTemplateByID(ctx, template.ID)
 }
 
-// GetRecurringTemplate retrieves a recurring template by ID.
+// FindRecurringTemplateByID retrieves a recurring template by ID.
 // Validates that the template belongs to the specified list.
-func (s *Service) GetRecurringTemplate(ctx context.Context, listID, templateID string) (*domain.RecurringTemplate, error) {
+func (s *Service) FindRecurringTemplateByID(ctx context.Context, listID, templateID string) (*domain.RecurringTemplate, error) {
 	if templateID == "" {
 		return nil, domain.ErrTemplateNotFound
 	}
 
-	template, err := s.repo.FindRecurringTemplate(ctx, templateID)
+	template, err := s.repo.FindRecurringTemplateByID(ctx, templateID)
 	if err != nil {
 		return nil, err // Repository returns domain errors
 	}
@@ -581,7 +581,7 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 	}
 
 	// Verify ownership before update
-	existing, err := s.repo.FindRecurringTemplate(ctx, params.TemplateID)
+	existing, err := s.repo.FindRecurringTemplateByID(ctx, params.TemplateID)
 	if err != nil {
 		return nil, err
 	}
@@ -738,7 +738,7 @@ func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *
 	}
 
 	// Refetch template to get updated generated_through
-	return s.repo.FindRecurringTemplate(ctx, params.TemplateID)
+	return s.repo.FindRecurringTemplateByID(ctx, params.TemplateID)
 }
 
 // DeleteRecurringTemplate deletes a recurring template.
@@ -749,7 +749,7 @@ func (s *Service) DeleteRecurringTemplate(ctx context.Context, listID, templateI
 	}
 
 	// Verify ownership before delete
-	existing, err := s.repo.FindRecurringTemplate(ctx, templateID)
+	existing, err := s.repo.FindRecurringTemplateByID(ctx, templateID)
 	if err != nil {
 		return err
 	}
@@ -778,9 +778,9 @@ func (s *Service) ListRecurringTemplates(ctx context.Context, listID string, act
 	return templates, nil
 }
 
-// ListExceptions retrieves exceptions for a recurring template.
+// FindExceptions retrieves exceptions for a recurring template.
 // Validates that the template belongs to the specified list.
-func (s *Service) ListExceptions(ctx context.Context, listID, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (s *Service) FindExceptions(ctx context.Context, listID, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	if listID == "" {
 		return nil, domain.ErrListNotFound
 	}
@@ -789,7 +789,7 @@ func (s *Service) ListExceptions(ctx context.Context, listID, templateID string,
 	}
 
 	// Verify template belongs to list
-	template, err := s.repo.FindRecurringTemplate(ctx, templateID)
+	template, err := s.repo.FindRecurringTemplateByID(ctx, templateID)
 	if err != nil {
 		return nil, err
 	}
@@ -797,5 +797,5 @@ func (s *Service) ListExceptions(ctx context.Context, listID, templateID string,
 		return nil, domain.ErrTemplateNotFound
 	}
 
-	return s.repo.ListExceptions(ctx, templateID, from, until)
+	return s.repo.FindExceptions(ctx, templateID, from, until)
 }

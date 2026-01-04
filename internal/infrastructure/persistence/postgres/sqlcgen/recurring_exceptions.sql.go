@@ -93,14 +93,21 @@ func (q *Queries) FindExceptionByOccurrence(ctx context.Context, arg FindExcepti
 	return i, err
 }
 
-const listAllExceptionsByTemplate = `-- name: ListAllExceptionsByTemplate :many
+const findExceptions = `-- name: FindExceptions :many
 SELECT id, template_id, occurs_at, exception_type, item_id, created_at FROM recurring_template_exceptions
 WHERE template_id = $1
+  AND occurs_at BETWEEN $2 AND $3
 ORDER BY occurs_at
 `
 
-func (q *Queries) ListAllExceptionsByTemplate(ctx context.Context, templateID pgtype.UUID) ([]RecurringTemplateException, error) {
-	rows, err := q.db.Query(ctx, listAllExceptionsByTemplate, templateID)
+type FindExceptionsParams struct {
+	TemplateID pgtype.UUID        `json:"template_id"`
+	OccursAt   pgtype.Timestamptz `json:"occurs_at"`
+	OccursAt_2 pgtype.Timestamptz `json:"occurs_at_2"`
+}
+
+func (q *Queries) FindExceptions(ctx context.Context, arg FindExceptionsParams) ([]RecurringTemplateException, error) {
+	rows, err := q.db.Query(ctx, findExceptions, arg.TemplateID, arg.OccursAt, arg.OccursAt_2)
 	if err != nil {
 		return nil, err
 	}
@@ -126,21 +133,14 @@ func (q *Queries) ListAllExceptionsByTemplate(ctx context.Context, templateID pg
 	return items, nil
 }
 
-const listExceptions = `-- name: ListExceptions :many
+const listAllExceptionsByTemplate = `-- name: ListAllExceptionsByTemplate :many
 SELECT id, template_id, occurs_at, exception_type, item_id, created_at FROM recurring_template_exceptions
 WHERE template_id = $1
-  AND occurs_at BETWEEN $2 AND $3
 ORDER BY occurs_at
 `
 
-type ListExceptionsParams struct {
-	TemplateID pgtype.UUID        `json:"template_id"`
-	OccursAt   pgtype.Timestamptz `json:"occurs_at"`
-	OccursAt_2 pgtype.Timestamptz `json:"occurs_at_2"`
-}
-
-func (q *Queries) ListExceptions(ctx context.Context, arg ListExceptionsParams) ([]RecurringTemplateException, error) {
-	rows, err := q.db.Query(ctx, listExceptions, arg.TemplateID, arg.OccursAt, arg.OccursAt_2)
+func (q *Queries) ListAllExceptionsByTemplate(ctx context.Context, templateID pgtype.UUID) ([]RecurringTemplateException, error) {
+	rows, err := q.db.Query(ctx, listAllExceptionsByTemplate, templateID)
 	if err != nil {
 		return nil, err
 	}

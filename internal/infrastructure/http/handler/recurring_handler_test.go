@@ -78,7 +78,7 @@ func (s *stubRepository) CreateList(ctx context.Context, list *domain.TodoList) 
 func (s *stubRepository) FindListByID(ctx context.Context, id string) (*domain.TodoList, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (s *stubRepository) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
@@ -99,7 +99,7 @@ func (s *stubRepository) FindItems(ctx context.Context, params domain.ListTasksP
 func (s *stubRepository) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (s *stubRepository) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	panic("should not be called")
 }
 func (s *stubRepository) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
@@ -132,7 +132,7 @@ func (s *stubRepository) Transaction(ctx context.Context, fn func(todo.Repositor
 func (s *stubRepository) CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error) {
 	panic("not implemented")
 }
-func (s *stubRepository) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (s *stubRepository) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	panic("not implemented")
 }
 func (s *stubRepository) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
@@ -157,7 +157,7 @@ type spyRepository struct {
 	existingTemplate *domain.RecurringTemplate
 }
 
-func (s *spyRepository) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (s *spyRepository) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	if s.existingTemplate != nil {
 		return s.existingTemplate, nil
 	}
@@ -184,7 +184,7 @@ func (s *spyRepository) DeleteFuturePendingItems(ctx context.Context, templateID
 	return 0, nil
 }
 
-func (s *spyRepository) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (s *spyRepository) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	return nil, nil
 }
 

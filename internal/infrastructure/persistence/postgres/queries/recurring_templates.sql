@@ -14,7 +14,7 @@ INSERT INTO recurring_task_templates (
 )
 RETURNING *;
 
--- name: GetRecurringTemplate :one
+-- name: FindRecurringTemplateByID :one
 SELECT * FROM recurring_task_templates
 WHERE id = $1;
 

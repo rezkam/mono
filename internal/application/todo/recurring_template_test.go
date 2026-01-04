@@ -40,7 +40,7 @@ func (m *mockRecurringRepo) FindListByID(ctx context.Context, id string) (*domai
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (m *mockRecurringRepo) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	panic("not used in recurring template tests")
 }
 
@@ -74,7 +74,7 @@ func (m *mockRecurringRepo) CreateRecurringTemplate(ctx context.Context, templat
 	return template, nil
 }
 
-func (m *mockRecurringRepo) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (m *mockRecurringRepo) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	if m.findTemplateFn != nil {
 		return m.findTemplateFn(ctx, id)
 	}
@@ -125,7 +125,7 @@ func (m *mockRecurringRepo) CreateException(ctx context.Context, exception *doma
 	panic("not used in recurring template tests")
 }
 
-func (m *mockRecurringRepo) ListExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
+func (m *mockRecurringRepo) FindExceptions(ctx context.Context, templateID string, from, until time.Time) ([]*domain.RecurringTemplateException, error) {
 	panic("not used in recurring template tests")
 }
 

@@ -10,7 +10,7 @@ INSERT INTO recurring_template_exceptions (
     $1, $2, $3, $4, $5, $6
 ) RETURNING *;
 
--- name: ListExceptions :many
+-- name: FindExceptions :many
 SELECT * FROM recurring_template_exceptions
 WHERE template_id = $1
   AND occurs_at BETWEEN $2 AND $3

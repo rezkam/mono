@@ -96,7 +96,7 @@ func (w *Worker) Start(ctx context.Context) error {
 func (w *Worker) RunScheduleOnce(ctx context.Context) error {
 	slog.InfoContext(ctx, "Scheduling generation jobs...")
 
-	templates, err := w.repo.GetActiveTemplatesNeedingGeneration(ctx)
+	templates, err := w.repo.FindActiveTemplatesNeedingGeneration(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active templates: %w", err)
 	}

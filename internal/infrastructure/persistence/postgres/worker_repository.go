@@ -19,7 +19,7 @@ import (
 // === Template Operations ===
 
 // GetActiveTemplatesNeedingGeneration retrieves all active templates that need task generation.
-func (s *Store) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
+func (s *Store) FindActiveTemplatesNeedingGeneration(ctx context.Context) ([]*domain.RecurringTemplate, error) {
 	dbTemplates, err := s.queries.ListAllActiveRecurringTemplates(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list active templates: %w", err)
@@ -35,28 +35,6 @@ func (s *Store) GetActiveTemplatesNeedingGeneration(ctx context.Context) ([]*dom
 	}
 
 	return templates, nil
-}
-
-// GetRecurringTemplate retrieves a single recurring template by ID.
-func (s *Store) GetRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
-	if _, err := uuid.Parse(id); err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
-	}
-
-	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
-		}
-		return nil, fmt.Errorf("failed to get template: %w", err)
-	}
-
-	template, err := dbRecurringTemplateToDomain(dbTemplate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert template: %w", err)
-	}
-
-	return template, nil
 }
 
 // UpdateRecurringTemplateGenerationWindow updates the generated_through timestamp.
@@ -112,13 +90,13 @@ func (s *Store) ScheduleGenerationJob(ctx context.Context, templateID string, sc
 	return s.CreateGenerationJobWorker(ctx, templateID, scheduledFor, from, until)
 }
 
-// GetGenerationJob retrieves job details by ID.
-func (s *Store) GetGenerationJob(ctx context.Context, id string) (*domain.GenerationJob, error) {
+// FindGenerationJobByID retrieves job details by ID.
+func (s *Store) FindGenerationJobByID(ctx context.Context, id string) (*domain.GenerationJob, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	dbJob, err := s.queries.GetGenerationJob(ctx, id)
+	dbJob, err := s.queries.FindGenerationJobByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: job %s", domain.ErrNotFound, id)

@@ -103,7 +103,7 @@ func (s *Store) FindListByID(ctx context.Context, id string) (*domain.TodoList, 
 }
 
 // ListLists retrieves todo lists with filtering, sorting, and pagination.
-func (s *Store) ListLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
+func (s *Store) FindLists(ctx context.Context, params domain.ListListsParams) (*domain.PagedListResult, error) {
 	// Build sqlc params from domain params
 	sqlcParams := sqlcgen.FindTodoListsWithFiltersParams{
 		UndoneStatuses: taskStatusesToStrings(domain.UndoneStatuses()),
@@ -564,13 +564,13 @@ func (s *Store) CreateRecurringTemplate(ctx context.Context, template *domain.Re
 }
 
 // FindRecurringTemplate retrieves a template by ID.
-func (s *Store) FindRecurringTemplate(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
+func (s *Store) FindRecurringTemplateByID(ctx context.Context, id string) (*domain.RecurringTemplate, error) {
 	templateUUID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	dbTemplate, err := s.queries.GetRecurringTemplate(ctx, templateUUID.String())
+	dbTemplate, err := s.queries.FindRecurringTemplateByID(ctx, templateUUID.String())
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
@@ -688,7 +688,7 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Distinguish between not-found and version-conflict
-			existingTemplate, lookupErr := s.queries.GetRecurringTemplate(ctx, templateUUID.String())
+			existingTemplate, lookupErr := s.queries.FindRecurringTemplateByID(ctx, templateUUID.String())
 			if lookupErr != nil {
 				if errors.Is(lookupErr, pgx.ErrNoRows) {
 					return nil, fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, params.TemplateID)

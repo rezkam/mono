@@ -80,6 +80,10 @@ type Querier interface {
 	// Only succeeds if job is still owned by the specified worker.
 	ExtendJobAvailability(ctx context.Context, arg ExtendJobAvailabilityParams) (int64, error)
 	FindExceptionByOccurrence(ctx context.Context, arg FindExceptionByOccurrenceParams) (RecurringTemplateException, error)
+	FindExceptions(ctx context.Context, arg FindExceptionsParams) ([]RecurringTemplateException, error)
+	// Retrieve a generation job by ID
+	FindGenerationJobByID(ctx context.Context, id string) (RecurringGenerationJob, error)
+	FindRecurringTemplateByID(ctx context.Context, id string) (RecurringTaskTemplate, error)
 	// Find templates that need generation (generated_through < target date)
 	FindStaleTemplates(ctx context.Context, arg FindStaleTemplatesParams) ([]RecurringTaskTemplate, error)
 	// Find templates needing reconciliation across all lists.
@@ -105,11 +109,8 @@ type Querier interface {
 	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
 	// Retrieve a specific dead letter job by ID.
 	GetDeadLetterJob(ctx context.Context, id pgtype.UUID) (DeadLetterJob, error)
-	// Retrieve a generation job by ID
-	GetGenerationJob(ctx context.Context, id string) (RecurringGenerationJob, error)
 	// Retrieve the current lease holder for a run type.
 	GetLease(ctx context.Context, runType string) (CronJobLease, error)
-	GetRecurringTemplate(ctx context.Context, id string) (RecurringTaskTemplate, error)
 	GetTaskStatusHistory(ctx context.Context, taskID string) ([]TaskStatusHistory, error)
 	GetTaskStatusHistoryByDateRange(ctx context.Context, arg GetTaskStatusHistoryByDateRangeParams) ([]TaskStatusHistory, error)
 	GetTodoItem(ctx context.Context, id string) (TodoItem, error)
@@ -150,7 +151,6 @@ type Querier interface {
 	ListAllActiveRecurringTemplates(ctx context.Context) ([]RecurringTaskTemplate, error)
 	ListAllExceptionsByTemplate(ctx context.Context, templateID pgtype.UUID) ([]RecurringTemplateException, error)
 	ListAllRecurringTemplatesByList(ctx context.Context, listID string) ([]RecurringTaskTemplate, error)
-	ListExceptions(ctx context.Context, arg ListExceptionsParams) ([]RecurringTemplateException, error)
 	// Retrieve unresolved dead letter jobs for admin review.
 	// Ordered by failure time (most recent first).
 	ListPendingDeadLetterJobs(ctx context.Context, limit int32) ([]DeadLetterJob, error)

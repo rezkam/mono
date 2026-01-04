@@ -150,7 +150,7 @@ func (c *PostgresCoordinator) CompleteJob(ctx context.Context, jobID, workerID s
 
 func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errMsg string, cfg worker.RetryConfig) (willRetry bool, err error) {
 	// Fetch current job to check retry count
-	job, err := c.queries.GetGenerationJob(ctx, jobID)
+	job, err := c.queries.FindGenerationJobByID(ctx, jobID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get job: %w", err)
 	}

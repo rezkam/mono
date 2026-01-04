@@ -124,6 +124,35 @@ func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const findRecurringTemplateByID = `-- name: FindRecurringTemplateByID :one
+SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days, version FROM recurring_task_templates
+WHERE id = $1
+`
+
+func (q *Queries) FindRecurringTemplateByID(ctx context.Context, id string) (RecurringTaskTemplate, error) {
+	row := q.db.QueryRow(ctx, findRecurringTemplateByID, id)
+	var i RecurringTaskTemplate
+	err := row.Scan(
+		&i.ID,
+		&i.ListID,
+		&i.Title,
+		&i.Tags,
+		&i.Priority,
+		&i.EstimatedDuration,
+		&i.RecurrencePattern,
+		&i.RecurrenceConfig,
+		&i.DueOffset,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.GeneratedThrough,
+		&i.SyncHorizonDays,
+		&i.GenerationHorizonDays,
+		&i.Version,
+	)
+	return i, err
+}
+
 const findStaleTemplates = `-- name: FindStaleTemplates :many
 SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days, version FROM recurring_task_templates
 WHERE list_id = $1
@@ -245,35 +274,6 @@ func (q *Queries) FindStaleTemplatesForReconciliation(ctx context.Context, arg F
 		return nil, err
 	}
 	return items, nil
-}
-
-const getRecurringTemplate = `-- name: GetRecurringTemplate :one
-SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days, version FROM recurring_task_templates
-WHERE id = $1
-`
-
-func (q *Queries) GetRecurringTemplate(ctx context.Context, id string) (RecurringTaskTemplate, error) {
-	row := q.db.QueryRow(ctx, getRecurringTemplate, id)
-	var i RecurringTaskTemplate
-	err := row.Scan(
-		&i.ID,
-		&i.ListID,
-		&i.Title,
-		&i.Tags,
-		&i.Priority,
-		&i.EstimatedDuration,
-		&i.RecurrencePattern,
-		&i.RecurrenceConfig,
-		&i.DueOffset,
-		&i.IsActive,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.GeneratedThrough,
-		&i.SyncHorizonDays,
-		&i.GenerationHorizonDays,
-		&i.Version,
-	)
-	return i, err
 }
 
 const listAllActiveRecurringTemplates = `-- name: ListAllActiveRecurringTemplates :many

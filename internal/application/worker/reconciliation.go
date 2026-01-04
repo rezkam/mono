@@ -209,7 +209,7 @@ func (w *ReconciliationWorker) reconcileOnce(ctx context.Context) error {
 		}
 
 		// Fetch exceptions for this template in the generation range
-		exceptions, err := w.repo.ListExceptions(ctx, template.ID, template.GeneratedThrough, generateUntil)
+		exceptions, err := w.repo.FindExceptions(ctx, template.ID, template.GeneratedThrough, generateUntil)
 		if err != nil {
 			slog.ErrorContext(ctx, "reconciliation: failed to fetch exceptions",
 				"template_id", template.ID,

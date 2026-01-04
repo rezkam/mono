@@ -99,7 +99,7 @@ func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params o
 	}
 
 	// Call service layer with filters and sorting
-	result, err := h.todoService.ListLists(r.Context(), filterParams)
+	result, err := h.todoService.FindLists(r.Context(), filterParams)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

@@ -116,7 +116,7 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 // GET /v1/lists/{list_id}/recurring-templates/{template_id}
 func (h *TodoHandler) GetRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Call service layer with list ownership validation
-	template, err := h.todoService.GetRecurringTemplate(r.Context(), listID.String(), templateID.String())
+	template, err := h.todoService.FindRecurringTemplateByID(r.Context(), listID.String(), templateID.String())
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return
@@ -299,7 +299,7 @@ func (h *TodoHandler) ListRecurringTemplateExceptions(
 	}
 
 	// Call service layer (validates template ownership)
-	exceptions, err := h.todoService.ListExceptions(r.Context(), listID.String(), templateID.String(), from, until)
+	exceptions, err := h.todoService.FindExceptions(r.Context(), listID.String(), templateID.String(), from, until)
 	if err != nil {
 		response.FromDomainError(w, r, err)
 		return

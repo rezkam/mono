@@ -97,7 +97,7 @@ func TestRecurringTemplate_UpdateViaWrongList_ReturnsNotFound(t *testing.T) {
 	assert.Equal(t, "recurring template not found", *resp.Error.Message)
 
 	// Verify the template was NOT modified
-	originalTemplate, err := ts.TodoService.GetRecurringTemplate(context.Background(), listA.Id.String(), template.Id.String())
+	originalTemplate, err := ts.TodoService.FindRecurringTemplateByID(context.Background(), listA.Id.String(), template.Id.String())
 	require.NoError(t, err)
 	assert.Equal(t, "Template in List A", originalTemplate.Title,
 		"Template should not have been modified via wrong list")
@@ -133,7 +133,7 @@ func TestRecurringTemplate_DeleteViaWrongList_ReturnsNotFound(t *testing.T) {
 	assert.Equal(t, "recurring template not found", *resp.Error.Message)
 
 	// Verify the template was NOT deleted
-	_, err := ts.TodoService.GetRecurringTemplate(context.Background(), listA.Id.String(), template.Id.String())
+	_, err := ts.TodoService.FindRecurringTemplateByID(context.Background(), listA.Id.String(), template.Id.String())
 	require.NoError(t, err, "Template should still exist - it should not have been deleted via wrong list")
 }
 

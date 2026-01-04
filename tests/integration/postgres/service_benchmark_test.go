@@ -37,7 +37,7 @@ func cleanupBenchmarkData(b *testing.B, storage todo.Repository) {
 	b.Helper()
 
 	ctx := context.Background()
-	result, err := storage.ListLists(ctx, domain.ListListsParams{Limit: 1000})
+	result, err := storage.FindLists(ctx, domain.ListListsParams{Limit: 1000})
 	if err != nil {
 		b.Logf("failed to list lists for cleanup: %v", err)
 		return
@@ -350,7 +350,7 @@ func BenchmarkListLists(b *testing.B) {
 			}
 
 			for b.Loop() {
-				_, err := todoService.ListLists(ctx, domain.ListListsParams{})
+				_, err := todoService.FindLists(ctx, domain.ListListsParams{})
 				if err != nil {
 					b.Fatalf("failed: %v", err)
 				}

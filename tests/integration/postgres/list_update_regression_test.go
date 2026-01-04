@@ -207,7 +207,7 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	}
 
 	// Verify counts via ListLists (which includes TotalItems/UndoneItems)
-	result, err := todoService.ListLists(ctx, domain.ListListsParams{})
+	result, err := todoService.FindLists(ctx, domain.ListListsParams{})
 	require.NoError(t, err)
 
 	var targetList *domain.TodoList
@@ -235,7 +235,7 @@ func TestListLists_ReturnsCorrectItemCounts(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify counts updated correctly
-	result, err = todoService.ListLists(ctx, domain.ListListsParams{})
+	result, err = todoService.FindLists(ctx, domain.ListListsParams{})
 	require.NoError(t, err)
 
 	for _, l := range result.Lists {
