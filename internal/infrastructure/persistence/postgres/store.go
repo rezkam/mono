@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rezkam/mono/internal/application/auth"
 	"github.com/rezkam/mono/internal/application/todo"
@@ -60,6 +61,24 @@ func (s *Store) Close() error {
 	return nil
 }
 
+// finalizeTx handles transaction cleanup with panic recovery.
+// Rolls back on panic or error, commits on success.
+func finalizeTx(ctx context.Context, tx pgx.Tx, err *error) {
+	// Handle panics by rolling back and re-panicking
+	if p := recover(); p != nil {
+		_ = tx.Rollback(ctx)
+		panic(p)
+	}
+
+	if *err != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			*err = fmt.Errorf("transaction failed: %w (rollback error: %v)", *err, rbErr)
+		}
+	} else {
+		*err = tx.Commit(ctx)
+	}
+}
+
 // Atomic executes a callback function within a database transaction.
 // All operations inside the callback succeed together or fail together.
 // The callback receives a Repository instance that operates within the transaction.
@@ -71,16 +90,8 @@ func (s *Store) Atomic(ctx context.Context, fn func(repo todo.Repository) error)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	// Ensure transaction is closed
-	defer func() {
-		if err != nil {
-			if rbErr := tx.Rollback(ctx); rbErr != nil {
-				err = fmt.Errorf("transaction failed: %w (rollback error: %v)", err, rbErr)
-			}
-		} else {
-			err = tx.Commit(ctx)
-		}
-	}()
+	// Ensure transaction is closed with panic recovery
+	defer finalizeTx(ctx, tx, &err)
 
 	// Create a new store instance with the transaction
 	txStore := &Store{
@@ -100,21 +111,8 @@ func (s *Store) AtomicRecurring(ctx context.Context, fn func(ops todo.RecurringO
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	defer func() {
-		// Handle panics by rolling back and re-panicking
-		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
-			panic(p)
-		}
-
-		if err != nil {
-			if rbErr := tx.Rollback(ctx); rbErr != nil {
-				err = fmt.Errorf("transaction failed: %w (rollback error: %v)", err, rbErr)
-			}
-		} else {
-			err = tx.Commit(ctx)
-		}
-	}()
+	// Ensure transaction is closed with panic recovery
+	defer finalizeTx(ctx, tx, &err)
 
 	// Create transactional store
 	txStore := &Store{
