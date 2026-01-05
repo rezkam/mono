@@ -359,7 +359,7 @@ func TestQuery_FilterByStatusAndPriority(t *testing.T) {
 	assert.Equal(t, 2, len(results), "should find 2 active high priority items")
 }
 
-func TestQuery_TagsWithJSONB(t *testing.T) {
+func TestQuery_TagsWithTextArray(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
 
@@ -371,29 +371,31 @@ func TestQuery_TagsWithJSONB(t *testing.T) {
 	`, listID, "Test List", time.Now().UTC())
 	require.NoError(t, err)
 
-	// Create items with different tag combinations
+	// Create items with different tag combinations using PostgreSQL array literal syntax
+	// Format: '{value1,value2}' for TEXT[] arrays
 	testCases := []struct {
 		id   string
-		tags string
+		tags string // PostgreSQL array literal format
 	}{
-		{"550e8400-e29b-41d4-a716-446655440200", `["urgent", "bug"]`},
-		{"550e8400-e29b-41d4-a716-446655440201", `["urgent", "feature"]`},
-		{"550e8400-e29b-41d4-a716-446655440202", `["feature", "backend"]`},
-		{"550e8400-e29b-41d4-a716-446655440203", `["frontend"]`},
+		{"550e8400-e29b-41d4-a716-446655440200", `{urgent,bug}`},
+		{"550e8400-e29b-41d4-a716-446655440201", `{urgent,feature}`},
+		{"550e8400-e29b-41d4-a716-446655440202", `{feature,backend}`},
+		{"550e8400-e29b-41d4-a716-446655440203", `{frontend}`},
 	}
 
 	for _, tc := range testCases {
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO todo_items (id, list_id, title, status, created_at, updated_at, tags)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			VALUES ($1, $2, $3, $4, $5, $6, $7::text[])
 		`, tc.id, listID, "Task", "todo", time.Now().UTC(), time.Now().UTC(), tc.tags)
 		require.NoError(t, err)
 	}
 
-	// Test JSONB contains operator (@>)
+	// Test TEXT[] contains operator (@>) - finds items containing ALL specified tags
+	// Uses ARRAY constructor in SQL for cleaner parameterization
 	rows, err := db.QueryContext(ctx, `
-		SELECT id FROM todo_items WHERE tags @> $1
-	`, `["urgent"]`)
+		SELECT id FROM todo_items WHERE tags @> ARRAY[$1]::text[]
+	`, "urgent")
 	require.NoError(t, err)
 	defer rows.Close()
 

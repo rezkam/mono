@@ -77,7 +77,7 @@ type RecurringTaskTemplate struct {
 	ID                    string           `json:"id"`
 	ListID                string           `json:"list_id"`
 	Title                 string           `json:"title"`
-	Tags                  []byte           `json:"tags"`
+	Tags                  []string         `json:"tags"`
 	Priority              sql.Null[string] `json:"priority"`
 	EstimatedDuration     pgtype.Interval  `json:"estimated_duration"`
 	RecurrencePattern     string           `json:"recurrence_pattern"`
@@ -121,7 +121,7 @@ type TodoItem struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           time.Time          `json:"updated_at"`
 	DueAt               pgtype.Timestamptz `json:"due_at"`
-	Tags                []byte             `json:"tags"`
+	Tags                []string           `json:"tags"`
 	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
 	StartsAt            pgtype.Date        `json:"starts_at"`
 	OccursAt            pgtype.Timestamptz `json:"occurs_at"`

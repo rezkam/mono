@@ -34,7 +34,7 @@ type CreateRecurringTemplateParams struct {
 	ID                    string           `json:"id"`
 	ListID                string           `json:"list_id"`
 	Title                 string           `json:"title"`
-	Tags                  []byte           `json:"tags"`
+	Tags                  []string         `json:"tags"`
 	Priority              sql.Null[string] `json:"priority"`
 	EstimatedDuration     pgtype.Interval  `json:"estimated_duration"`
 	RecurrencePattern     string           `json:"recurrence_pattern"`
@@ -449,7 +449,7 @@ type UpdateRecurringTemplateParams struct {
 	SetTitle                 bool             `json:"set_title"`
 	Title                    string           `json:"title"`
 	SetTags                  bool             `json:"set_tags"`
-	Tags                     []byte           `json:"tags"`
+	Tags                     []string         `json:"tags"`
 	SetPriority              bool             `json:"set_priority"`
 	Priority                 sql.Null[string] `json:"priority"`
 	SetEstimatedDuration     bool             `json:"set_estimated_duration"`

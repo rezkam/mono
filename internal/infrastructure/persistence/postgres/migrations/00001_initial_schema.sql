@@ -36,8 +36,12 @@ CREATE TABLE todo_items (
     updated_at timestamptz NOT NULL DEFAULT now(),
     due_at timestamptz,
 
-    -- Tags stored as JSONB array
-    tags jsonb,
+    -- Tags stored as TEXT array for native PostgreSQL array operations
+    -- Query patterns:
+    --   tags @> ARRAY['work']           -- has tag "work"
+    --   tags @> ARRAY['work', 'urgent'] -- has ALL tags (AND)
+    --   tags && ARRAY['work', 'urgent'] -- has ANY tag (OR)
+    tags TEXT[],
 
     -- Recurring task link
     recurring_template_id uuid,
@@ -137,7 +141,7 @@ CREATE TABLE recurring_task_templates (
 
     -- Template fields (same structure as todo_items)
     title TEXT NOT NULL,
-    tags jsonb,
+    tags TEXT[],
     priority TEXT
         CHECK (priority IS NULL OR priority IN ('low', 'medium', 'high', 'urgent')),
     estimated_duration INTERVAL,

@@ -82,13 +82,9 @@ func domainTodoItemToInsertParams(item *domain.TodoItem) (sqlcgen.InsertItemIgno
 		params.ActualDuration = durationToInterval(*item.ActualDuration)
 	}
 
-	// Tags
+	// Tags: Direct assignment since sqlc generates []string for TEXT[]
 	if len(item.Tags) > 0 {
-		tagsJSON, err := jsonMarshalHelper(item.Tags)
-		if err != nil {
-			return params, fmt.Errorf("failed to marshal tags: %w", err)
-		}
-		params.Tags = tagsJSON
+		params.Tags = item.Tags
 	}
 
 	// Recurring Template ID

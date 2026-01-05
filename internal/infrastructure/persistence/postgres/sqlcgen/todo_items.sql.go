@@ -25,7 +25,7 @@ type BatchCreateTodoItemsParams struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           time.Time          `json:"updated_at"`
 	DueAt               pgtype.Timestamptz `json:"due_at"`
-	Tags                []byte             `json:"tags"`
+	Tags                []string           `json:"tags"`
 	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
 	StartsAt            pgtype.Date        `json:"starts_at"`
 	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
@@ -41,7 +41,7 @@ WHERE
     (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
     (array_length($9::text[], 1) IS NULL OR status != ALL($9::text[])) AND
     (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
-    (array_length($4::text[], 1) IS NULL OR tags ?& $4::text[]) AND
+    (array_length($4::text[], 1) IS NULL OR tags @> $4::text[]) AND
     ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_at <= $5) AND
     ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_at >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
@@ -109,7 +109,7 @@ type CreateTodoItemParams struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           time.Time          `json:"updated_at"`
 	DueAt               pgtype.Timestamptz `json:"due_at"`
-	Tags                []byte             `json:"tags"`
+	Tags                []string           `json:"tags"`
 	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
 	StartsAt            pgtype.Date        `json:"starts_at"`
 	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
@@ -352,7 +352,7 @@ type InsertItemIgnoreConflictParams struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           time.Time          `json:"updated_at"`
 	DueAt               pgtype.Timestamptz `json:"due_at"`
-	Tags                []byte             `json:"tags"`
+	Tags                []string           `json:"tags"`
 	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
 	StartsAt            pgtype.Date        `json:"starts_at"`
 	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
@@ -398,7 +398,7 @@ WHERE
     (array_length($2::text[], 1) IS NULL OR i.status = ANY($2::text[])) AND
     (array_length($12::text[], 1) IS NULL OR i.status != ALL($12::text[])) AND
     (array_length($3::text[], 1) IS NULL OR i.priority = ANY($3::text[])) AND
-    (array_length($4::text[], 1) IS NULL OR i.tags ?& $4::text[]) AND
+    (array_length($4::text[], 1) IS NULL OR i.tags @> $4::text[]) AND
     ($5::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at <= $5) AND
     ($6::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at >= $6) AND
     ($7::timestamptz = '0001-01-01 00:00:00+00' OR i.updated_at >= $7) AND
@@ -463,7 +463,7 @@ type ListTasksWithFiltersRow struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           time.Time          `json:"updated_at"`
 	DueAt               pgtype.Timestamptz `json:"due_at"`
-	Tags                []byte             `json:"tags"`
+	Tags                []string           `json:"tags"`
 	RecurringTemplateID uuid.NullUUID      `json:"recurring_template_id"`
 	StartsAt            pgtype.Date        `json:"starts_at"`
 	OccursAt            pgtype.Timestamptz `json:"occurs_at"`
@@ -601,7 +601,7 @@ type UpdateTodoItemParams struct {
 	SetDueAt             bool               `json:"set_due_at"`
 	DueAt                pgtype.Timestamptz `json:"due_at"`
 	SetTags              bool               `json:"set_tags"`
-	Tags                 []byte             `json:"tags"`
+	Tags                 []string           `json:"tags"`
 	SetTimezone          bool               `json:"set_timezone"`
 	Timezone             sql.Null[string]   `json:"timezone"`
 	DetachFromTemplate   bool               `json:"detach_from_template"`

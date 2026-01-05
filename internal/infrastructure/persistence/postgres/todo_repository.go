@@ -342,13 +342,9 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 	if maskSet["tags"] {
 		sqlcParams.SetTags = true
 		if params.Tags != nil {
-			tagsJSON, err := json.Marshal(*params.Tags)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal tags: %w", err)
-			}
-			sqlcParams.Tags = tagsJSON
+			sqlcParams.Tags = *params.Tags
 		} else {
-			sqlcParams.Tags = []byte("[]")
+			sqlcParams.Tags = []string{}
 		}
 	}
 	if maskSet["timezone"] {
@@ -630,13 +626,9 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	if maskSet["tags"] {
 		sqlcParams.SetTags = true
 		if params.Tags != nil {
-			tagsJSON, err := json.Marshal(*params.Tags)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal tags: %w", err)
-			}
-			sqlcParams.Tags = tagsJSON
+			sqlcParams.Tags = *params.Tags
 		} else {
-			sqlcParams.Tags = []byte("[]")
+			sqlcParams.Tags = []string{}
 		}
 	}
 	if maskSet["priority"] {
