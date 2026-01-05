@@ -420,6 +420,27 @@ func TestUpdateRecurringTemplate_AcceptsValidTitle(t *testing.T) {
 	assert.Equal(t, "Valid Template Title", result.Title)
 }
 
+// TestCreateRecurringTemplate_RejectsNegativeSyncHorizonDays tests that
+// negative SyncHorizonDays values are rejected during template creation.
+func TestCreateRecurringTemplate_RejectsNegativeSyncHorizonDays(t *testing.T) {
+	repo := &mockRecurringRepo{}
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{})
+
+	template := &domain.RecurringTemplate{
+		ListID:                "list-123",
+		Title:                 "Test Template",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		SyncHorizonDays:       -5, // Negative value should be rejected
+		GenerationHorizonDays: 365,
+	}
+
+	_, err := service.CreateRecurringTemplate(context.Background(), template)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrSyncHorizonMustBePositive)
+}
+
 // TestUpdateRecurringTemplate_ValidatesMultipleFields tests that validation
 // is applied to all fields in the update mask.
 func TestUpdateRecurringTemplate_ValidatesMultipleFields(t *testing.T) {
@@ -449,6 +470,26 @@ func TestUpdateRecurringTemplate_ValidatesMultipleFields(t *testing.T) {
 				RecurrencePattern: ptr.To(domain.RecurrencePattern("invalid")),
 			},
 			wantError: domain.ErrInvalidRecurrencePattern,
+		},
+		{
+			name: "negative sync_horizon_days",
+			params: domain.UpdateRecurringTemplateParams{
+				TemplateID:      "template-123",
+				ListID:          "list-123",
+				UpdateMask:      []string{"sync_horizon_days"},
+				SyncHorizonDays: ptr.To(-5),
+			},
+			wantError: domain.ErrSyncHorizonMustBePositive,
+		},
+		{
+			name: "zero sync_horizon_days",
+			params: domain.UpdateRecurringTemplateParams{
+				TemplateID:      "template-123",
+				ListID:          "list-123",
+				UpdateMask:      []string{"sync_horizon_days"},
+				SyncHorizonDays: ptr.To(0),
+			},
+			wantError: domain.ErrSyncHorizonMustBePositive,
 		},
 	}
 

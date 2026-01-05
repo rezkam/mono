@@ -479,6 +479,12 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 	template.GeneratedThrough = now
 	template.IsActive = true
 
+	// Validate horizon values before applying defaults
+	// Negative values are invalid and should be rejected explicitly
+	if template.SyncHorizonDays < 0 {
+		return nil, domain.ErrSyncHorizonMustBePositive
+	}
+
 	// Apply default horizons if not set
 	if template.SyncHorizonDays == 0 {
 		template.SyncHorizonDays = 14 // Default: 2 weeks immediate

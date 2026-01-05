@@ -151,8 +151,8 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 	return nil
 }
 
-// HasPendingOrRunningJob checks if a template already has a pending or running job.
-// Returns true if template has any jobs in 'pending' or 'running' status.
+// HasPendingOrRunningJob checks if a template already has an active job.
+// Returns true if template has any jobs in 'pending', 'scheduled', or 'running' status.
 func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (bool, error) {
 	templateUUID, err := uuid.Parse(templateID)
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *Store) HasPendingOrRunningJob(ctx context.Context, templateID string) (
 		SELECT EXISTS(
 			SELECT 1 FROM recurring_generation_jobs
 			WHERE template_id = $1
-			  AND status IN ('pending', 'running')
+			  AND status IN ('pending', 'scheduled', 'running')
 			LIMIT 1
 		)
 	`, templateUUID).Scan(&exists)
