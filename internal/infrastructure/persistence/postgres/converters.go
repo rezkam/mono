@@ -172,7 +172,7 @@ type todoItemFields struct {
 	Timezone            sql.Null[string]
 	EstimatedDuration   pgtype.Interval
 	ActualDuration      pgtype.Interval
-	Tags                []byte
+	Tags                []string
 	RecurringTemplateID uuid.NullUUID
 	StartsAt            pgtype.Date
 	OccursAt            pgtype.Timestamptz
@@ -213,13 +213,9 @@ func convertTodoItemFields(fields todoItemFields) (domain.TodoItem, error) {
 		item.ActualDuration = &duration
 	}
 
-	// Tags
+	// Tags: Direct assignment since sqlc generates []string for TEXT[]
 	if len(fields.Tags) > 0 {
-		var tags []string
-		if err := json.Unmarshal(fields.Tags, &tags); err != nil {
-			return domain.TodoItem{}, fmt.Errorf("invalid tags JSON for item %s: %w", fields.ID, err)
-		}
-		item.Tags = tags
+		item.Tags = fields.Tags
 	}
 
 	// Recurring Template ID: DB uuid.NullUUID → Domain *string
@@ -319,13 +315,9 @@ func domainTodoItemToDB(item *domain.TodoItem, listID string) (sqlcgen.CreateTod
 		params.ActualDuration = durationToInterval(*item.ActualDuration)
 	}
 
-	// Tags
+	// Tags: Direct assignment since sqlc generates []string for TEXT[]
 	if len(item.Tags) > 0 {
-		tagsJSON, err := json.Marshal(item.Tags)
-		if err != nil {
-			return params, fmt.Errorf("failed to marshal tags: %w", err)
-		}
-		params.Tags = tagsJSON
+		params.Tags = item.Tags
 	}
 
 	// Recurring Template ID: Domain *string → DB uuid.NullUUID
@@ -369,13 +361,9 @@ func dbRecurringTemplateToDomain(dbTemplate sqlcgen.RecurringTaskTemplate) (*dom
 		Tags:                  []string{},
 	}
 
-	// Tags (now []byte in pgx)
+	// Tags: Direct assignment since sqlc generates []string for TEXT[]
 	if len(dbTemplate.Tags) > 0 {
-		var tags []string
-		if err := json.Unmarshal(dbTemplate.Tags, &tags); err != nil {
-			return nil, fmt.Errorf("invalid tags JSON for template %s: %w", dbTemplate.ID, err)
-		}
-		template.Tags = tags
+		template.Tags = dbTemplate.Tags
 	}
 
 	// Priority: Convert from sql.Null[string] to *TaskPriority
@@ -430,13 +418,9 @@ func domainRecurringTemplateToDB(template *domain.RecurringTemplate) (sqlcgen.Cr
 		GenerationHorizonDays: int32(template.GenerationHorizonDays),
 	}
 
-	// Tags (now []byte in pgx)
+	// Tags: Direct assignment since sqlc generates []string for TEXT[]
 	if len(template.Tags) > 0 {
-		tagsJSON, err := json.Marshal(template.Tags)
-		if err != nil {
-			return params, fmt.Errorf("failed to marshal tags: %w", err)
-		}
-		params.Tags = tagsJSON
+		params.Tags = template.Tags
 	}
 
 	// Priority: Convert from *TaskPriority to sql.Null[string]
@@ -489,10 +473,20 @@ func dbGenerationJobToDomain(dbJob sqlcgen.RecurringGenerationJob) *domain.Gener
 // === Helper Functions ===
 
 // intervalToDuration converts PostgreSQL interval to Go duration.
-// Note: This assumes intervals are stored as microseconds.
+// Handles all three PostgreSQL interval components: Months, Days, and Microseconds.
+// Uses PostgreSQL's default approximations: 30 days/month, 24 hours/day.
 func intervalToDuration(interval pgtype.Interval) time.Duration {
-	// pgtype.Interval has Microseconds field
-	return time.Duration(interval.Microseconds) * time.Microsecond
+	const (
+		microsecondsPerHour = 60 * 60 * 1_000_000
+		hoursPerDay         = 24
+		daysPerMonth        = 30 // PostgreSQL default for interval arithmetic
+	)
+
+	totalMicros := interval.Microseconds
+	totalMicros += int64(interval.Days) * hoursPerDay * microsecondsPerHour
+	totalMicros += int64(interval.Months) * daysPerMonth * hoursPerDay * microsecondsPerHour
+
+	return time.Duration(totalMicros) * time.Microsecond
 }
 
 // durationToInterval converts Go duration to PostgreSQL interval.
@@ -563,12 +557,9 @@ func domainTodoItemsToBatchParams(items []domain.TodoItem, listID string) ([]sql
 			p.ActualDuration = durationToInterval(*item.ActualDuration)
 		}
 
+		// Tags: Direct assignment since sqlc generates []string for TEXT[]
 		if len(item.Tags) > 0 {
-			tagsJSON, err := json.Marshal(item.Tags)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal tags for item %s: %w", item.ID, err)
-			}
-			p.Tags = tagsJSON
+			p.Tags = item.Tags
 		}
 
 		recurringTemplateID, err := stringPtrToNullUUID(item.RecurringTemplateID)
@@ -584,11 +575,6 @@ func domainTodoItemsToBatchParams(items []domain.TodoItem, listID string) ([]sql
 }
 
 // === Additional Helpers for Hybrid Recurring Refactoring ===
-
-// jsonMarshalHelper marshals any value to JSON bytes.
-func jsonMarshalHelper(v any) ([]byte, error) {
-	return json.Marshal(v)
-}
 
 // timeToDate converts time.Time to pgtype.Date for database DATE columns.
 func timeToDate(t time.Time) pgtype.Date {
