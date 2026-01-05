@@ -40,19 +40,23 @@ jobs:
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
       - name: Generate Code (OpenAPI, sqlc)
-        run: make gen
+        run: |
+          oapi-codegen -config api/openapi/oapi-codegen.yaml api/openapi/mono.yaml
+          sqlc generate
 
       - name: Verify Generated Code In Sync
         run: |
-          git diff --exit-code || (echo "Generated code is out of sync. Run 'make gen' and commit." && exit 1)
+          git diff --exit-code || (echo "Generated code is out of sync. Run 'just gen' and commit." && exit 1)
 
       - name: Security Scan
-        run: make security
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
       - name: Verify sqlc Generated Code
         run: |
-          make gen-sqlc
-          git diff --exit-code internal/infrastructure/persistence/postgres/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'make gen-sqlc' and commit." && exit 1)
+          sqlc generate
+          git diff --exit-code internal/infrastructure/persistence/postgres/sqlcgen/ || (echo "sqlc generated code is out of sync. Run 'just gen-sqlc' and commit." && exit 1)
 
       - name: Install golangci-lint
         run: |
@@ -65,20 +69,23 @@ jobs:
           golangci-lint --version
 
       - name: Run Linters
-        run: make lint
+        run: golangci-lint run
 
       - name: Run Unit Tests
-        run: make test
+        run: go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -v
 
       - name: Apply Database Migrations
-        run: make db-migrate-up
-        env:
-          DB_URL: "postgres://postgres:postgres@localhost:5432/mono_test?sslmode=disable"
+        run: |
+          go run -tags 'no_sqlite' github.com/pressly/goose/v3/cmd/goose@latest \
+            -dir internal/infrastructure/persistence/postgres/migrations \
+            postgres \
+            "postgres://postgres:postgres@localhost:5432/mono_test?sslmode=disable" \
+            up
 
       - name: Run Integration Tests
-        run: make test-integration-run
+        run: go test -v -p 1 ./tests/integration/... -count=1
         env:
           MONO_STORAGE_DSN: "postgres://postgres:postgres@localhost:5432/mono_test?sslmode=disable"
 
       - name: Build Binary
-        run: make build
+        run: go build -o mono-server ./cmd/server

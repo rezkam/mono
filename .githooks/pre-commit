@@ -14,7 +14,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
             if ! gofmt -l "$file" | grep -q .; then
                 :
             else
-                echo "File $file is not properly formatted. Run 'make fmt' to fix."
+                echo "File $file is not properly formatted. Run 'just fmt' to fix."
                 exit 1
             fi
         fi
@@ -35,7 +35,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
     echo "Running timezone linter on staged files..."
     # Build the linter if it doesn't exist
     if [ ! -f "./timeutc" ]; then
-        make build-timeutc-linter
+        just build-timeutc-linter
     fi
     # Run on packages instead of individual files, excluding testdata and generated code
     LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | grep -v sqlcgen | grep -v '^ *$' | tr '\n' ' ')
@@ -46,7 +46,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
     echo "Running interface{} linter on staged files..."
     # Build the linter if it doesn't exist
     if [ ! -f "./nointerface" ]; then
-        make build-nointerface-linter
+        just build-nointerface-linter
     fi
     # Run on packages instead of individual files, excluding testdata and generated code
     if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
@@ -54,7 +54,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
     fi
 
     echo "Running tests..."
-    make test
+    just test
 else
     echo "No staged Go files to check."
 fi

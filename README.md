@@ -108,7 +108,7 @@ The project uses git hooks for quality assurance:
 
 ```bash
 # Enable hooks
-make setup-hooks
+just setup-hooks
 ```
 
 ### Testing
