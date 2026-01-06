@@ -84,8 +84,6 @@ type Querier interface {
 	// Retrieve a generation job by ID
 	FindGenerationJobByID(ctx context.Context, id string) (RecurringGenerationJob, error)
 	FindRecurringTemplateByID(ctx context.Context, id string) (RecurringTaskTemplate, error)
-	// Find templates that need generation (generated_through < target date)
-	FindStaleTemplates(ctx context.Context, arg FindStaleTemplatesParams) ([]RecurringTaskTemplate, error)
 	// Find templates needing reconciliation across all lists.
 	// Used by reconciliation worker to ensure all templates are properly generated.
 	// Excludes:

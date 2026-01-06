@@ -71,14 +71,6 @@ WHERE id = $2;
 DELETE FROM recurring_task_templates
 WHERE id = $1;
 
--- name: FindStaleTemplates :many
--- Find templates that need generation (generated_through < target date)
-SELECT * FROM recurring_task_templates
-WHERE list_id = $1
-  AND is_active = true
-  AND generated_through < $2
-ORDER BY created_at;
-
 -- name: FindStaleTemplatesForReconciliation :many
 -- Find templates needing reconciliation across all lists.
 -- Used by reconciliation worker to ensure all templates are properly generated.

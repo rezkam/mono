@@ -153,57 +153,6 @@ func (q *Queries) FindRecurringTemplateByID(ctx context.Context, id string) (Rec
 	return i, err
 }
 
-const findStaleTemplates = `-- name: FindStaleTemplates :many
-SELECT id, list_id, title, tags, priority, estimated_duration, recurrence_pattern, recurrence_config, due_offset, is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days, version FROM recurring_task_templates
-WHERE list_id = $1
-  AND is_active = true
-  AND generated_through < $2
-ORDER BY created_at
-`
-
-type FindStaleTemplatesParams struct {
-	ListID           string      `json:"list_id"`
-	GeneratedThrough pgtype.Date `json:"generated_through"`
-}
-
-// Find templates that need generation (generated_through < target date)
-func (q *Queries) FindStaleTemplates(ctx context.Context, arg FindStaleTemplatesParams) ([]RecurringTaskTemplate, error) {
-	rows, err := q.db.Query(ctx, findStaleTemplates, arg.ListID, arg.GeneratedThrough)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RecurringTaskTemplate{}
-	for rows.Next() {
-		var i RecurringTaskTemplate
-		if err := rows.Scan(
-			&i.ID,
-			&i.ListID,
-			&i.Title,
-			&i.Tags,
-			&i.Priority,
-			&i.EstimatedDuration,
-			&i.RecurrencePattern,
-			&i.RecurrenceConfig,
-			&i.DueOffset,
-			&i.IsActive,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.GeneratedThrough,
-			&i.SyncHorizonDays,
-			&i.GenerationHorizonDays,
-			&i.Version,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const findStaleTemplatesForReconciliation = `-- name: FindStaleTemplatesForReconciliation :many
 SELECT t.id, t.list_id, t.title, t.tags, t.priority, t.estimated_duration, t.recurrence_pattern, t.recurrence_config, t.due_offset, t.is_active, t.created_at, t.updated_at, t.generated_through, t.sync_horizon_days, t.generation_horizon_days, t.version FROM recurring_task_templates t
 WHERE t.is_active = true

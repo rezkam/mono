@@ -132,41 +132,6 @@ func (s *Store) DeleteFuturePendingItems(ctx context.Context, templateID string,
 
 // === Template Generation Tracking ===
 
-// FindStaleTemplates finds templates needing generation.
-// Returns templates where generated_through < target date.
-func (s *Store) FindStaleTemplates(ctx context.Context, listID string, untilDate time.Time) ([]*domain.RecurringTemplate, error) {
-	// Parse listID - empty string means search all lists
-	var listUUIDStr string
-	if listID != "" {
-		listUUID, err := uuid.Parse(listID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
-		}
-		listUUIDStr = listUUID.String()
-	}
-
-	params := sqlcgen.FindStaleTemplatesParams{
-		ListID:           listUUIDStr,
-		GeneratedThrough: timeToDate(untilDate),
-	}
-
-	dbTemplates, err := s.queries.FindStaleTemplates(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find stale templates: %w", err)
-	}
-
-	templates := make([]*domain.RecurringTemplate, 0, len(dbTemplates))
-	for _, dbTemplate := range dbTemplates {
-		template, err := dbRecurringTemplateToDomain(dbTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert template: %w", err)
-		}
-		templates = append(templates, template)
-	}
-
-	return templates, nil
-}
-
 // SetGeneratedThrough updates the generated_through marker after generation.
 func (s *Store) SetGeneratedThrough(ctx context.Context, templateID string, generatedThrough time.Time) error {
 	templateUUID, err := uuid.Parse(templateID)
