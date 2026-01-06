@@ -38,7 +38,8 @@ func (m *mockListListsRepo) FindLists(ctx context.Context, params domain.ListLis
 }
 
 func (m *mockListListsRepo) UpdateList(ctx context.Context, params domain.UpdateListParams) (*domain.TodoList, error) {
-	panic("not used in ListLists tests")
+	// Return success for etag validation tests
+	return &domain.TodoList{ID: params.ListID}, nil
 }
 
 func (m *mockListListsRepo) CreateItem(ctx context.Context, listID string, item *domain.TodoItem) (*domain.TodoItem, error) {
@@ -278,4 +279,89 @@ func TestUpdateItem_RejectsTitleInMaskWithNilValue(t *testing.T) {
 
 	assert.ErrorIs(t, err, domain.ErrTitleRequired,
 		"should return ErrTitleRequired when title is in update_mask but Title is nil")
+}
+
+// TestUpdateList_RejectsInvalidEtag verifies that UpdateList validates etag format
+// consistently with UpdateItem, rejecting malformed etags like "123abc".
+// BUG: Currently missing etag validation (inconsistent with UpdateItem).
+func TestUpdateList_RejectsInvalidEtag(t *testing.T) {
+	repo := &mockListListsRepo{}
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
+
+	testCases := []struct {
+		name  string
+		etag  string
+		valid bool
+	}{
+		{"valid numeric", "123", true},
+		{"trailing letters", "123abc", false},
+		{"zero", "0", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			etag := tc.etag
+			title := "Updated List"
+			params := domain.UpdateListParams{
+				ListID:     "list-123",
+				Etag:       &etag,
+				UpdateMask: []string{"title"},
+				Title:      &title,
+			}
+
+			_, err := service.UpdateList(context.Background(), params)
+
+			if tc.valid {
+				assert.NotErrorIs(t, err, domain.ErrInvalidEtagFormat)
+			} else {
+				assert.ErrorIs(t, err, domain.ErrInvalidEtagFormat,
+					"UpdateList should reject invalid etag %q", tc.etag)
+			}
+		})
+	}
+}
+
+// TestUpdateRecurringTemplate_RejectsInvalidEtag verifies that UpdateRecurringTemplate
+// validates etag format consistently with UpdateItem, rejecting malformed etags.
+// BUG: Currently missing etag validation (inconsistent with UpdateItem).
+func TestUpdateRecurringTemplate_RejectsInvalidEtag(t *testing.T) {
+	repo := &mockRecurringRepo{}
+	generator := &mockTaskGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
+
+	testCases := []struct {
+		name  string
+		etag  string
+		valid bool
+	}{
+		{"valid numeric", "123", true},
+		{"trailing letters", "123abc", false},
+		{"zero", "0", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			etag := tc.etag
+			title := "Updated Template"
+			params := domain.UpdateRecurringTemplateParams{
+				TemplateID:        "template-123",
+				ListID:            "list-123",
+				Etag:              &etag,
+				UpdateMask:        []string{"title"},
+				Title:             &title,
+				RecurrencePattern: nil,
+				RecurrenceConfig:  nil,
+			}
+
+			_, err := service.UpdateRecurringTemplate(context.Background(), params)
+
+			if tc.valid {
+				assert.NotErrorIs(t, err, domain.ErrInvalidEtagFormat)
+			} else {
+				assert.ErrorIs(t, err, domain.ErrInvalidEtagFormat,
+					"UpdateRecurringTemplate should reject invalid etag %q", tc.etag)
+			}
+		})
+	}
 }

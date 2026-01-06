@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -21,6 +22,9 @@ func (h *TodoHandler) ListDeadLetterJobs(w http.ResponseWriter, r *http.Request,
 
 	jobs, err := h.coordinator.ListDeadLetterJobs(r.Context(), limit)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to list dead letter jobs via HTTP",
+			"limit", limit,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
@@ -34,15 +38,26 @@ func (h *TodoHandler) ListDeadLetterJobs(w http.ResponseWriter, r *http.Request,
 func (h *TodoHandler) RetryDeadLetterJob(w http.ResponseWriter, r *http.Request, id types.UUID) {
 	newJobID, err := h.coordinator.RetryDeadLetterJob(r.Context(), id.String())
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to retry dead letter job via HTTP",
+			"dead_letter_id", id.String(),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
 
 	newJobUUID, err := uuid.Parse(newJobID)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to parse new job ID for retry dead letter job",
+			"dead_letter_id", id.String(),
+			"new_job_id", newJobID,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "dead letter job retried via HTTP",
+		"dead_letter_id", id.String(),
+		"new_job_id", newJobID)
 
 	response.OK(w, openapi.RetryDeadLetterJobResponse{
 		NewJobId: &newJobUUID,
@@ -53,6 +68,9 @@ func (h *TodoHandler) RetryDeadLetterJob(w http.ResponseWriter, r *http.Request,
 func (h *TodoHandler) DiscardDeadLetterJob(w http.ResponseWriter, r *http.Request, id types.UUID) {
 	var req openapi.DiscardDeadLetterJobJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.WarnContext(r.Context(), "failed to parse discard dead letter job request",
+			"dead_letter_id", id.String(),
+			"error", err)
 		response.FromDomainError(w, r, domain.ErrInvalidRequest)
 		return
 	}
@@ -64,9 +82,16 @@ func (h *TodoHandler) DiscardDeadLetterJob(w http.ResponseWriter, r *http.Reques
 
 	err := h.coordinator.DiscardDeadLetterJob(r.Context(), id.String(), note)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to discard dead letter job via HTTP",
+			"dead_letter_id", id.String(),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "dead letter job discarded via HTTP",
+		"dead_letter_id", id.String(),
+		"has_note", note != "")
 
 	w.WriteHeader(http.StatusNoContent)
 }

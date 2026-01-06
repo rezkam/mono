@@ -82,7 +82,8 @@ func (m *mockRecurringRepo) FindRecurringTemplateByID(ctx context.Context, id st
 	if m.findTemplateFn != nil {
 		return m.findTemplateFn(ctx, id)
 	}
-	panic("FindRecurringTemplate not mocked")
+	// Return default template for validation tests
+	return &domain.RecurringTemplate{ID: id, ListID: "list-123"}, nil
 }
 
 func (m *mockRecurringRepo) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {

@@ -156,6 +156,15 @@ func (s *Service) UpdateList(ctx context.Context, params domain.UpdateListParams
 		return nil, domain.ErrListNotFound
 	}
 
+	// Validate etag format if provided
+	if params.Etag != nil {
+		etag := *params.Etag
+		version, err := strconv.Atoi(etag)
+		if err != nil || version < 1 {
+			return nil, domain.ErrInvalidEtagFormat
+		}
+	}
+
 	// Validate update mask and required fields
 	if err := params.Validate(); err != nil {
 		return nil, err
@@ -620,6 +629,15 @@ func (s *Service) FindRecurringTemplateByID(ctx context.Context, listID, templat
 func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	if params.TemplateID == "" {
 		return nil, domain.ErrTemplateNotFound
+	}
+
+	// Validate etag format if provided
+	if params.Etag != nil {
+		etag := *params.Etag
+		version, err := strconv.Atoi(etag)
+		if err != nil || version < 1 {
+			return nil, domain.ErrInvalidEtagFormat
+		}
 	}
 
 	// Verify ownership before update
