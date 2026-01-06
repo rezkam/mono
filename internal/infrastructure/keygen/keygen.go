@@ -75,25 +75,9 @@ func ParseAPIKey(apiKey string) (*APIKeyParts, error) {
 	}, nil
 }
 
-// GetDisplayKey returns a safe-to-display version of the key showing only prefix and short token.
-// Example: "sk-mono-v1-a3f5d8c2b4e6-****"
-func (k *APIKeyParts) GetDisplayKey() string {
-	return fmt.Sprintf("%s-%s-%s-%s-****", k.KeyType, k.Service, k.Version, k.ShortToken)
-}
-
 // HashSecret computes BLAKE2b-256 hash of the secret and returns hex-encoded string.
 // BLAKE2b is faster than SHA-256 while maintaining security for high-entropy API keys.
 func HashSecret(secret string) string {
 	hash := blake2b.Sum256([]byte(secret))
 	return hex.EncodeToString(hash[:])
-}
-
-// MaskAPIKey returns a safe-to-log version of an API key showing only the prefix.
-// Example: "sk-mono-v1-a3f5d8c2b4e6-****" → "sk-***"
-func MaskAPIKey(apiKey string) string {
-	parts, err := ParseAPIKey(apiKey)
-	if err != nil {
-		return "***"
-	}
-	return parts.KeyType + "-***"
 }
