@@ -44,10 +44,10 @@ func NewTaskStatus(s string) (TaskStatus, error) {
 }
 
 // NewTaskPriority validates and creates a TaskPriority.
-// Returns error for invalid values.
+// Returns error for invalid values including empty string.
 func NewTaskPriority(s string) (TaskPriority, error) {
 	if s == "" {
-		return TaskPriorityMedium, nil
+		return "", fmt.Errorf("%w: priority cannot be empty", ErrInvalidTaskPriority)
 	}
 
 	priority := TaskPriority(strings.ToLower(s))
@@ -190,18 +190,36 @@ func NewItemsFilter(input ItemsFilterInput) (ItemsFilter, error) {
 }
 
 // Statuses returns the validated status filters (empty slice if not filtering).
+// Returns a defensive copy to prevent external mutation.
 func (f ItemsFilter) Statuses() []TaskStatus {
-	return f.statuses
+	if len(f.statuses) == 0 {
+		return nil
+	}
+	result := make([]TaskStatus, len(f.statuses))
+	copy(result, f.statuses)
+	return result
 }
 
 // Priorities returns the validated priority filters (empty slice if not filtering).
+// Returns a defensive copy to prevent external mutation.
 func (f ItemsFilter) Priorities() []TaskPriority {
-	return f.priorities
+	if len(f.priorities) == 0 {
+		return nil
+	}
+	result := make([]TaskPriority, len(f.priorities))
+	copy(result, f.priorities)
+	return result
 }
 
 // Tags returns the tags filter (empty slice if not filtering).
+// Returns a defensive copy to prevent external mutation.
 func (f ItemsFilter) Tags() []string {
-	return f.tags
+	if len(f.tags) == 0 {
+		return nil
+	}
+	result := make([]string, len(f.tags))
+	copy(result, f.tags)
+	return result
 }
 
 // OrderBy returns the order by field (defaults to "created_at").

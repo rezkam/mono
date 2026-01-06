@@ -388,6 +388,58 @@ func TestNewItemsFilter_DefaultValues(t *testing.T) {
 	assert.Equal(t, "desc", DefaultOrderDir)
 }
 
+// TestItemsFilter_SliceEscapePrevention verifies that returned slices cannot mutate the filter.
+// Value objects must be immutable - callers should not be able to bypass validation.
+func TestItemsFilter_SliceEscapePrevention(t *testing.T) {
+	t.Run("statuses slice cannot be mutated", func(t *testing.T) {
+		filter, err := NewItemsFilter(ItemsFilterInput{
+			Statuses: []string{"todo", "done"},
+		})
+		require.NoError(t, err)
+		require.Len(t, filter.Statuses(), 2)
+		assert.Equal(t, TaskStatusTodo, filter.Statuses()[0])
+
+		// Attempt to mutate the returned slice
+		returnedStatuses := filter.Statuses()
+		returnedStatuses[0] = "INVALID_STATUS"
+
+		// Filter should be unchanged - must return defensive copy
+		assert.Equal(t, TaskStatusTodo, filter.Statuses()[0], "filter was mutated via returned slice")
+	})
+
+	t.Run("priorities slice cannot be mutated", func(t *testing.T) {
+		filter, err := NewItemsFilter(ItemsFilterInput{
+			Priorities: []string{"high", "urgent"},
+		})
+		require.NoError(t, err)
+		require.Len(t, filter.Priorities(), 2)
+		assert.Equal(t, TaskPriorityHigh, filter.Priorities()[0])
+
+		// Attempt to mutate the returned slice
+		returnedPriorities := filter.Priorities()
+		returnedPriorities[0] = "INVALID_PRIORITY"
+
+		// Filter should be unchanged - must return defensive copy
+		assert.Equal(t, TaskPriorityHigh, filter.Priorities()[0], "filter was mutated via returned slice")
+	})
+
+	t.Run("tags slice cannot be mutated", func(t *testing.T) {
+		filter, err := NewItemsFilter(ItemsFilterInput{
+			Tags: []string{"work", "urgent"},
+		})
+		require.NoError(t, err)
+		require.Len(t, filter.Tags(), 2)
+		assert.Equal(t, "work", filter.Tags()[0])
+
+		// Attempt to mutate the returned slice
+		returnedTags := filter.Tags()
+		returnedTags[0] = "hacked"
+
+		// Filter should be unchanged - must return defensive copy
+		assert.Equal(t, "work", filter.Tags()[0], "filter was mutated via returned slice")
+	})
+}
+
 func TestNewItemsFilter_FilterLimitsConstants(t *testing.T) {
 	assert.Equal(t, 6, MaxStatusFilter)
 	assert.Equal(t, 4, MaxPriorityFilter)
@@ -491,10 +543,13 @@ func TestNewTaskPriority_AllValid(t *testing.T) {
 	}
 }
 
-func TestNewTaskPriority_Empty_DefaultsToMedium(t *testing.T) {
-	priority, err := NewTaskPriority("")
-	require.NoError(t, err)
-	assert.Equal(t, TaskPriorityMedium, priority)
+func TestNewTaskPriority_Empty_ReturnsError(t *testing.T) {
+	// Empty string should be treated as invalid, not as a default.
+	// API uses *string pointer to distinguish "not set" (nil) vs "empty" ("").
+	_, err := NewTaskPriority("")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidTaskPriority))
+	assert.Contains(t, err.Error(), "cannot be empty")
 }
 
 func TestNewTaskPriority_Invalid(t *testing.T) {
