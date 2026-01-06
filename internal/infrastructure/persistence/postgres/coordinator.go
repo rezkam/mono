@@ -185,15 +185,19 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 			return false, fmt.Errorf("failed to move to dead letter: %w", err)
 		}
 
-		// 2. Discard job in original table
-		discardParams := sqlcgen.DiscardJobAfterMaxRetriesParams{
+		// 2. Discard job with ownership verification
+		discardParams := sqlcgen.DiscardJobWithOwnershipCheckParams{
 			ID:           jobID,
-			RetryCount:   newRetryCount,
+			ClaimedBy:    sql.Null[string]{V: workerID, Valid: true},
 			ErrorMessage: sql.Null[string]{V: errMsg, Valid: true},
 		}
-		_, err = qtx.DiscardJobAfterMaxRetries(ctx, discardParams)
+		rows, err := qtx.DiscardJobWithOwnershipCheck(ctx, discardParams)
 		if err != nil {
 			return false, fmt.Errorf("failed to discard job: %w", err)
+		}
+		if rows == 0 {
+			// Lost ownership during transaction - job was reclaimed by another worker
+			return false, domain.ErrJobOwnershipLost
 		}
 
 		// 3. Commit both operations atomically

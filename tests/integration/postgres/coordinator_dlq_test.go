@@ -155,6 +155,89 @@ func TestCoordinator_OwnershipCheck_PreventsRaceConditions(t *testing.T) {
 	assert.Len(t, dlJobs, expectedCount, "Should have exactly one new DLQ entry from worker A")
 }
 
+// TestCoordinator_MaxRetryDiscard_ChecksOwnership tests the critical race condition
+// where a worker's lease expires while failing a job at max retries. Another worker
+// can reclaim the job, but the original worker should NOT be able to discard it.
+//
+// Race condition scenario:
+// 1. Worker A claims job (at max retries)
+// 2. Worker A's lease expires
+// 3. Worker B reclaims the job
+// 4. Worker A tries to fail/discard job → MUST fail with ErrJobOwnershipLost
+//
+// Without ownership check in DiscardJobAfterMaxRetries, Worker A would discard
+// Worker B's job, causing lost work.
+func TestCoordinator_MaxRetryDiscard_ChecksOwnership(t *testing.T) {
+	store, _, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
+
+	// Create template and job at max retries
+	templateID := createTestTemplate(t, store, ctx)
+	jobID, err := store.ScheduleGenerationJob(ctx, templateID, time.Time{},
+		time.Now().UTC(), time.Now().UTC().AddDate(0, 0, 7))
+	require.NoError(t, err)
+
+	// Set job to max retries
+	maxRetries := 3
+	_, err = store.Pool().Exec(ctx, `
+		UPDATE recurring_generation_jobs SET retry_count = $1 WHERE id = $2
+	`, maxRetries, jobID)
+	require.NoError(t, err)
+
+	// Worker A claims the job
+	workerA := "worker-a-" + uuid.New().String()
+	jobA, err := coordinator.ClaimNextJob(ctx, workerA, 5*time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, jobA)
+	require.Equal(t, maxRetries, jobA.RetryCount)
+
+	// Simulate lease expiration: manually expire Worker A's lease
+	_, err = store.Pool().Exec(ctx, `
+		UPDATE recurring_generation_jobs
+		SET available_at = NOW() - INTERVAL '1 minute'
+		WHERE id = $1
+	`, jobID)
+	require.NoError(t, err)
+
+	// Worker B reclaims the job (now that lease expired)
+	workerB := "worker-b-" + uuid.New().String()
+	jobB, err := coordinator.ClaimNextJob(ctx, workerB, 5*time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, jobB, "Worker B should reclaim the job after Worker A's lease expired")
+	require.Equal(t, jobID, jobB.ID)
+
+	// Worker A (belatedly) tries to fail the job at max retries
+	// This should FAIL because Worker A no longer owns the job
+	willRetry, err := coordinator.FailJob(ctx, jobID, workerA, "error from A", worker.DefaultRetryConfig())
+
+	// BUG: Currently this succeeds and discards Worker B's job!
+	// FIX: Should return ErrJobOwnershipLost
+	require.ErrorIs(t, err, domain.ErrJobOwnershipLost,
+		"Worker A should NOT be able to discard job after losing ownership - Worker B reclaimed it")
+	assert.False(t, willRetry, "Should not retry when ownership is lost")
+
+	// Verify job was NOT moved to DLQ
+	dlJobs, err := coordinator.ListDeadLetterJobs(ctx, 10)
+	require.NoError(t, err)
+	assert.Empty(t, dlJobs, "Job should NOT be in DLQ - Worker B still owns it")
+
+	// Verify job is still claimable by Worker B (not discarded)
+	var status string
+	var claimedBy *string
+	err = store.Pool().QueryRow(ctx, `
+		SELECT status, claimed_by
+		FROM recurring_generation_jobs
+		WHERE id = $1
+	`, jobID).Scan(&status, &claimedBy)
+	require.NoError(t, err)
+	assert.Equal(t, "running", status, "Job should still be running for Worker B")
+	require.NotNil(t, claimedBy, "Job should still be claimed")
+	assert.Equal(t, workerB, *claimedBy, "Job should be owned by Worker B")
+}
+
 // TestCoordinator_RetryExhaustion_MovesToDLQ verifies the progression from
 // retries to DLQ after max retries exceeded.
 func TestCoordinator_RetryExhaustion_MovesToDLQ(t *testing.T) {
