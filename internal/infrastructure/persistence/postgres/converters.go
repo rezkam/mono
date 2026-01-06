@@ -584,6 +584,15 @@ func timeToDate(t time.Time) pgtype.Date {
 	}
 }
 
+// timePtrToDate converts *time.Time to pgtype.Date for nullable DATE columns.
+// Returns invalid date when pointer is nil.
+func timePtrToDate(t *time.Time) pgtype.Date {
+	if t == nil {
+		return pgtype.Date{Valid: false}
+	}
+	return pgtype.Date{Time: *t, Valid: true}
+}
+
 // timeToTimestamptz converts time.Time to pgtype.Timestamptz for database TIMESTAMPTZ columns.
 func timeToTimestamptz(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{

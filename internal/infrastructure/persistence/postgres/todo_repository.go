@@ -363,6 +363,14 @@ func (s *Store) UpdateItem(ctx context.Context, params domain.UpdateItemParams) 
 		sqlcParams.SetActualDuration = true
 		sqlcParams.ActualDuration = durationPtrToPgtypeInterval(params.ActualDuration)
 	}
+	if maskSet["starts_at"] {
+		sqlcParams.SetStartsAt = true
+		sqlcParams.StartsAt = timePtrToDate(params.StartsAt)
+	}
+	if maskSet["due_offset"] {
+		sqlcParams.SetDueOffset = true
+		sqlcParams.DueOffset = durationPtrToPgtypeInterval(params.DueOffset)
+	}
 
 	// Handle detachment from recurring template
 	// Set by service layer when content/schedule fields are modified on recurring items

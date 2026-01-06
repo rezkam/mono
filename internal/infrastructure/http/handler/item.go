@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime/types"
@@ -62,12 +63,37 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 		item.OccursAt = req.InstanceDate
 	}
 
+	// Set starts_at if provided
+	if req.StartsAt != nil {
+		startsAt := req.StartsAt.Time
+		item.StartsAt = &startsAt
+	}
+
+	// Parse due_offset if provided
+	if req.DueOffset != nil {
+		d, err := domain.NewDuration(*req.DueOffset)
+		if err != nil {
+			response.FromDomainError(w, r, err)
+			return
+		}
+		duration := d.Value()
+		item.DueOffset = &duration
+	}
+
 	// Call service layer (validation and ID generation happens here)
 	createdItem, err := h.todoService.CreateItem(r.Context(), listID.String(), item)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to create item via HTTP",
+			"list_id", listID.String(),
+			"title", req.Title,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "item created via HTTP",
+		"item_id", createdItem.ID,
+		"list_id", listID.String())
 
 	// Map domain model to DTO
 	itemDTO := MapItemToDTO(createdItem)
@@ -154,15 +180,40 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 				duration := d.Value()
 				params.ActualDuration = &duration
 			}
+		case "starts_at":
+			if req.Item.StartsAt != nil {
+				startsAt := req.Item.StartsAt.Time
+				params.StartsAt = &startsAt
+			}
+		case "due_offset":
+			if req.Item.DueOffset != nil {
+				d, err := domain.NewDuration(*req.Item.DueOffset)
+				if err != nil {
+					response.FromDomainError(w, r, err)
+					return
+				}
+				duration := d.Value()
+				params.DueOffset = &duration
+			}
 		}
 	}
 
 	// Call service layer - returns updated item
 	updated, err := h.todoService.UpdateItem(r.Context(), params)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to update item via HTTP",
+			"list_id", listID.String(),
+			"item_id", itemID.String(),
+			"update_mask", params.UpdateMask,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "item updated via HTTP",
+		"item_id", itemID.String(),
+		"list_id", listID.String(),
+		"update_mask", params.UpdateMask)
 
 	// Map domain model to DTO
 	itemDTO := MapItemToDTO(updated)
@@ -177,9 +228,17 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 // DELETE /v1/lists/{list_id}/items/{item_id}
 func (h *TodoHandler) DeleteItem(w http.ResponseWriter, r *http.Request, listID types.UUID, itemID types.UUID) {
 	if err := h.todoService.DeleteItem(r.Context(), listID.String(), itemID.String()); err != nil {
+		slog.ErrorContext(r.Context(), "failed to delete item via HTTP",
+			"list_id", listID.String(),
+			"item_id", itemID.String(),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "item deleted via HTTP",
+		"item_id", itemID.String(),
+		"list_id", listID.String())
 
 	response.NoContent(w)
 }
@@ -217,6 +276,11 @@ func (h *TodoHandler) ListItems(w http.ResponseWriter, r *http.Request, listID t
 	// Call service layer
 	result, err := h.todoService.ListItems(r.Context(), domainParams)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to list items via HTTP",
+			"list_id", listID.String(),
+			"offset", offset,
+			"limit", domainParams.Limit,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}

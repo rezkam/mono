@@ -576,14 +576,16 @@ SET title = CASE WHEN $1::boolean THEN $2 ELSE title END,
     estimated_duration = CASE WHEN $7::boolean THEN $8 ELSE estimated_duration END,
     actual_duration = CASE WHEN $9::boolean THEN $10 ELSE actual_duration END,
     due_at = CASE WHEN $11::boolean THEN $12 ELSE due_at END,
-    tags = CASE WHEN $13::boolean THEN $14 ELSE tags END,
-    timezone = CASE WHEN $15::boolean THEN $16 ELSE timezone END,
-    recurring_template_id = CASE WHEN $17::boolean THEN NULL ELSE recurring_template_id END,
+    starts_at = CASE WHEN $13::boolean THEN $14 ELSE starts_at END,
+    due_offset = CASE WHEN $15::boolean THEN $16 ELSE due_offset END,
+    tags = CASE WHEN $17::boolean THEN $18 ELSE tags END,
+    timezone = CASE WHEN $19::boolean THEN $20 ELSE timezone END,
+    recurring_template_id = CASE WHEN $21::boolean THEN NULL ELSE recurring_template_id END,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $18
-  AND list_id = $19
-  AND ($20::integer IS NULL OR version = $20::integer)
+WHERE id = $22
+  AND list_id = $23
+  AND ($24::integer IS NULL OR version = $24::integer)
 RETURNING id, list_id, title, status, priority, estimated_duration, actual_duration, created_at, updated_at, due_at, tags, recurring_template_id, starts_at, occurs_at, due_offset, timezone, version
 `
 
@@ -600,6 +602,10 @@ type UpdateTodoItemParams struct {
 	ActualDuration       pgtype.Interval    `json:"actual_duration"`
 	SetDueAt             bool               `json:"set_due_at"`
 	DueAt                pgtype.Timestamptz `json:"due_at"`
+	SetStartsAt          bool               `json:"set_starts_at"`
+	StartsAt             pgtype.Date        `json:"starts_at"`
+	SetDueOffset         bool               `json:"set_due_offset"`
+	DueOffset            pgtype.Interval    `json:"due_offset"`
 	SetTags              bool               `json:"set_tags"`
 	Tags                 []string           `json:"tags"`
 	SetTimezone          bool               `json:"set_timezone"`
@@ -634,6 +640,10 @@ func (q *Queries) UpdateTodoItem(ctx context.Context, arg UpdateTodoItemParams) 
 		arg.ActualDuration,
 		arg.SetDueAt,
 		arg.DueAt,
+		arg.SetStartsAt,
+		arg.StartsAt,
+		arg.SetDueOffset,
+		arg.DueOffset,
 		arg.SetTags,
 		arg.Tags,
 		arg.SetTimezone,

@@ -118,6 +118,8 @@ type UpdateItemParams struct {
 	Status            *TaskStatus
 	Priority          *TaskPriority
 	DueAt             *time.Time
+	StartsAt          *time.Time
+	DueOffset         *time.Duration
 	Tags              *[]string
 	Timezone          *string
 	EstimatedDuration *time.Duration

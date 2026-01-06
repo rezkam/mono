@@ -51,6 +51,14 @@ func ptrDuration(d *time.Duration) *string {
 	return &s
 }
 
+func ptrDate(t *time.Time) *types.Date {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+	date := types.Date{Time: *t}
+	return &date
+}
+
 // Domain → DTO mappers
 
 // MapListToDTO converts domain.TodoList to openapi.TodoList.
@@ -74,6 +82,8 @@ func MapItemToDTO(item *domain.TodoItem) openapi.TodoItem {
 		CreatedAt:         ptrTime(item.CreatedAt),
 		UpdatedAt:         ptrTime(item.UpdatedAt),
 		DueAt:             item.DueAt,
+		StartsAt:          ptrDate(item.StartsAt),
+		DueOffset:         ptrDuration(item.DueOffset),
 		Tags:              &item.Tags,
 		EstimatedDuration: ptrDuration(item.EstimatedDuration),
 		ActualDuration:    ptrDuration(item.ActualDuration),

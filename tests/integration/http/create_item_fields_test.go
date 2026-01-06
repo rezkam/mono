@@ -149,7 +149,7 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 		require.NotNil(t, resp.Item)
 		require.NotNil(t, resp.Item.EstimatedDuration, "estimated_duration should be in response")
-		assert.Equal(t, "1h30m0s", *resp.Item.EstimatedDuration)
+		assert.Equal(t, "PT1H30M", *resp.Item.EstimatedDuration, "estimated_duration should be ISO 8601 format")
 	})
 
 	t.Run("timezone is mapped", func(t *testing.T) {
@@ -199,9 +199,84 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		assert.Equal(t, instanceDate.UTC(), resp.Item.InstanceDate.UTC())
 	})
 
+	t.Run("starts_at is mapped", func(t *testing.T) {
+		startsAt := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+		reqBody := map[string]any{
+			"title":     "Starts At Test",
+			"starts_at": startsAt.Format("2006-01-02"), // Date only format
+		}
+		body, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/lists/%s/items", listID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+		w := httptest.NewRecorder()
+		ts.Router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+
+		var resp openapi.CreateItemResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.NotNil(t, resp.Item)
+		require.NotNil(t, resp.Item.StartsAt, "starts_at should be in response")
+		assert.Equal(t, "2025-06-15", resp.Item.StartsAt.String())
+	})
+
+	t.Run("due_offset is mapped", func(t *testing.T) {
+		reqBody := map[string]any{
+			"title":      "Due Offset Test",
+			"due_offset": "PT3H", // ISO 8601 duration: 3 hours
+		}
+		body, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/lists/%s/items", listID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+		w := httptest.NewRecorder()
+		ts.Router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+
+		var resp openapi.CreateItemResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.NotNil(t, resp.Item)
+		require.NotNil(t, resp.Item.DueOffset, "due_offset should be in response")
+		assert.Equal(t, "PT3H", *resp.Item.DueOffset, "due_offset should be ISO 8601 format")
+	})
+
+	t.Run("starts_at and due_offset together", func(t *testing.T) {
+		startsAt := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
+		reqBody := map[string]any{
+			"title":      "Starts At + Due Offset Test",
+			"starts_at":  startsAt.Format("2006-01-02"),
+			"due_offset": "PT2H30M", // 2 hours 30 minutes
+		}
+		body, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/lists/%s/items", listID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+		w := httptest.NewRecorder()
+		ts.Router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+
+		var resp openapi.CreateItemResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.NotNil(t, resp.Item)
+		require.NotNil(t, resp.Item.StartsAt, "starts_at should be in response")
+		require.NotNil(t, resp.Item.DueOffset, "due_offset should be in response")
+		assert.Equal(t, "2025-07-01", resp.Item.StartsAt.String())
+		assert.Equal(t, "PT2H30M", *resp.Item.DueOffset, "due_offset should be ISO 8601 format")
+	})
+
 	t.Run("all fields together", func(t *testing.T) {
 		dueTime := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
 		instanceDate := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
+		startsAt := time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)
 
 		reqBody := map[string]any{
 			"title":              "Complete Item Test",
@@ -211,6 +286,8 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 			"estimated_duration": "PT2H45M", // ISO 8601 format
 			"timezone":           "America/New_York",
 			"instance_date":      instanceDate.Format(time.RFC3339),
+			"starts_at":          startsAt.Format("2006-01-02"),
+			"due_offset":         "PT4H",
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -242,13 +319,19 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 		assert.Equal(t, urgent, *resp.Item.Priority)
 
 		require.NotNil(t, resp.Item.EstimatedDuration)
-		assert.Equal(t, "2h45m0s", *resp.Item.EstimatedDuration)
+		assert.Equal(t, "PT2H45M", *resp.Item.EstimatedDuration, "estimated_duration should be ISO 8601 format")
 
 		require.NotNil(t, resp.Item.Timezone)
 		assert.Equal(t, "America/New_York", *resp.Item.Timezone)
 
 		require.NotNil(t, resp.Item.InstanceDate)
 		assert.Equal(t, instanceDate.UTC(), resp.Item.InstanceDate.UTC())
+
+		require.NotNil(t, resp.Item.StartsAt)
+		assert.Equal(t, "2025-08-01", resp.Item.StartsAt.String())
+
+		require.NotNil(t, resp.Item.DueOffset)
+		assert.Equal(t, "PT4H", *resp.Item.DueOffset, "due_offset should be ISO 8601 format")
 
 		// Verify auto-generated fields
 		require.NotNil(t, resp.Item.Id)
@@ -285,12 +368,12 @@ func TestCreateItem_EstimatedDurationFormats(t *testing.T) {
 		expected string
 	}{
 		// ISO 8601 format (documented in OpenAPI spec)
-		{"ISO minutes only", "PT30M", "30m0s"},
-		{"ISO hours only", "PT2H", "2h0m0s"},
-		{"ISO hours and minutes", "PT1H30M", "1h30m0s"},
-		{"ISO seconds", "PT90S", "1m30s"},
-		{"ISO complex", "PT2H30M15S", "2h30m15s"},
-		{"ISO fractional hours", "PT1.5H", "1h30m0s"},
+		{"ISO minutes only", "PT30M", "PT30M"},
+		{"ISO hours only", "PT2H", "PT2H"},
+		{"ISO hours and minutes", "PT1H30M", "PT1H30M"},
+		{"ISO seconds", "PT90S", "PT1M30S"},
+		{"ISO complex", "PT2H30M15S", "PT2H30M15S"},
+		{"ISO fractional hours", "PT1.5H", "PT1H30M"},
 	}
 
 	for _, tc := range testCases {

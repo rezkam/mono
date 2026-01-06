@@ -650,6 +650,19 @@ components:
           type: string
           description: IANA timezone (e.g., 'Europe/Stockholm')
           example: "America/New_York"
+        starts_at:
+          type: string
+          format: date
+          description: |
+            When the task becomes active/visible.
+            For recurring items: set from the occurrence pattern.
+            For direct items: explicitly set to schedule future tasks.
+        due_offset:
+          type: string
+          description: |
+            Duration from starts_at to due_at (ISO 8601 duration).
+            If set with starts_at, due_at = starts_at + due_offset.
+          example: "PT2H"
 
     CreateItemResponse:
       type: object
@@ -675,6 +688,8 @@ components:
               - status
               - priority
               - due_at
+              - starts_at
+              - due_offset
               - tags
               - estimated_duration
               - actual_duration

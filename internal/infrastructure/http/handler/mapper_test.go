@@ -97,3 +97,45 @@ func TestMapItemToDTO_ZeroDuration(t *testing.T) {
 	require.NotNil(t, dto.EstimatedDuration)
 	assert.Equal(t, "PT0S", *dto.EstimatedDuration, "Zero duration should be ISO 8601 format")
 }
+
+func TestMapItemToDTO_StartsAtAndDueOffsetAreMapped(t *testing.T) {
+	// Create item with StartsAt and DueOffset populated
+	startsAt := time.Date(2025, 3, 15, 9, 0, 0, 0, time.UTC)
+	dueOffset := 2 * time.Hour
+
+	item := &domain.TodoItem{
+		ID:        "test-id-123",
+		Title:     "Scheduled Task",
+		Status:    domain.TaskStatusTodo,
+		StartsAt:  &startsAt,
+		DueOffset: &dueOffset,
+	}
+
+	// Map to DTO
+	dto := MapItemToDTO(item)
+
+	// Verify StartsAt is mapped (not nil)
+	require.NotNil(t, dto.StartsAt, "StartsAt should be mapped from domain to DTO")
+	assert.Equal(t, startsAt.Format(time.DateOnly), dto.StartsAt.String(), "StartsAt date should match")
+
+	// Verify DueOffset is mapped in ISO 8601 format
+	require.NotNil(t, dto.DueOffset, "DueOffset should be mapped from domain to DTO")
+	assert.Equal(t, "PT2H", *dto.DueOffset, "DueOffset should be ISO 8601 format")
+}
+
+func TestMapItemToDTO_NilStarsAtAndDueOffset(t *testing.T) {
+	// Create item without StartsAt and DueOffset
+	item := &domain.TodoItem{
+		ID:     "test-id-123",
+		Title:  "Regular Task",
+		Status: domain.TaskStatusTodo,
+		// StartsAt and DueOffset are nil
+	}
+
+	// Map to DTO
+	dto := MapItemToDTO(item)
+
+	// Verify nil values remain nil
+	assert.Nil(t, dto.StartsAt, "Nil StartsAt should remain nil")
+	assert.Nil(t, dto.DueOffset, "Nil DueOffset should remain nil")
+}

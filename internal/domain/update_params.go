@@ -8,6 +8,8 @@ var updateItemValidFields = map[string]struct{}{
 	"status":             {},
 	"priority":           {},
 	"due_at":             {},
+	"starts_at":          {},
+	"due_offset":         {},
 	"tags":               {},
 	"timezone":           {},
 	"estimated_duration": {},

@@ -629,6 +629,211 @@ func TestE2E_ListsPagination(t *testing.T) {
 	}
 }
 
+// TestE2E_ItemWithStartsAtAndDueOffset tests creating and updating items with scheduling fields
+func TestE2E_ItemWithStartsAtAndDueOffset(t *testing.T) {
+	// 1. Create list
+	createListJSON := `{"title": "Scheduled Tasks"}`
+	resp, err := httpRequest(t, "POST", "/api/v1/lists", createListJSON)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var createListResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&createListResp)
+	require.NoError(t, err)
+	listID := createListResp["list"].(map[string]any)["id"].(string)
+
+	// 2. Create item with starts_at and due_offset
+	startsAt := time.Now().UTC().AddDate(0, 0, 7).Format("2006-01-02")
+	createItemJSON := fmt.Sprintf(`{
+		"title": "Future Task",
+		"starts_at": "%s",
+		"due_offset": "PT2H30M",
+		"tags": ["scheduled"],
+		"priority": "high"
+	}`, startsAt)
+
+	resp, err = httpRequest(t, "POST", fmt.Sprintf("/api/v1/lists/%s/items", listID), createItemJSON)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var createItemResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&createItemResp)
+	require.NoError(t, err)
+
+	item := createItemResp["item"].(map[string]any)
+	itemID := item["id"].(string)
+
+	// Verify all input fields are present in response
+	assert.NotEmpty(t, itemID)
+	assert.Equal(t, "Future Task", item["title"])
+	assert.NotNil(t, item["starts_at"], "starts_at should be present in response")
+	assert.Equal(t, startsAt, item["starts_at"], "starts_at should match input")
+	assert.NotNil(t, item["due_offset"], "due_offset should be present in response")
+	assert.Equal(t, "PT2H30M", item["due_offset"], "due_offset should be ISO 8601 format in response")
+	assert.Equal(t, "high", item["priority"])
+
+	tags := item["tags"].([]any)
+	assert.Contains(t, tags, "scheduled")
+
+	// 3. Update starts_at and due_offset using field mask
+	newStartsAt := time.Now().UTC().AddDate(0, 0, 14).Format("2006-01-02")
+	updateJSON := fmt.Sprintf(`{
+		"item": {
+			"id": "%s",
+			"starts_at": "%s",
+			"due_offset": "PT4H"
+		},
+		"update_mask": ["starts_at", "due_offset"]
+	}`, itemID, newStartsAt)
+
+	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/lists/%s/items/%s", listID, itemID), updateJSON)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var updateResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&updateResp)
+	require.NoError(t, err)
+
+	updatedItem := updateResp["item"].(map[string]any)
+
+	// Verify updated fields (ISO 8601 format for durations)
+	assert.Equal(t, newStartsAt, updatedItem["starts_at"], "starts_at should be updated")
+	assert.Equal(t, "PT4H", updatedItem["due_offset"], "due_offset should be updated in ISO 8601 format")
+	assert.Equal(t, "Future Task", updatedItem["title"], "title should not change")
+	assert.Equal(t, "high", updatedItem["priority"], "priority should not change")
+
+	// 4. Get item and verify persistence
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/lists/%s/items", listID), "")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var listResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&listResp)
+	require.NoError(t, err)
+
+	items := listResp["items"].([]any)
+	require.Len(t, items, 1)
+
+	persistedItem := items[0].(map[string]any)
+	assert.Equal(t, itemID, persistedItem["id"])
+	assert.Equal(t, newStartsAt, persistedItem["starts_at"], "starts_at should persist")
+	assert.Equal(t, "PT4H", persistedItem["due_offset"], "due_offset should persist in ISO 8601 format")
+}
+
+// TestE2E_RecurringTemplateWithDueOffset tests that recurring templates with due_offset generate items correctly
+func TestE2E_RecurringTemplateWithDueOffset(t *testing.T) {
+	// 1. Create list
+	createListJSON := `{"title": "Recurring Scheduled Tasks"}`
+	resp, err := httpRequest(t, "POST", "/api/v1/lists", createListJSON)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var createListResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&createListResp)
+	require.NoError(t, err)
+	listID := createListResp["list"].(map[string]any)["id"].(string)
+
+	// 2. Create recurring template with due_offset
+	createTemplateJSON := `{
+		"title": "Daily Meeting",
+		"recurrence_pattern": "daily",
+		"due_offset": "PT1H30M",
+		"sync_horizon_days": 7,
+		"generation_horizon_days": 30,
+		"tags": ["meeting", "daily"]
+	}`
+
+	resp, err = httpRequest(t, "POST", fmt.Sprintf("/api/v1/lists/%s/recurring-templates", listID), createTemplateJSON)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected 201, got %d. Response: %s", resp.StatusCode, string(body))
+	}
+
+	var createTemplateResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&createTemplateResp)
+	require.NoError(t, err)
+
+	template := createTemplateResp["template"].(map[string]any)
+	templateID := template["id"].(string)
+
+	// Verify template has due_offset in response (ISO 8601 format)
+	assert.NotEmpty(t, templateID)
+	assert.Equal(t, "Daily Meeting", template["title"])
+	assert.NotNil(t, template["due_offset"], "due_offset should be present in template response")
+	assert.Equal(t, "PT1H30M", template["due_offset"], "due_offset should be ISO 8601 format in response")
+
+	templateTags := template["tags"].([]any)
+	assert.Contains(t, templateTags, "meeting")
+	assert.Contains(t, templateTags, "daily")
+
+	// 3. Get template to verify persistence
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), "")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var getTemplateResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&getTemplateResp)
+	require.NoError(t, err)
+
+	fetchedTemplate := getTemplateResp["template"].(map[string]any)
+	assert.Equal(t, "PT1H30M", fetchedTemplate["due_offset"], "due_offset should persist in template with ISO 8601 format")
+
+	// 4. List generated items and verify they have starts_at and due_offset
+	resp, err = httpRequest(t, "GET", fmt.Sprintf("/api/v1/lists/%s/items", listID), "")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var listResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&listResp)
+	require.NoError(t, err)
+
+	items := listResp["items"].([]any)
+	assert.Greater(t, len(items), 0, "Template should generate at least one item")
+
+	// Verify first generated item has all scheduling fields
+	firstItem := items[0].(map[string]any)
+	assert.Equal(t, templateID, firstItem["recurring_template_id"], "Generated item should link to template")
+	assert.NotNil(t, firstItem["instance_date"], "Generated item should have instance_date")
+	assert.NotNil(t, firstItem["starts_at"], "Generated item should have starts_at from template pattern")
+	assert.NotNil(t, firstItem["due_offset"], "Generated item should inherit due_offset from template")
+	assert.Equal(t, "PT1H30M", firstItem["due_offset"], "Generated item due_offset should match template in ISO 8601 format")
+
+	itemTags := firstItem["tags"].([]any)
+	assert.Contains(t, itemTags, "meeting", "Generated item should inherit tags from template")
+	assert.Contains(t, itemTags, "daily", "Generated item should inherit tags from template")
+
+	// 5. Update template's due_offset and verify it affects future generations
+	updateTemplateJSON := fmt.Sprintf(`{
+		"template": {
+			"id": "%s",
+			"list_id": "%s",
+			"due_offset": "PT3H"
+		},
+		"update_mask": ["due_offset"]
+	}`, templateID, listID)
+
+	resp, err = httpRequest(t, "PATCH", fmt.Sprintf("/api/v1/lists/%s/recurring-templates/%s", listID, templateID), updateTemplateJSON)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var updateTemplateResp map[string]any
+	err = json.NewDecoder(resp.Body).Decode(&updateTemplateResp)
+	require.NoError(t, err)
+
+	updatedTemplate := updateTemplateResp["template"].(map[string]any)
+	assert.Equal(t, "PT3H", updatedTemplate["due_offset"], "Template due_offset should be updated in ISO 8601 format")
+	assert.Equal(t, "Daily Meeting", updatedTemplate["title"], "Title should not change")
+}
+
 // httpRequest is a helper to make authenticated HTTP requests with JSON
 func httpRequest(t *testing.T, method, path, body string) (*http.Response, error) {
 	var reqBody io.Reader

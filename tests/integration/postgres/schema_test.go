@@ -146,7 +146,7 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 	// Create item with all new fields
 	itemID := "550e8400-e29b-41d4-a716-446655440002"
 	dueTime := time.Now().UTC().Add(24 * time.Hour)
-	tags := `["urgent", "bug", "backend"]`
+	tags := `{"urgent", "bug", "backend"}`
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO todo_items (
@@ -169,7 +169,7 @@ func TestCRUD_TodoItems_WithNewFields(t *testing.T) {
 	)
 
 	err = db.QueryRowContext(ctx, `
-		SELECT title, status, priority, estimated_duration, actual_duration, tags, due_at
+		SELECT title, status, priority, estimated_duration, actual_duration, to_json(tags)::text, due_at
 		FROM todo_items WHERE id = $1
 	`, itemID).Scan(&title, &status, &priority, &estimatedDuration, &actualDuration, &tagsJSON, &retrievedDueAt)
 	require.NoError(t, err)
