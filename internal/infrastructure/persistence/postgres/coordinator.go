@@ -500,6 +500,10 @@ func (c *PostgresCoordinator) TryAcquireExclusiveRun(ctx context.Context, runTyp
 
 	lease, err := c.queries.TryAcquireLease(ctx, params)
 	if err != nil {
+		// No rows means lease is held by another worker - this is normal contention
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false, nil
+		}
 		return nil, false, fmt.Errorf("failed to acquire lease: %w", err)
 	}
 

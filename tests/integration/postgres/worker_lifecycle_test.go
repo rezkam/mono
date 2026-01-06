@@ -241,6 +241,40 @@ func TestWorker_Lifecycle_ReconciliationExclusivity(t *testing.T) {
 	assert.Equal(t, int32(1), acquiredCount.Load(), "Only one worker should acquire exclusive lease")
 }
 
+// TestWorker_Lifecycle_LeaseContention_ReturnsNotAcquiredNotError tests that when
+// a worker tries to acquire a lease already held by another worker, it returns
+// acquired=false with no error (not sql.ErrNoRows wrapped as an error).
+// This is the correct behavior for lease contention - it's not an error, it's
+// just "someone else has the lease."
+func TestWorker_Lifecycle_LeaseContention_ReturnsNotAcquiredNotError(t *testing.T) {
+	store, _, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	coordinator := postgres.NewPostgresCoordinator(store.Pool())
+
+	runType := "test-reconciliation"
+	workerA := "worker-a-" + uuid.New().String()
+	workerB := "worker-b-" + uuid.New().String()
+	leaseDuration := 5 * time.Second
+
+	// Worker A acquires the lease
+	releaseA, acquiredA, errA := coordinator.TryAcquireExclusiveRun(ctx, runType, workerA, leaseDuration)
+	require.NoError(t, errA, "Worker A should not get error when acquiring lease")
+	require.True(t, acquiredA, "Worker A should acquire the lease")
+	require.NotNil(t, releaseA, "Worker A should get a release function")
+	defer releaseA()
+
+	// Worker B tries to acquire the SAME lease (should fail gracefully, not error)
+	releaseB, acquiredB, errB := coordinator.TryAcquireExclusiveRun(ctx, runType, workerB, leaseDuration)
+
+	// BUG: Currently errB != nil because sql.ErrNoRows is treated as an error
+	// FIX: errB should be nil - lease contention is not an error
+	require.NoError(t, errB, "Worker B should NOT get error when lease is held by another worker - this is normal contention")
+	assert.False(t, acquiredB, "Worker B should NOT acquire the lease (held by Worker A)")
+	assert.Nil(t, releaseB, "Worker B should NOT get a release function")
+}
+
 // TestWorker_Lifecycle_PanicHandling_MovesToDLQ verifies that if the worker
 // panics during processing, the recovery mechanism catches it and moves the
 // job to the DLQ.
