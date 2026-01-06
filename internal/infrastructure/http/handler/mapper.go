@@ -47,7 +47,7 @@ func ptrDuration(d *time.Duration) *string {
 	if d == nil {
 		return nil
 	}
-	s := d.String()
+	s := domain.FormatDurationISO8601(*d)
 	return &s
 }
 

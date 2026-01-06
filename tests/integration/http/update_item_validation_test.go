@@ -199,3 +199,57 @@ func TestUpdateItem_EmptyTitleRejected(t *testing.T) {
 	assert.Equal(t, "Original Valid Title", updatedItem.Title,
 		"title should remain unchanged after rejected update")
 }
+
+// TestUpdateItem_InvalidTimezone verifies that UpdateItem returns a 400 validation error
+// (not 500 internal server error) when an invalid timezone is provided.
+// BUG: Currently returns 500 because timezone validation uses fmt.Errorf instead of domain error.
+func TestUpdateItem_InvalidTimezone(t *testing.T) {
+	ts := SetupTestServer(t)
+	defer ts.Cleanup()
+
+	ctx := context.Background()
+
+	// Create a list and item
+	list, err := ts.TodoService.CreateList(ctx, "Timezone Validation List")
+	require.NoError(t, err)
+
+	item, err := ts.TodoService.CreateItem(ctx, list.ID, &domain.TodoItem{
+		Title: "Test Item",
+	})
+	require.NoError(t, err)
+
+	// Try to update with invalid timezone
+	invalidTimezone := "Invalid/Timezone"
+	reqBody := openapi.UpdateItemRequest{
+		Item: openapi.TodoItem{
+			Timezone: &invalidTimezone,
+		},
+		UpdateMask: []openapi.UpdateItemRequestUpdateMask{"timezone"},
+	}
+
+	body, err := json.Marshal(reqBody)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/lists/%s/items/%s", list.ID, item.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+	w := httptest.NewRecorder()
+	ts.Router.ServeHTTP(w, req)
+
+	// Should return 400 Bad Request with validation error (NOT 500)
+	assert.Equal(t, http.StatusBadRequest, w.Code,
+		"expected 400 for invalid timezone, got %d: %s", w.Code, w.Body.String())
+
+	var resp openapi.ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Error)
+	require.NotNil(t, resp.Error.Code)
+	assert.Equal(t, "VALIDATION_ERROR", *resp.Error.Code)
+
+	// Verify error mentions timezone field
+	require.NotNil(t, resp.Error.Details)
+	require.NotEmpty(t, *resp.Error.Details)
+	details := *resp.Error.Details
+	assert.Equal(t, "timezone", *details[0].Field)
+}

@@ -150,6 +150,8 @@ func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		ValidationError(w, "estimated_duration", "invalid duration format (expected ISO 8601 duration like 'PT1H30M')")
 	case errors.Is(err, domain.ErrDurationEmpty):
 		ValidationError(w, "estimated_duration", "duration cannot be empty")
+	case errors.Is(err, domain.ErrInvalidTimezone):
+		ValidationError(w, "timezone", "invalid timezone (expected IANA timezone like 'America/New_York')")
 
 	// Not found errors (404)
 	case errors.Is(err, domain.ErrListNotFound):

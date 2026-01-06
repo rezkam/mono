@@ -35,14 +35,19 @@ func (d Duration) Value() time.Duration {
 
 // String returns the ISO 8601 representation of the duration.
 func (d Duration) String() string {
-	if d.value == 0 {
+	return FormatDurationISO8601(d.value)
+}
+
+// FormatDurationISO8601 converts a time.Duration to ISO 8601 format (e.g., "PT1H30M").
+func FormatDurationISO8601(d time.Duration) string {
+	if d == 0 {
 		return "PT0S"
 	}
 
 	var b strings.Builder
 	b.WriteString("PT")
 
-	remaining := d.value
+	remaining := d
 
 	if hours := remaining / time.Hour; hours > 0 {
 		fmt.Fprintf(&b, "%dH", hours)

@@ -34,6 +34,7 @@ var (
 	ErrInvalidDurationFormat         = errors.New("invalid duration format")
 	ErrDurationEmpty                 = errors.New("duration cannot be empty")
 	ErrInvalidRecurrenceDayOfWeek    = errors.New("invalid recurrence day of week")
+	ErrInvalidTimezone               = errors.New("invalid timezone")
 	ErrInvalidPageToken              = errors.New("invalid page token")
 	ErrInvalidLimit                  = errors.New("invalid limit value")
 	ErrInvalidCursorFormat           = errors.New("invalid cursor format")
