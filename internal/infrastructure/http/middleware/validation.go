@@ -65,9 +65,16 @@ type ErrorField struct {
 
 // validationErrorHandler formats validation errors as JSON responses using the standard ErrorResponse format.
 // Parses OpenAPI validation errors to extract field-specific details.
-func validationErrorHandler(_ context.Context, err error, w http.ResponseWriter, _ *http.Request, opts nethttpmiddleware.ErrorHandlerOpts) {
+func validationErrorHandler(ctx context.Context, err error, w http.ResponseWriter, r *http.Request, opts nethttpmiddleware.ErrorHandlerOpts) {
 	// Parse validation error to extract field details
 	details := parseValidationError(err)
+
+	// Log validation failure with field details
+	slog.WarnContext(ctx, "request validation failed",
+		"path", r.URL.Path,
+		"method", r.Method,
+		"invalid_field_count", len(details),
+		"error", err.Error())
 
 	// Use standard ErrorResponse structure matching OpenAPI spec
 	resp := ErrorResponse{
@@ -80,7 +87,10 @@ func validationErrorHandler(_ context.Context, err error, w http.ResponseWriter,
 
 	jsonBytes, encErr := json.Marshal(resp)
 	if encErr != nil {
-		slog.Error("failed to marshal validation error response", "error", encErr)
+		slog.ErrorContext(ctx, "failed to marshal validation error response",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"error", encErr)
 		// Fallback to pre-marshaled error
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

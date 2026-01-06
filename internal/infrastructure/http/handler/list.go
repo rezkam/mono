@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime/types"
@@ -24,9 +25,15 @@ func (h *TodoHandler) CreateList(w http.ResponseWriter, r *http.Request) {
 	// Call service layer (validation happens here via value objects in future)
 	list, err := h.todoService.CreateList(r.Context(), req.Title)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to create list via HTTP",
+			"title", req.Title,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "list created via HTTP",
+		"list_id", list.ID)
 
 	// Map domain model to DTO
 	listDTO := MapListToDTO(list)
@@ -43,6 +50,9 @@ func (h *TodoHandler) GetList(w http.ResponseWriter, r *http.Request, id types.U
 	// Call service layer
 	list, err := h.todoService.GetList(r.Context(), id.String())
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to get list via HTTP",
+			"list_id", id.String(),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
@@ -77,6 +87,10 @@ func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params o
 		OrderDir: sortDir,
 	})
 	if err != nil {
+		slog.WarnContext(r.Context(), "invalid sorting parameters for list lists",
+			"sort_by", sortBy,
+			"sort_dir", sortDir,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
@@ -101,6 +115,10 @@ func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params o
 	// Call service layer with filters and sorting
 	result, err := h.todoService.FindLists(r.Context(), filterParams)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to list lists via HTTP",
+			"offset", offset,
+			"limit", filterParams.Limit,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}

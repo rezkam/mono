@@ -3,6 +3,7 @@ package todo
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"time"
@@ -503,10 +504,23 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 	// No exceptions for newly created template
 	syncItems, err := s.generator.GenerateTasksForTemplateWithExceptions(ctx, template, now, syncEnd, nil)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to generate sync items for recurring template",
+			"list_id", template.ListID,
+			"recurrence_pattern", template.RecurrencePattern,
+			"sync_horizon_days", template.SyncHorizonDays,
+			"error", err)
 		return nil, fmt.Errorf("failed to generate sync items: %w", err)
 	}
 
+	slog.InfoContext(ctx, "creating recurring template",
+		"list_id", template.ListID,
+		"recurrence_pattern", template.RecurrencePattern,
+		"sync_horizon_days", template.SyncHorizonDays,
+		"generation_horizon_days", template.GenerationHorizonDays,
+		"sync_items_count", len(syncItems))
+
 	var created *domain.RecurringTemplate
+	var asyncJobScheduled bool
 
 	// Use AtomicRecurring: template + items + generation marker + job all succeed/fail together
 	err = s.repo.AtomicRecurring(ctx, func(ops RecurringOperations) error {
@@ -543,13 +557,25 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 			if err != nil {
 				return fmt.Errorf("failed to schedule generation job: %w", err)
 			}
+			asyncJobScheduled = true
 		}
 
 		return nil
 	})
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to create recurring template",
+			"list_id", template.ListID,
+			"recurrence_pattern", template.RecurrencePattern,
+			"error", err)
 		return nil, err
 	}
+
+	slog.InfoContext(ctx, "recurring template created successfully",
+		"template_id", created.ID,
+		"list_id", created.ListID,
+		"recurrence_pattern", created.RecurrencePattern,
+		"sync_items_inserted", len(syncItems),
+		"async_job_scheduled", asyncJobScheduled)
 
 	return created, nil
 }
@@ -586,14 +612,26 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 	// Verify ownership before update
 	existing, err := s.repo.FindRecurringTemplateByID(ctx, params.TemplateID)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to find recurring template for update",
+			"template_id", params.TemplateID,
+			"list_id", params.ListID,
+			"error", err)
 		return nil, err
 	}
 	if existing.ListID != params.ListID {
+		slog.WarnContext(ctx, "template ownership mismatch during update",
+			"template_id", params.TemplateID,
+			"requested_list_id", params.ListID,
+			"actual_list_id", existing.ListID)
 		return nil, domain.ErrTemplateNotFound
 	}
 
 	// Validate update mask and required fields
 	if err := params.Validate(); err != nil {
+		slog.WarnContext(ctx, "invalid update parameters for recurring template",
+			"template_id", params.TemplateID,
+			"update_mask", params.UpdateMask,
+			"error", err)
 		return nil, err
 	}
 
@@ -628,13 +666,33 @@ func (s *Service) UpdateRecurringTemplate(ctx context.Context, params domain.Upd
 	// Check if this is a pattern change (requires regeneration)
 	isPatternChange := s.isPatternChange(params)
 
+	slog.InfoContext(ctx, "updating recurring template",
+		"template_id", params.TemplateID,
+		"list_id", params.ListID,
+		"update_mask", params.UpdateMask,
+		"is_pattern_change", isPatternChange)
+
 	if isPatternChange {
 		// Pattern change: delete future items and regenerate
 		return s.updateTemplateWithRegeneration(ctx, existing, params)
 	}
 
 	// Content-only change: just update the template
-	return s.repo.UpdateRecurringTemplate(ctx, params)
+	updated, err := s.repo.UpdateRecurringTemplate(ctx, params)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to update recurring template",
+			"template_id", params.TemplateID,
+			"update_mask", params.UpdateMask,
+			"error", err)
+		return nil, err
+	}
+
+	slog.InfoContext(ctx, "recurring template updated successfully",
+		"template_id", updated.ID,
+		"list_id", updated.ListID,
+		"update_type", "content_only")
+
+	return updated, nil
 }
 
 // isPatternChange detects if the update changes scheduling behavior.
@@ -667,7 +725,14 @@ func shouldCreateException(updateMask []string) bool {
 func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *domain.RecurringTemplate, params domain.UpdateRecurringTemplateParams) (*domain.RecurringTemplate, error) {
 	now := time.Now().UTC()
 
+	slog.InfoContext(ctx, "updating recurring template with regeneration",
+		"template_id", params.TemplateID,
+		"list_id", params.ListID,
+		"update_mask", params.UpdateMask)
+
 	var updated *domain.RecurringTemplate
+	var regeneratedCount int
+	var asyncJobScheduled bool
 
 	// Use AtomicRecurring: update template + regenerate items + generation marker + job all succeed/fail together
 	err := s.repo.AtomicRecurring(ctx, func(ops RecurringOperations) error {
@@ -680,9 +745,13 @@ func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *
 		}
 
 		// 2. Delete future pending items (before regenerating with new pattern)
-		if _, err := ops.DeleteFuturePendingItems(ctx, params.TemplateID, now); err != nil {
+		deletedCount, err := ops.DeleteFuturePendingItems(ctx, params.TemplateID, now)
+		if err != nil {
 			return fmt.Errorf("failed to delete future items: %w", err)
 		}
+		slog.DebugContext(ctx, "deleted future pending items",
+			"template_id", params.TemplateID,
+			"deleted_count", deletedCount)
 
 		// 3. Calculate sync horizon from UPDATED template
 		syncHorizon := updated.SyncHorizonDays
@@ -702,6 +771,7 @@ func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *
 			if _, err := ops.BatchInsertItemsIgnoreConflict(ctx, syncItems); err != nil {
 				return fmt.Errorf("failed to insert regenerated items: %w", err)
 			}
+			regeneratedCount = len(syncItems)
 		}
 
 		// 6. Update generation marker
@@ -727,13 +797,25 @@ func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *
 			if err != nil {
 				return fmt.Errorf("failed to schedule generation job: %w", err)
 			}
+			asyncJobScheduled = true
 		}
 
 		return nil
 	})
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to update recurring template with regeneration",
+			"template_id", params.TemplateID,
+			"update_mask", params.UpdateMask,
+			"error", err)
 		return nil, err
 	}
+
+	slog.InfoContext(ctx, "recurring template updated with regeneration successfully",
+		"template_id", updated.ID,
+		"list_id", updated.ListID,
+		"update_type", "pattern_change",
+		"regenerated_items", regeneratedCount,
+		"async_job_scheduled", asyncJobScheduled)
 
 	return updated, nil
 }
@@ -748,15 +830,35 @@ func (s *Service) DeleteRecurringTemplate(ctx context.Context, listID, templateI
 	// Verify ownership before delete
 	existing, err := s.repo.FindRecurringTemplateByID(ctx, templateID)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to find recurring template for deletion",
+			"template_id", templateID,
+			"list_id", listID,
+			"error", err)
 		return err
 	}
 	if existing.ListID != listID {
+		slog.WarnContext(ctx, "template ownership mismatch during deletion",
+			"template_id", templateID,
+			"requested_list_id", listID,
+			"actual_list_id", existing.ListID)
 		return domain.ErrTemplateNotFound
 	}
 
+	slog.InfoContext(ctx, "deleting recurring template",
+		"template_id", templateID,
+		"list_id", listID)
+
 	if err := s.repo.DeleteRecurringTemplate(ctx, templateID); err != nil {
+		slog.ErrorContext(ctx, "failed to delete recurring template",
+			"template_id", templateID,
+			"list_id", listID,
+			"error", err)
 		return err // Repository returns domain errors
 	}
+
+	slog.InfoContext(ctx, "recurring template deleted successfully",
+		"template_id", templateID,
+		"list_id", listID)
 
 	return nil
 }

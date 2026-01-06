@@ -38,25 +38,52 @@ func NewPostgresCoordinator(pool *pgxpool.Pool) *PostgresCoordinator {
 
 func (c *PostgresCoordinator) InsertJob(ctx context.Context, job *domain.GenerationJob) error {
 	params := domainJobToInsertParams(job)
-	return c.queries.InsertGenerationJob(ctx, params)
+	err := c.queries.InsertGenerationJob(ctx, params)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to insert generation job",
+			"job_id", job.ID,
+			"template_id", job.TemplateID,
+			"scheduled_for", job.ScheduledFor,
+			"error", err)
+	}
+	return err
 }
 
 func (c *PostgresCoordinator) InsertMany(ctx context.Context, jobs []*domain.GenerationJob) error {
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction for batch job insert",
+			"batch_size", len(jobs),
+			"error", err)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	qtx := c.queries.WithTx(tx)
-	for _, job := range jobs {
+	for i, job := range jobs {
 		params := domainJobToInsertParams(job)
 		if err := qtx.InsertGenerationJob(ctx, params); err != nil {
+			slog.ErrorContext(ctx, "failed to insert job in batch",
+				"job_id", job.ID,
+				"template_id", job.TemplateID,
+				"batch_position", i,
+				"batch_size", len(jobs),
+				"error", err)
 			return fmt.Errorf("failed to insert job %s: %w", job.ID, err)
 		}
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "failed to commit batch job insert transaction",
+			"batch_size", len(jobs),
+			"error", err)
+		return err
+	}
+
+	slog.InfoContext(ctx, "batch job insertion completed",
+		"batch_size", len(jobs))
+
+	return nil
 }
 
 // === Job Claiming & Processing ===
@@ -64,6 +91,9 @@ func (c *PostgresCoordinator) InsertMany(ctx context.Context, jobs []*domain.Gen
 func (c *PostgresCoordinator) ClaimNextJob(ctx context.Context, workerID string, availabilityTimeout time.Duration) (*domain.GenerationJob, error) {
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction for job claim",
+			"worker_id", workerID,
+			"error", err)
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -74,8 +104,11 @@ func (c *PostgresCoordinator) ClaimNextJob(ctx context.Context, workerID string,
 	row, err := qtx.ClaimNextPendingJob(ctx)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil // No jobs available
+			return nil, nil // No jobs available - not an error
 		}
+		slog.ErrorContext(ctx, "failed to claim next job",
+			"worker_id", workerID,
+			"error", err)
 		return nil, fmt.Errorf("failed to claim job: %w", err)
 	}
 
@@ -88,10 +121,18 @@ func (c *PostgresCoordinator) ClaimNextJob(ctx context.Context, workerID string,
 	}
 	_, err = qtx.MarkJobAsRunning(ctx, markParams)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to mark job as running",
+			"job_id", row.ID,
+			"worker_id", workerID,
+			"error", err)
 		return nil, fmt.Errorf("failed to mark job as running: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "failed to commit job claim transaction",
+			"job_id", row.ID,
+			"worker_id", workerID,
+			"error", err)
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
@@ -140,9 +181,16 @@ func (c *PostgresCoordinator) CompleteJob(ctx context.Context, jobID, workerID s
 
 	rows, err := c.queries.CompleteJobWithOwnershipCheck(ctx, params)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to complete job",
+			"job_id", jobID,
+			"worker_id", workerID,
+			"error", err)
 		return fmt.Errorf("failed to complete job: %w", err)
 	}
 	if rows == 0 {
+		slog.WarnContext(ctx, "lost job ownership during completion",
+			"job_id", jobID,
+			"worker_id", workerID)
 		return domain.ErrJobOwnershipLost
 	}
 	return nil
@@ -152,6 +200,10 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 	// Fetch current job to check retry count
 	job, err := c.queries.FindGenerationJobByID(ctx, jobID)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to fetch job for failure handling",
+			"job_id", jobID,
+			"worker_id", workerID,
+			"error", err)
 		return false, fmt.Errorf("failed to get job: %w", err)
 	}
 
@@ -159,9 +211,20 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 
 	// Check if we've exhausted retries
 	if newRetryCount > int32(cfg.MaxRetries) {
+		slog.WarnContext(ctx, "job exhausted retries, moving to dead letter queue",
+			"job_id", jobID,
+			"template_id", job.TemplateID,
+			"worker_id", workerID,
+			"retry_count", newRetryCount,
+			"max_retries", cfg.MaxRetries,
+			"error", errMsg)
+
 		// Max retries exceeded - atomically move to DLQ and discard
 		tx, err := c.pool.Begin(ctx)
 		if err != nil {
+			slog.ErrorContext(ctx, "failed to begin transaction for DLQ move",
+				"job_id", jobID,
+				"error", err)
 			return false, fmt.Errorf("failed to begin transaction: %w", err)
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
@@ -182,6 +245,10 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 
 		// 1. Move to dead letter queue
 		if err := c.moveJobToDeadLetterTx(ctx, qtx, domainJob, "exhausted", errMsg); err != nil {
+			slog.ErrorContext(ctx, "failed to insert job into dead letter queue",
+				"job_id", jobID,
+				"template_id", job.TemplateID,
+				"error", err)
 			return false, fmt.Errorf("failed to move to dead letter: %w", err)
 		}
 
@@ -193,17 +260,31 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 		}
 		rows, err := qtx.DiscardJobWithOwnershipCheck(ctx, discardParams)
 		if err != nil {
+			slog.ErrorContext(ctx, "failed to discard job after DLQ insert",
+				"job_id", jobID,
+				"error", err)
 			return false, fmt.Errorf("failed to discard job: %w", err)
 		}
 		if rows == 0 {
 			// Lost ownership during transaction - job was reclaimed by another worker
+			slog.WarnContext(ctx, "lost job ownership during DLQ transaction",
+				"job_id", jobID,
+				"worker_id", workerID)
 			return false, domain.ErrJobOwnershipLost
 		}
 
 		// 3. Commit both operations atomically
 		if err := tx.Commit(ctx); err != nil {
+			slog.ErrorContext(ctx, "failed to commit DLQ transaction",
+				"job_id", jobID,
+				"error", err)
 			return false, fmt.Errorf("failed to commit transaction: %w", err)
 		}
+
+		slog.InfoContext(ctx, "job moved to dead letter queue",
+			"job_id", jobID,
+			"template_id", job.TemplateID,
+			"retry_count", newRetryCount)
 
 		return false, nil // Job will not retry, moved to DLQ
 	}
@@ -211,6 +292,16 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 	// Calculate retry delay with exponential backoff + full jitter
 	retryDelay := calculateRetryDelay(int(newRetryCount), cfg)
 	scheduledFor := time.Now().UTC().Add(retryDelay)
+
+	slog.InfoContext(ctx, "scheduling job retry",
+		"job_id", jobID,
+		"template_id", job.TemplateID,
+		"worker_id", workerID,
+		"retry_count", newRetryCount,
+		"max_retries", cfg.MaxRetries,
+		"retry_delay_seconds", retryDelay.Seconds(),
+		"scheduled_for", scheduledFor,
+		"error", errMsg)
 
 	retryParams := sqlcgen.ScheduleJobRetryParams{
 		ID:           jobID,
@@ -222,9 +313,16 @@ func (c *PostgresCoordinator) FailJob(ctx context.Context, jobID, workerID, errM
 
 	rows, err := c.queries.ScheduleJobRetry(ctx, retryParams)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to schedule job retry",
+			"job_id", jobID,
+			"retry_count", newRetryCount,
+			"error", err)
 		return false, fmt.Errorf("failed to schedule retry: %w", err)
 	}
 	if rows == 0 {
+		slog.WarnContext(ctx, "lost job ownership during retry scheduling",
+			"job_id", jobID,
+			"worker_id", workerID)
 		return false, domain.ErrJobOwnershipLost
 	}
 
@@ -367,9 +465,21 @@ func (c *PostgresCoordinator) moveJobToDeadLetterTx(
 }
 
 func (c *PostgresCoordinator) MoveToDeadLetter(ctx context.Context, job *domain.GenerationJob, workerID, errType, errMsg string, stackTrace *string) error {
+	slog.WarnContext(ctx, "moving job to dead letter queue",
+		"job_id", job.ID,
+		"template_id", job.TemplateID,
+		"worker_id", workerID,
+		"error_type", errType,
+		"retry_count", job.RetryCount)
+
 	// Begin transaction for atomicity: both DLQ insert and job discard must succeed together
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction for dead letter move",
+			"job_id", job.ID,
+			"template_id", job.TemplateID,
+			"error_type", errType,
+			"error", err)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -379,11 +489,17 @@ func (c *PostgresCoordinator) MoveToDeadLetter(ctx context.Context, job *domain.
 	// 1. Insert into dead letter queue
 	jobID, err := uuid.Parse(job.ID)
 	if err != nil {
+		slog.ErrorContext(ctx, "invalid job ID format",
+			"job_id", job.ID,
+			"error", err)
 		return fmt.Errorf("invalid job ID: %w", err)
 	}
 
 	templateID, err := uuid.Parse(job.TemplateID)
 	if err != nil {
+		slog.ErrorContext(ctx, "invalid template ID format",
+			"template_id", job.TemplateID,
+			"error", err)
 		return fmt.Errorf("invalid template ID: %w", err)
 	}
 
@@ -407,6 +523,11 @@ func (c *PostgresCoordinator) MoveToDeadLetter(ctx context.Context, job *domain.
 	}
 
 	if err := qtx.InsertDeadLetterJob(ctx, params); err != nil {
+		slog.ErrorContext(ctx, "failed to insert into dead letter queue",
+			"job_id", job.ID,
+			"template_id", job.TemplateID,
+			"error_type", errType,
+			"error", err)
 		return fmt.Errorf("failed to insert dead letter job: %w", err)
 	}
 
@@ -418,16 +539,31 @@ func (c *PostgresCoordinator) MoveToDeadLetter(ctx context.Context, job *domain.
 	}
 	rows, err := qtx.DiscardJobWithOwnershipCheck(ctx, discardParams)
 	if err != nil {
+		slog.ErrorContext(ctx, "failed to discard job after DLQ insert",
+			"job_id", job.ID,
+			"error", err)
 		return fmt.Errorf("failed to discard job: %w", err)
 	}
 	if rows == 0 {
+		slog.WarnContext(ctx, "lost job ownership during dead letter move",
+			"job_id", job.ID,
+			"worker_id", workerID)
 		return domain.ErrJobOwnershipLost
 	}
 
 	// 3. Commit both operations atomically
 	if err := tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "failed to commit dead letter transaction",
+			"job_id", job.ID,
+			"error", err)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	slog.InfoContext(ctx, "job moved to dead letter queue",
+		"job_id", job.ID,
+		"template_id", job.TemplateID,
+		"error_type", errType,
+		"worker_id", workerID)
 
 	return nil
 }

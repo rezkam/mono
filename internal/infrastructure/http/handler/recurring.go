@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime/types"
@@ -98,9 +99,17 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 	// Call service layer (validation happens here)
 	created, err := h.todoService.CreateRecurringTemplate(r.Context(), template)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to create recurring template via HTTP",
+			"list_id", listID.String(),
+			"recurrence_pattern", string(req.RecurrencePattern),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "recurring template created via HTTP",
+		"template_id", created.ID,
+		"list_id", listID.String())
 
 	// Map domain model to DTO
 	templateDTO := MapTemplateToDTO(created)
@@ -117,6 +126,10 @@ func (h *TodoHandler) GetRecurringTemplate(w http.ResponseWriter, r *http.Reques
 	// Call service layer with list ownership validation
 	template, err := h.todoService.FindRecurringTemplateByID(r.Context(), listID.String(), templateID.String())
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to get recurring template via HTTP",
+			"list_id", listID.String(),
+			"template_id", templateID.String(),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
@@ -220,9 +233,19 @@ func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Req
 	// Call service layer (validation happens there)
 	updated, err := h.todoService.UpdateRecurringTemplate(r.Context(), params)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to update recurring template via HTTP",
+			"list_id", listID.String(),
+			"template_id", templateID.String(),
+			"update_mask", params.UpdateMask,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "recurring template updated via HTTP",
+		"template_id", templateID.String(),
+		"list_id", listID.String(),
+		"update_mask", params.UpdateMask)
 
 	// Map domain model to DTO
 	templateDTO := MapTemplateToDTO(updated)
@@ -238,9 +261,17 @@ func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Req
 func (h *TodoHandler) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Request, listID types.UUID, templateID types.UUID) {
 	// Call service layer with list ownership validation
 	if err := h.todoService.DeleteRecurringTemplate(r.Context(), listID.String(), templateID.String()); err != nil {
+		slog.ErrorContext(r.Context(), "failed to delete recurring template via HTTP",
+			"list_id", listID.String(),
+			"template_id", templateID.String(),
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
+
+	slog.InfoContext(r.Context(), "recurring template deleted via HTTP",
+		"template_id", templateID.String(),
+		"list_id", listID.String())
 
 	// Return success response (204 No Content)
 	response.NoContent(w)
@@ -258,6 +289,10 @@ func (h *TodoHandler) ListRecurringTemplates(w http.ResponseWriter, r *http.Requ
 	// Call service layer
 	templates, err := h.todoService.ListRecurringTemplates(r.Context(), listID.String(), activeOnly)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to list recurring templates via HTTP",
+			"list_id", listID.String(),
+			"active_only", activeOnly,
+			"error", err)
 		response.FromDomainError(w, r, err)
 		return
 	}
