@@ -85,6 +85,10 @@ func (m *mockListListsRepo) CreateException(ctx context.Context, exception *doma
 	panic("not used in ListLists tests")
 }
 
+func (m *mockListListsRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	panic("not used in ListLists tests")
+}
+
 // Atomic executes callback without transaction (tests don't need real transactions)
 func (m *mockListListsRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	// Execute the function with the same mock (no actual transaction needed for validation tests)

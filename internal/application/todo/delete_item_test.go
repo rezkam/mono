@@ -32,6 +32,11 @@ func (m *mockDeleteItemRepo) CreateException(ctx context.Context, exc *domain.Re
 	panic("CreateException not implemented")
 }
 
+func (m *mockDeleteItemRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	// Default: no exception exists (allows CreateException to succeed)
+	return nil, domain.ErrExceptionNotFound
+}
+
 func (m *mockDeleteItemRepo) UpdateItem(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
 	if m.updateItemFn != nil {
 		return m.updateItemFn(ctx, params)

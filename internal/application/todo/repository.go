@@ -2,6 +2,7 @@ package todo
 
 import (
 	"context"
+	"time"
 
 	"github.com/rezkam/mono/internal/domain"
 )
@@ -87,6 +88,10 @@ type Repository interface {
 	// Not exposed via HTTP API - exceptions are created automatically when users modify recurring task instances.
 	// Returns domain.ErrExceptionAlreadyExists if exception already exists for this occurrence.
 	CreateException(ctx context.Context, exception *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error)
+
+	// FindExceptionByOccurrence retrieves an exception for a specific template occurrence.
+	// Returns domain.ErrExceptionNotFound if no exception exists for this occurrence.
+	FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error)
 
 	// === Atomic Operations ===
 

@@ -104,6 +104,10 @@ func (m *mockRecurringRepo) CreateException(ctx context.Context, exception *doma
 	panic("not used in recurring template tests")
 }
 
+func (m *mockRecurringRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	panic("not used in recurring template tests")
+}
+
 // Atomic executes callback without transaction (tests don't need real transactions)
 func (m *mockRecurringRepo) Atomic(ctx context.Context, fn func(tx Repository) error) error {
 	// Execute the function with the same mock (no actual transaction needed for validation tests)

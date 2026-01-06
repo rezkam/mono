@@ -189,6 +189,10 @@ func (m *workflowMockRepo) CreateException(ctx context.Context, exception *domai
 	panic("not used in workflow tests")
 }
 
+func (m *workflowMockRepo) FindExceptionByOccurrence(ctx context.Context, templateID string, occursAt time.Time) (*domain.RecurringTemplateException, error) {
+	panic("not used in workflow tests")
+}
+
 // workflowMockGenerator generates predictable tasks for testing
 type workflowMockGenerator struct {
 	itemsToGenerate []*domain.TodoItem

@@ -2,6 +2,7 @@ package todo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -316,22 +317,6 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 	// Check if this is a recurring item that needs exception handling
 	if existingItem.RecurringTemplateID != nil && existingItem.OccursAt != nil {
 		if shouldCreateException(params.UpdateMask) {
-			// Create exception to prevent template regeneration
-			// Keep template link for reference - exception prevents regeneration
-			excID, err := uuid.NewV7()
-			if err != nil {
-				return nil, fmt.Errorf("failed to generate exception id: %w", err)
-			}
-
-			exception := &domain.RecurringTemplateException{
-				ID:            excID.String(),
-				TemplateID:    *existingItem.RecurringTemplateID,
-				OccursAt:      *existingItem.OccursAt,
-				ExceptionType: domain.ExceptionTypeEdited,
-				ItemID:        &existingItem.ID,
-				CreatedAt:     time.Now().UTC(),
-			}
-
 			// Use atomic operation to update item and create exception together
 			var updatedItem *domain.TodoItem
 			err = s.repo.Atomic(ctx, func(repo Repository) error {
@@ -340,6 +325,32 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 					return err
 				}
 				updatedItem = item
+
+				// Check if exception already exists for this occurrence
+				_, err = repo.FindExceptionByOccurrence(ctx, *existingItem.RecurringTemplateID, *existingItem.OccursAt)
+				if err == nil {
+					// Exception already exists, no need to create another
+					return nil
+				}
+				if !errors.Is(err, domain.ErrExceptionNotFound) {
+					// Unexpected error
+					return err
+				}
+
+				// Exception doesn't exist, create it
+				excID, err := uuid.NewV7()
+				if err != nil {
+					return fmt.Errorf("failed to generate exception id: %w", err)
+				}
+
+				exception := &domain.RecurringTemplateException{
+					ID:            excID.String(),
+					TemplateID:    *existingItem.RecurringTemplateID,
+					OccursAt:      *existingItem.OccursAt,
+					ExceptionType: domain.ExceptionTypeEdited,
+					ItemID:        &existingItem.ID,
+					CreatedAt:     time.Now().UTC(),
+				}
 
 				_, err = repo.CreateException(ctx, exception)
 				return err

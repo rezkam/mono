@@ -276,3 +276,68 @@ func TestExceptionFlow_MultipleEditsOnSameInstance(t *testing.T) {
 
 	assert.ErrorIs(t, err, domain.ErrExceptionAlreadyExists)
 }
+
+// TestExceptionFlow_DoubleEditSameInstance verifies that editing the same recurring
+// instance twice should work - the second edit should succeed without trying to
+// create a duplicate exception.
+// BUG: Currently fails because UpdateItem always tries to create a new exception.
+func TestExceptionFlow_DoubleEditSameInstance(t *testing.T) {
+	store, ctx := SetupTestStore(t)
+	generator := recurring.NewDomainGenerator()
+	service := todo.NewService(store, generator, todo.Config{})
+
+	// Create template and instance
+	template := createTestRecurringTemplate(t, store, "Daily Task")
+
+	itemID, _ := uuid.NewV7()
+	occursAt := time.Now().UTC().Truncate(time.Second)
+	startsAt := occursAt
+	item := &domain.TodoItem{
+		ID:                  itemID.String(),
+		Title:               "Original Title",
+		Status:              domain.TaskStatusTodo,
+		RecurringTemplateID: &template.ID,
+		StartsAt:            &startsAt,
+		OccursAt:            &occursAt,
+		CreatedAt:           time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
+		Version:             1,
+	}
+	_, err := store.CreateItem(ctx, template.ListID, item)
+	require.NoError(t, err)
+
+	// First edit: Change title (should create exception)
+	firstTitle := "First Edit"
+	params1 := domain.UpdateItemParams{
+		ItemID:     item.ID,
+		ListID:     template.ListID,
+		UpdateMask: []string{domain.FieldItemTitle},
+		Title:      &firstTitle,
+	}
+	updated1, err := service.UpdateItem(ctx, params1)
+	require.NoError(t, err)
+	assert.Equal(t, firstTitle, updated1.Title)
+
+	// Verify exception created
+	exceptions, err := store.ListAllExceptionsByTemplate(ctx, template.ID)
+	require.NoError(t, err)
+	require.Len(t, exceptions, 1)
+	assert.Equal(t, domain.ExceptionTypeEdited, exceptions[0].ExceptionType)
+
+	// Second edit: Change title again (should succeed without creating duplicate exception)
+	secondTitle := "Second Edit"
+	params2 := domain.UpdateItemParams{
+		ItemID:     item.ID,
+		ListID:     template.ListID,
+		UpdateMask: []string{domain.FieldItemTitle},
+		Title:      &secondTitle,
+	}
+	updated2, err := service.UpdateItem(ctx, params2)
+	require.NoError(t, err, "Second edit should succeed without creating duplicate exception")
+	assert.Equal(t, secondTitle, updated2.Title)
+
+	// Verify still only one exception (not two)
+	exceptions, err = store.ListAllExceptionsByTemplate(ctx, template.ID)
+	require.NoError(t, err)
+	assert.Len(t, exceptions, 1, "Should still have only one exception after second edit")
+}
