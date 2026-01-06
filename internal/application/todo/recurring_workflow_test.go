@@ -296,6 +296,52 @@ func TestCreateRecurringTemplate_SyncGeneration(t *testing.T) {
 	assert.Empty(t, repo.scheduleJobCalls, "should NOT schedule job when sync_horizon == generation_horizon")
 }
 
+// TestCreateRecurringTemplate_ReturnsUpdatedGeneratedThrough verifies that the returned
+// template has the correct GeneratedThrough field set by SetGeneratedThrough.
+// This is a regression test for a bug where SetGeneratedThrough updated the database
+// but the returned struct had a stale (zero) GeneratedThrough value.
+func TestCreateRecurringTemplate_ReturnsUpdatedGeneratedThrough(t *testing.T) {
+	repo := &workflowMockRepo{
+		templateToReturn: &domain.RecurringTemplate{
+			ID:                    "template-123",
+			ListID:                "list-456",
+			Title:                 "Daily Task",
+			RecurrencePattern:     domain.RecurrenceDaily,
+			SyncHorizonDays:       14,
+			GenerationHorizonDays: 14,
+			// NOTE: GeneratedThrough is initially zero (not set)
+		},
+	}
+	generator := &workflowMockGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
+
+	template := &domain.RecurringTemplate{
+		ListID:                "list-456",
+		Title:                 "Daily Task",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 14,
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	created, err := service.CreateRecurringTemplate(ctx, template)
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	// Calculate expected GeneratedThrough value
+	expectedGeneratedThrough := now.AddDate(0, 0, 14)
+
+	// BUG: The returned template should have GeneratedThrough set to the value
+	// passed to SetGeneratedThrough, but currently it returns the stale struct
+	// with zero GeneratedThrough
+	assert.False(t, created.GeneratedThrough.IsZero(),
+		"returned template must have GeneratedThrough set, not zero")
+	assert.WithinDuration(t, expectedGeneratedThrough, created.GeneratedThrough, 2*time.Second,
+		"returned template.GeneratedThrough should match the value set via SetGeneratedThrough")
+}
+
 // TestCreateRecurringTemplate_AsyncJobScheduling verifies that when
 // generation_horizon_days > sync_horizon_days, an async job is scheduled for the remaining period.
 func TestCreateRecurringTemplate_AsyncJobScheduling(t *testing.T) {
@@ -483,6 +529,67 @@ func TestUpdateRecurringTemplate_Regeneration(t *testing.T) {
 	jobCall := repo.scheduleJobCalls[0]
 	assert.Equal(t, "template-123", jobCall.templateID)
 	assert.WithinDuration(t, expectedSyncEnd, jobCall.from, 2*time.Second)
+}
+
+// TestUpdateRecurringTemplate_ReturnsUpdatedGeneratedThrough verifies that when pattern
+// changes trigger regeneration, the returned template has the correct GeneratedThrough value.
+// This is a regression test for a bug where SetGeneratedThrough updated the database
+// but the returned struct had a stale GeneratedThrough value.
+func TestUpdateRecurringTemplate_ReturnsUpdatedGeneratedThrough(t *testing.T) {
+	now := time.Now().UTC()
+	existingTemplate := &domain.RecurringTemplate{
+		ID:                    "template-123",
+		ListID:                "list-456",
+		Title:                 "Old Title",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 365,
+		GeneratedThrough:      now.AddDate(0, 0, 7), // Already generated 7 days
+	}
+
+	repo := &workflowMockRepo{
+		findTemplateReturn: existingTemplate,
+		updateTemplateReturn: &domain.RecurringTemplate{
+			ID:                    "template-123",
+			ListID:                "list-456",
+			Title:                 "New Title",
+			RecurrencePattern:     domain.RecurrenceWeekly,
+			SyncHorizonDays:       21,
+			GenerationHorizonDays: 365,
+			GeneratedThrough:      now.AddDate(0, 0, 7), // STALE VALUE - not updated yet
+		},
+		deletedItemCount: 50,
+		jobIDToReturn:    "job-new",
+	}
+
+	generator := &workflowMockGenerator{}
+	service := NewService(repo, generator, Config{DefaultPageSize: 25, MaxPageSize: 100})
+
+	newTitle := "New Title"
+	newPattern := domain.RecurrenceWeekly
+	newSyncHorizon := 21
+	params := domain.UpdateRecurringTemplateParams{
+		TemplateID:        "template-123",
+		ListID:            "list-456",
+		UpdateMask:        []string{"title", "recurrence_pattern", "sync_horizon_days"},
+		Title:             &newTitle,
+		RecurrencePattern: &newPattern,
+		SyncHorizonDays:   &newSyncHorizon,
+	}
+
+	ctx := context.Background()
+	updated, err := service.UpdateRecurringTemplate(ctx, params)
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+
+	// Calculate expected GeneratedThrough value (syncEnd = now + 21 days)
+	expectedGeneratedThrough := now.AddDate(0, 0, 21)
+
+	// BUG: The returned template should have GeneratedThrough set to the new value
+	// passed to SetGeneratedThrough (21 days from now), but currently it returns
+	// the stale struct with the old value (7 days from now)
+	assert.WithinDuration(t, expectedGeneratedThrough, updated.GeneratedThrough, 2*time.Second,
+		"returned template.GeneratedThrough should match the NEW value set via SetGeneratedThrough, not the old value")
 }
 
 // TestUpdateRecurringTemplate_NoRegenerationWhenNoRelevantChanges verifies that when

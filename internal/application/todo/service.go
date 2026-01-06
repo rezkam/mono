@@ -299,7 +299,7 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 	// exception creation for recurring items (timezone is presentation-layer concern).
 	if params.Timezone != nil && *params.Timezone != "" {
 		if _, err := time.LoadLocation(*params.Timezone); err != nil {
-			return nil, fmt.Errorf("invalid timezone: %w", err)
+			return nil, domain.ErrInvalidTimezone
 		}
 	}
 
@@ -554,6 +554,8 @@ func (s *Service) CreateRecurringTemplate(ctx context.Context, template *domain.
 		if err := ops.SetGeneratedThrough(ctx, created.ID, syncEnd); err != nil {
 			return fmt.Errorf("failed to update generation marker: %w", err)
 		}
+		// Update in-memory struct to match database
+		created.GeneratedThrough = syncEnd
 
 		// 4. Schedule async generation job if needed
 		asyncEnd := now.AddDate(0, 0, created.GenerationHorizonDays)
@@ -789,6 +791,8 @@ func (s *Service) updateTemplateWithRegeneration(ctx context.Context, existing *
 		if err := ops.SetGeneratedThrough(ctx, params.TemplateID, syncEnd); err != nil {
 			return fmt.Errorf("failed to update generation marker: %w", err)
 		}
+		// Update in-memory struct to match database
+		updated.GeneratedThrough = syncEnd
 
 		// 7. Schedule async generation job if needed
 		generationHorizon := updated.GenerationHorizonDays
