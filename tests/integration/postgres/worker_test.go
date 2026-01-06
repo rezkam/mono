@@ -799,3 +799,114 @@ func TestCoordinator_ExhaustedRetries_MovesToDeadLetter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "discarded", status)
 }
+
+// TestWorker_UpdateGenerationJobStatus_ReturnsErrorForNonExistentJob verifies that
+// UpdateGenerationJobStatus returns domain.ErrJobNotFound when attempting to update
+// a job that doesn't exist in the database.
+//
+// This test catches the bug where the implementation ignores RowsAffected() and
+// returns success even when 0 rows were updated.
+func TestWorker_UpdateGenerationJobStatus_ReturnsErrorForNonExistentJob(t *testing.T) {
+	store, _, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Generate a valid UUID that doesn't exist in the database
+	nonExistentJobID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	// Test 1: Try to mark non-existent job as "completed"
+	err = store.UpdateGenerationJobStatus(ctx, nonExistentJobID.String(), "completed", nil)
+
+	// BUG: Currently returns nil (success) instead of domain.ErrJobNotFound
+	// FIX: Should check RowsAffected() and return error when 0 rows updated
+	require.Error(t, err, "UpdateGenerationJobStatus should return error for non-existent job")
+	assert.ErrorIs(t, err, domain.ErrJobNotFound, "Error should be domain.ErrJobNotFound")
+
+	// Test 2: Try to mark non-existent job as "failed"
+	errMsg := "simulated error"
+	err = store.UpdateGenerationJobStatus(ctx, nonExistentJobID.String(), "failed", &errMsg)
+
+	require.Error(t, err, "UpdateGenerationJobStatus should return error for non-existent job")
+	assert.ErrorIs(t, err, domain.ErrJobNotFound, "Error should be domain.ErrJobNotFound")
+}
+
+// TestWorker_UpdateGenerationJobStatus_SucceedsForExistingJob verifies that
+// UpdateGenerationJobStatus successfully updates an existing job and returns nil.
+func TestWorker_UpdateGenerationJobStatus_SucceedsForExistingJob(t *testing.T) {
+	store, _, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create test list
+	listUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	list := &domain.TodoList{
+		ID:    listUUID.String(),
+		Title: "Test List",
+	}
+	_, err = store.CreateList(ctx, list)
+	require.NoError(t, err)
+
+	// Create template
+	templateUUID, err := uuid.NewV7()
+	require.NoError(t, err)
+	template := &domain.RecurringTemplate{
+		ID:                    templateUUID.String(),
+		ListID:                listUUID.String(),
+		Title:                 "Test Task",
+		RecurrencePattern:     domain.RecurrenceDaily,
+		RecurrenceConfig:      map[string]any{"interval": float64(1)},
+		SyncHorizonDays:       14,
+		GenerationHorizonDays: 30,
+		IsActive:              true,
+	}
+	_, err = store.CreateRecurringTemplate(ctx, template)
+	require.NoError(t, err)
+
+	// Create job
+	jobID, err := store.ScheduleGenerationJob(ctx, templateUUID.String(), time.Time{},
+		time.Now().UTC(), time.Now().UTC().Add(24*time.Hour))
+	require.NoError(t, err)
+
+	// Test 1: Update to "completed" - should succeed
+	err = store.UpdateGenerationJobStatus(ctx, jobID, "completed", nil)
+	require.NoError(t, err, "UpdateGenerationJobStatus should succeed for existing job")
+
+	// Verify status was actually updated
+	var status string
+	var completedAt *time.Time
+	err = store.Pool().QueryRow(ctx, `
+		SELECT status, completed_at
+		FROM recurring_generation_jobs
+		WHERE id = $1
+	`, jobID).Scan(&status, &completedAt)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", status)
+	assert.NotNil(t, completedAt, "completed_at should be set")
+
+	// Test 2: Create another job and update to "failed"
+	jobID2, err := store.ScheduleGenerationJob(ctx, templateUUID.String(), time.Time{},
+		time.Now().UTC(), time.Now().UTC().Add(48*time.Hour))
+	require.NoError(t, err)
+
+	errMsg := "test error message"
+	err = store.UpdateGenerationJobStatus(ctx, jobID2, "failed", &errMsg)
+	require.NoError(t, err, "UpdateGenerationJobStatus should succeed for existing job")
+
+	// Verify status and error message were updated
+	var failedAt *time.Time
+	var savedErrMsg *string
+	err = store.Pool().QueryRow(ctx, `
+		SELECT status, failed_at, error_message
+		FROM recurring_generation_jobs
+		WHERE id = $1
+	`, jobID2).Scan(&status, &failedAt, &savedErrMsg)
+	require.NoError(t, err)
+	assert.Equal(t, "failed", status)
+	assert.NotNil(t, failedAt, "failed_at should be set")
+	require.NotNil(t, savedErrMsg)
+	assert.Equal(t, "test error message", *savedErrMsg)
+}

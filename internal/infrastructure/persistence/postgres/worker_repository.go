@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rezkam/mono/internal/application/worker"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
@@ -109,16 +110,19 @@ func (s *Store) FindGenerationJobByID(ctx context.Context, id string) (*domain.G
 
 // UpdateGenerationJobStatus updates job status and optionally records an error.
 // With coordination pattern, this updates timestamps (completed_at/failed_at) and sets status.
+// Returns domain.ErrJobNotFound if the job doesn't exist.
 func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string, errorMessage *string) error {
 	jobUUID, err := uuid.Parse(id)
 	if err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
+	var result pgconn.CommandTag
+
 	// Map status to appropriate SQL update
 	switch status {
 	case "completed":
-		_, err = s.pool.Exec(ctx, `
+		result, err = s.pool.Exec(ctx, `
 			UPDATE recurring_generation_jobs
 			SET status = 'completed',
 				completed_at = NOW(),
@@ -131,7 +135,7 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 		if errorMessage != nil {
 			errMsg = *errorMessage
 		}
-		_, err = s.pool.Exec(ctx, `
+		result, err = s.pool.Exec(ctx, `
 			UPDATE recurring_generation_jobs
 			SET status = 'failed',
 				failed_at = NOW(),
@@ -146,6 +150,11 @@ func (s *Store) UpdateGenerationJobStatus(ctx context.Context, id, status string
 
 	if err != nil {
 		return fmt.Errorf("failed to update job status: %w", err)
+	}
+
+	// Verify job exists - if 0 rows updated, job not found
+	if result.RowsAffected() == 0 {
+		return domain.ErrJobNotFound
 	}
 
 	return nil

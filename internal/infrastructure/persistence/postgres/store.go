@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,67 +63,84 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// finalizeTx handles transaction cleanup with panic recovery.
-// Rolls back on panic or error, commits on success.
+// finalizeTx handles transaction cleanup for normal error/success cases.
+// Rolls back on error, commits on success.
+// Note: Panics are handled separately in the defer blocks before finalizeTx is called.
 func finalizeTx(ctx context.Context, tx pgx.Tx, err *error) {
-	// Handle panics by rolling back and re-panicking
-	if p := recover(); p != nil {
-		_ = tx.Rollback(ctx)
-		panic(p)
-	}
-
 	if *err != nil {
+		slog.ErrorContext(ctx, "transaction failed, rolling back",
+			"error", *err)
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			slog.ErrorContext(ctx, "rollback failed",
+				"original_error", *err,
+				"rollback_error", rbErr)
 			*err = fmt.Errorf("transaction failed: %w (rollback error: %v)", *err, rbErr)
 		}
 	} else {
 		*err = tx.Commit(ctx)
+		if *err != nil {
+			slog.ErrorContext(ctx, "transaction commit failed",
+				"error", *err)
+		}
 	}
+}
+
+// executeInTransaction is a helper that executes a callback within a transaction with logging and panic recovery.
+func (s *Store) executeInTransaction(ctx context.Context, operationName string, fn func(txStore *Store) error) (err error) {
+	start := time.Now().UTC()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction",
+			"operation", operationName,
+			"error", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			slog.ErrorContext(ctx, "transaction panic, rolling back",
+				"operation", operationName,
+				"panic", p)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				slog.ErrorContext(ctx, "rollback after panic failed",
+					"operation", operationName,
+					"panic", p,
+					"rollback_error", rbErr)
+			}
+			panic(p)
+		}
+
+		finalizeTx(ctx, tx, &err)
+		if err == nil {
+			slog.DebugContext(ctx, "transaction completed",
+				"operation", operationName,
+				"duration_ms", time.Since(start).Milliseconds())
+		}
+	}()
+
+	txStore := &Store{
+		pool:    s.pool,
+		queries: s.queries.WithTx(tx),
+	}
+
+	err = fn(txStore)
+	return
 }
 
 // Atomic executes a callback function within a database transaction.
 // All operations inside the callback succeed together or fail together.
 // The callback receives a Repository instance that operates within the transaction.
 // Commits the transaction if callback returns nil, rolls back if callback returns an error.
-func (s *Store) Atomic(ctx context.Context, fn func(repo todo.Repository) error) (err error) {
-	// Begin transaction
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	// Ensure transaction is closed with panic recovery
-	defer finalizeTx(ctx, tx, &err)
-
-	// Create a new store instance with the transaction
-	txStore := &Store{
-		pool:    s.pool,
-		queries: s.queries.WithTx(tx),
-	}
-
-	// Execute callback with transactional repository
-	err = fn(txStore)
-	return
+func (s *Store) Atomic(ctx context.Context, fn func(repo todo.Repository) error) error {
+	return s.executeInTransaction(ctx, "atomic", func(txStore *Store) error {
+		return fn(txStore)
+	})
 }
 
 // AtomicRecurring executes a callback with recurring template operations in a transaction.
-func (s *Store) AtomicRecurring(ctx context.Context, fn func(ops todo.RecurringOperations) error) (err error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	// Ensure transaction is closed with panic recovery
-	defer finalizeTx(ctx, tx, &err)
-
-	// Create transactional store
-	txStore := &Store{
-		pool:    s.pool,
-		queries: s.queries.WithTx(tx),
-	}
-
-	// txStore implements todo.Repository and worker.Repository (which provides the 4 methods),
-	// so it satisfies todo.RecurringOperations
-	err = fn(txStore)
-	return
+func (s *Store) AtomicRecurring(ctx context.Context, fn func(ops todo.RecurringOperations) error) error {
+	return s.executeInTransaction(ctx, "atomic_recurring", func(txStore *Store) error {
+		return fn(txStore)
+	})
 }
