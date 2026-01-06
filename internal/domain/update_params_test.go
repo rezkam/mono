@@ -340,6 +340,7 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 		mask    []string
 		title   *string
 		pattern *RecurrencePattern
+		config  map[string]any
 		wantErr error
 	}{
 		{
@@ -347,6 +348,7 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 			mask:    []string{"title"},
 			title:   nil,
 			pattern: nil,
+			config:  nil,
 			wantErr: ErrTitleRequired,
 		},
 		{
@@ -354,13 +356,23 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 			mask:    []string{"recurrence_pattern"},
 			title:   nil,
 			pattern: nil,
+			config:  nil,
 			wantErr: ErrRecurrencePatternRequired,
+		},
+		{
+			name:    "recurrence_config in mask with nil value",
+			mask:    []string{"recurrence_config"},
+			title:   nil,
+			pattern: nil,
+			config:  nil,
+			wantErr: ErrRecurrenceConfigRequired,
 		},
 		{
 			name:    "title in mask with valid value",
 			mask:    []string{"title"},
 			title:   ptr.To("Valid Title"),
 			pattern: nil,
+			config:  nil,
 			wantErr: nil,
 		},
 		{
@@ -368,6 +380,15 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 			mask:    []string{"recurrence_pattern"},
 			title:   nil,
 			pattern: ptr.To(RecurrenceDaily),
+			config:  nil,
+			wantErr: nil,
+		},
+		{
+			name:    "recurrence_config in mask with valid value",
+			mask:    []string{"recurrence_config"},
+			title:   nil,
+			pattern: nil,
+			config:  map[string]any{"interval": 1},
 			wantErr: nil,
 		},
 		{
@@ -375,6 +396,7 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 			mask:    []string{"tags"},
 			title:   nil,
 			pattern: nil,
+			config:  nil,
 			wantErr: nil,
 		},
 		{
@@ -382,6 +404,7 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 			mask:    []string{"is_active"},
 			title:   nil,
 			pattern: nil,
+			config:  nil,
 			wantErr: nil,
 		},
 	}
@@ -394,6 +417,7 @@ func TestUpdateRecurringTemplateParams_Validate_RequiredFieldNil(t *testing.T) {
 				UpdateMask:        tt.mask,
 				Title:             tt.title,
 				RecurrencePattern: tt.pattern,
+				RecurrenceConfig:  tt.config,
 			}
 
 			err := params.Validate()

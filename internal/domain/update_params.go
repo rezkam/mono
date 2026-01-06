@@ -110,6 +110,9 @@ func (p UpdateRecurringTemplateParams) Validate() error {
 	if maskSet["recurrence_pattern"] && p.RecurrencePattern == nil {
 		return ErrRecurrencePatternRequired
 	}
+	if maskSet["recurrence_config"] && p.RecurrenceConfig == nil {
+		return ErrRecurrenceConfigRequired
+	}
 
 	return nil
 }
