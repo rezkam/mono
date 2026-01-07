@@ -70,7 +70,11 @@ func (h *TodoHandler) GetList(w http.ResponseWriter, r *http.Request, id types.U
 // GET /v1/lists
 func (h *TodoHandler) ListLists(w http.ResponseWriter, r *http.Request, params openapi.ListListsParams) {
 	// Build domain params from query params
-	offset := parsePageToken(params.PageToken)
+	offset, err := parsePageToken(params.PageToken)
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
 
 	// Validate sorting parameters
 	var sortBy, sortDir *string

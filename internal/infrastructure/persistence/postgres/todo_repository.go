@@ -254,7 +254,7 @@ func (s *Store) CreateItem(ctx context.Context, listID string, item *domain.Todo
 		if isForeignKeyViolation(err, "list_id") {
 			return nil, fmt.Errorf("%w: %w", domain.ErrListNotFound, err)
 		}
-		if isForeignKeyViolation(err, "recurring_template_id") {
+		if isForeignKeyViolation(err, "recurring_template") {
 			return nil, fmt.Errorf("%w: %w", domain.ErrTemplateNotFound, err)
 		}
 		return nil, fmt.Errorf("failed to create item: %w", err)

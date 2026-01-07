@@ -636,6 +636,9 @@ components:
             type: string
         priority:
           $ref: '#/components/schemas/ItemPriority'
+        status:
+          $ref: '#/components/schemas/ItemStatus'
+          description: Initial status (defaults to 'todo' if not provided)
         estimated_duration:
           type: string
           description: ISO 8601 duration

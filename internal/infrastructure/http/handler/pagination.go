@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"strconv"
 
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/ptr"
 )
 
@@ -20,28 +21,32 @@ func generatePageToken(offset int, hasMore bool) *string {
 }
 
 // parsePageToken decodes a pagination token to get the offset.
-// Returns 0 if token is empty, invalid, or contains a negative value.
-func parsePageToken(token *string) int {
+// Returns (0, nil) if token is nil or empty (first page).
+// Returns (0, ErrInvalidPageToken) if token is malformed or invalid.
+func parsePageToken(token *string) (int, error) {
+	// nil or empty token is valid - means first page
 	if token == nil || *token == "" {
-		return 0
+		return 0, nil
 	}
 
+	// Decode base64
 	decoded, err := base64.URLEncoding.DecodeString(*token)
 	if err != nil {
-		return 0
+		return 0, domain.ErrInvalidPageToken
 	}
 
+	// Parse integer
 	offset, err := strconv.Atoi(string(decoded))
 	if err != nil {
-		return 0
+		return 0, domain.ErrInvalidPageToken
 	}
 
-	// Reject negative offsets to prevent slice bounds panic
+	// Reject negative offsets
 	if offset < 0 {
-		return 0
+		return 0, domain.ErrInvalidPageToken
 	}
 
-	return offset
+	return offset, nil
 }
 
 // getPageSize returns the requested page size, or 0 if not specified.

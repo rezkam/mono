@@ -188,6 +188,11 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 		return nil, domain.ErrListNotFound
 	}
 
+	// Defensive nil check - handler should never pass nil, but prevent panic
+	if item == nil {
+		return nil, domain.ErrInvalidRequest
+	}
+
 	// Validate title using value object
 	title, err := domain.NewTitle(item.Title)
 	if err != nil {
@@ -227,8 +232,14 @@ func (s *Service) CreateItem(ctx context.Context, listID string, item *domain.To
 	// Does NOT affect operational times (CreatedAt, UpdatedAt) which are always UTC.
 	if item.Timezone != nil && *item.Timezone != "" {
 		if _, err := time.LoadLocation(*item.Timezone); err != nil {
-			return nil, fmt.Errorf("invalid timezone: %w", err)
+			return nil, domain.ErrInvalidTimezone
 		}
+	}
+
+	// Validate recurring instance integrity.
+	// If OccursAt is set, RecurringTemplateID must also be set.
+	if item.OccursAt != nil && item.RecurringTemplateID == nil {
+		return nil, domain.ErrRecurringTaskRequiresTemplate
 	}
 
 	// Return the persisted entity from repository (includes version from persistence layer)

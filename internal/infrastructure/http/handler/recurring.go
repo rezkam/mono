@@ -52,7 +52,7 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 	if req.EstimatedDuration != nil {
 		d, err := domain.NewDuration(*req.EstimatedDuration)
 		if err != nil {
-			response.FromDomainError(w, r, err)
+			response.FromDomainFieldError(w, r, err, "estimated_duration")
 			return
 		}
 		duration := d.Value()
@@ -62,7 +62,7 @@ func (h *TodoHandler) CreateRecurringTemplate(w http.ResponseWriter, r *http.Req
 	if req.DueOffset != nil {
 		d, err := domain.NewDuration(*req.DueOffset)
 		if err != nil {
-			response.FromDomainError(w, r, err)
+			response.FromDomainFieldError(w, r, err, "due_offset")
 			return
 		}
 		duration := d.Value()
@@ -187,7 +187,7 @@ func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Req
 			if req.Template.EstimatedDuration != nil {
 				d, err := domain.NewDuration(*req.Template.EstimatedDuration)
 				if err != nil {
-					response.FromDomainError(w, r, err)
+					response.FromDomainFieldError(w, r, err, "estimated_duration")
 					return
 				}
 				duration := d.Value()
@@ -197,7 +197,7 @@ func (h *TodoHandler) UpdateRecurringTemplate(w http.ResponseWriter, r *http.Req
 			if req.Template.DueOffset != nil {
 				d, err := domain.NewDuration(*req.Template.DueOffset)
 				if err != nil {
-					response.FromDomainError(w, r, err)
+					response.FromDomainFieldError(w, r, err, "due_offset")
 					return
 				}
 				duration := d.Value()

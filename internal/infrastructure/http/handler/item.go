@@ -27,7 +27,7 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 		Title:    req.Title,
 		ListID:   listID.String(),
 		Tags:     derefStringSlice(req.Tags),
-		Timezone: req.Timezone,
+		Timezone: normalizeTimezone(req.Timezone),
 		DueAt:    req.DueAt,
 	}
 
@@ -35,7 +35,7 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 	if req.EstimatedDuration != nil {
 		d, err := domain.NewDuration(*req.EstimatedDuration)
 		if err != nil {
-			response.FromDomainError(w, r, err)
+			response.FromDomainFieldError(w, r, err, "estimated_duration")
 			return
 		}
 		duration := d.Value()
@@ -59,7 +59,12 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 	}
 
 	// Set occurrence time if provided
+	// Validate that instance_date requires recurring_template_id
 	if req.InstanceDate != nil {
+		if req.RecurringTemplateId == nil {
+			response.FromDomainError(w, r, domain.ErrRecurringTaskRequiresTemplate)
+			return
+		}
 		item.OccursAt = req.InstanceDate
 	}
 
@@ -73,7 +78,7 @@ func (h *TodoHandler) CreateItem(w http.ResponseWriter, r *http.Request, listID 
 	if req.DueOffset != nil {
 		d, err := domain.NewDuration(*req.DueOffset)
 		if err != nil {
-			response.FromDomainError(w, r, err)
+			response.FromDomainFieldError(w, r, err, "due_offset")
 			return
 		}
 		duration := d.Value()
@@ -159,12 +164,12 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 				params.Tags = req.Item.Tags
 			}
 		case "timezone":
-			params.Timezone = req.Item.Timezone
+			params.Timezone = normalizeTimezone(req.Item.Timezone)
 		case "estimated_duration":
 			if req.Item.EstimatedDuration != nil {
 				d, err := domain.NewDuration(*req.Item.EstimatedDuration)
 				if err != nil {
-					response.FromDomainError(w, r, err)
+					response.FromDomainFieldError(w, r, err, "estimated_duration")
 					return
 				}
 				duration := d.Value()
@@ -174,7 +179,7 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 			if req.Item.ActualDuration != nil {
 				d, err := domain.NewDuration(*req.Item.ActualDuration)
 				if err != nil {
-					response.FromDomainError(w, r, err)
+					response.FromDomainFieldError(w, r, err, "actual_duration")
 					return
 				}
 				duration := d.Value()
@@ -189,7 +194,7 @@ func (h *TodoHandler) UpdateItem(w http.ResponseWriter, r *http.Request, listID 
 			if req.Item.DueOffset != nil {
 				d, err := domain.NewDuration(*req.Item.DueOffset)
 				if err != nil {
-					response.FromDomainError(w, r, err)
+					response.FromDomainFieldError(w, r, err, "due_offset")
 					return
 				}
 				duration := d.Value()
@@ -246,7 +251,11 @@ func (h *TodoHandler) DeleteItem(w http.ResponseWriter, r *http.Request, listID 
 // ListItems implements ServerInterface.ListItems.
 // GET /v1/lists/{list_id}/items
 func (h *TodoHandler) ListItems(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListItemsParams) {
-	offset := parsePageToken(params.PageToken)
+	offset, err := parsePageToken(params.PageToken)
+	if err != nil {
+		response.FromDomainError(w, r, err)
+		return
+	}
 	listIDStr := listID.String()
 
 	// Map OpenAPI params to domain filter input - just pass through values
@@ -349,4 +358,14 @@ func derefStringSlice(s *[]string) []string {
 		return []string{}
 	}
 	return *s
+}
+
+// normalizeTimezone converts empty string timezone to nil for semantic correctness.
+// Empty timezone should mean "not set" (floating time), not "empty string".
+// This prevents validation bypass where ptr.To("") bypasses the != "" check.
+func normalizeTimezone(tz *string) *string {
+	if tz == nil || *tz == "" {
+		return nil
+	}
+	return tz
 }

@@ -68,6 +68,22 @@ func ValidationError(w http.ResponseWriter, field, issue string) {
 	_, _ = w.Write(jsonBytes)
 }
 
+// FromDomainFieldError maps field-specific domain errors to HTTP responses.
+// Use this when the error is field-specific but the domain error doesn't carry field information.
+// Example: duration validation errors (ErrInvalidDurationFormat, ErrDurationEmpty) can occur
+// on multiple fields (estimated_duration, actual_duration, due_offset).
+func FromDomainFieldError(w http.ResponseWriter, r *http.Request, err error, fieldName string) {
+	switch {
+	case errors.Is(err, domain.ErrInvalidDurationFormat):
+		ValidationError(w, fieldName, "invalid duration format (expected ISO 8601 duration like 'PT1H30M')")
+	case errors.Is(err, domain.ErrDurationEmpty):
+		ValidationError(w, fieldName, "duration cannot be empty")
+	default:
+		// Fall back to standard error mapping
+		FromDomainError(w, r, err)
+	}
+}
+
 // NotFound sends a 404 Not Found error.
 func NotFound(w http.ResponseWriter, resource string) {
 	Error(w, "NOT_FOUND", resource+" not found", http.StatusNotFound)
@@ -119,6 +135,8 @@ func Error(w http.ResponseWriter, code, message string, statusCode int) {
 func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	// Validation errors (400)
+	case errors.Is(err, domain.ErrInvalidRequest):
+		BadRequest(w, "invalid request payload")
 	case errors.Is(err, domain.ErrEmptyUpdateMask):
 		ValidationError(w, "update_mask", "update_mask cannot be empty")
 	case errors.Is(err, domain.ErrUnknownField):
@@ -146,12 +164,10 @@ func FromDomainError(w http.ResponseWriter, r *http.Request, err error) {
 		ValidationError(w, "generation_window_days", "must be between 1 and 365")
 	case errors.Is(err, domain.ErrInvalidEtagFormat):
 		ValidationError(w, "etag", "must be a numeric string (e.g., \"1\", \"2\")")
-	case errors.Is(err, domain.ErrInvalidDurationFormat):
-		ValidationError(w, "estimated_duration", "invalid duration format (expected ISO 8601 duration like 'PT1H30M')")
-	case errors.Is(err, domain.ErrDurationEmpty):
-		ValidationError(w, "estimated_duration", "duration cannot be empty")
 	case errors.Is(err, domain.ErrInvalidTimezone):
 		ValidationError(w, "timezone", "invalid timezone (expected IANA timezone like 'America/New_York')")
+	case errors.Is(err, domain.ErrInvalidPageToken):
+		ValidationError(w, "page_token", "invalid page token format")
 
 	// Not found errors (404)
 	case errors.Is(err, domain.ErrListNotFound):
