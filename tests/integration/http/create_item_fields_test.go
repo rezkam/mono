@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/http/openapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -176,10 +178,21 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("instance_date is mapped", func(t *testing.T) {
+		// Create a recurring template first (required for instance_date validation)
+		ctx := context.Background()
+		template, err := ts.TodoService.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+			ListID:            listID,
+			Title:             "Test Template",
+			RecurrencePattern: domain.RecurrenceDaily,
+			RecurrenceConfig:  map[string]any{},
+		})
+		require.NoError(t, err)
+
 		instanceDate := time.Date(2025, 12, 25, 0, 0, 0, 0, time.UTC)
 		reqBody := map[string]any{
-			"title":         "Instance Date Test",
-			"instance_date": instanceDate.Format(time.RFC3339),
+			"title":                 "Instance Date Test",
+			"instance_date":         instanceDate.Format(time.RFC3339),
+			"recurring_template_id": template.ID,
 		}
 		body, _ := json.Marshal(reqBody)
 
@@ -274,20 +287,31 @@ func TestCreateItem_AllFieldsMapped(t *testing.T) {
 	})
 
 	t.Run("all fields together", func(t *testing.T) {
+		// Create a recurring template first (required for instance_date validation)
+		ctx := context.Background()
+		template, err := ts.TodoService.CreateRecurringTemplate(ctx, &domain.RecurringTemplate{
+			ListID:            listID,
+			Title:             "Test Template for All Fields",
+			RecurrencePattern: domain.RecurrenceDaily,
+			RecurrenceConfig:  map[string]any{},
+		})
+		require.NoError(t, err)
+
 		dueTime := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
 		instanceDate := time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
 		startsAt := time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)
 
 		reqBody := map[string]any{
-			"title":              "Complete Item Test",
-			"due_at":             dueTime.Format(time.RFC3339),
-			"tags":               []string{"work", "important"},
-			"priority":           "urgent",
-			"estimated_duration": "PT2H45M", // ISO 8601 format
-			"timezone":           "America/New_York",
-			"instance_date":      instanceDate.Format(time.RFC3339),
-			"starts_at":          startsAt.Format("2006-01-02"),
-			"due_offset":         "PT4H",
+			"title":                 "Complete Item Test",
+			"due_at":                dueTime.Format(time.RFC3339),
+			"tags":                  []string{"work", "important"},
+			"priority":              "urgent",
+			"estimated_duration":    "PT2H45M", // ISO 8601 format
+			"timezone":              "America/New_York",
+			"instance_date":         instanceDate.Format(time.RFC3339),
+			"recurring_template_id": template.ID,
+			"starts_at":             startsAt.Format("2006-01-02"),
+			"due_offset":            "PT4H",
 		}
 		body, _ := json.Marshal(reqBody)
 
