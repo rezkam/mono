@@ -505,4 +505,38 @@ func TestCreateItem_PriorityValues(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
+
+	t.Run("instance_date without recurring_template_id returns error", func(t *testing.T) {
+		instanceDate := time.Date(2025, 12, 25, 9, 0, 0, 0, time.UTC)
+		reqBody := map[string]any{
+			"title":         "Orphan Instance Test",
+			"instance_date": instanceDate.Format(time.RFC3339),
+			// Note: recurring_template_id is intentionally omitted
+		}
+		body, _ := json.Marshal(reqBody)
+
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/lists/%s/items", listID), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+ts.APIKey)
+
+		w := httptest.NewRecorder()
+		ts.Router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code, "should reject instance_date without recurring_template_id")
+
+		var errorResp map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errorResp))
+
+		// Verify error response structure: {"error": {"code": "...", "message": "...", "details": [...]}}
+		errorObj, ok := errorResp["error"].(map[string]any)
+		require.True(t, ok, "error response should have 'error' object")
+
+		details, ok := errorObj["details"].([]any)
+		require.True(t, ok, "error object should have 'details' array")
+		require.NotEmpty(t, details, "details should contain validation error")
+
+		firstDetail := details[0].(map[string]any)
+		assert.Equal(t, "recurring_template_id", firstDetail["field"])
+		assert.Contains(t, firstDetail["issue"], "required for recurring tasks")
+	})
 }

@@ -73,7 +73,11 @@ CREATE TABLE todo_items (
     timezone TEXT,
 
     version INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
+    FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE,
+
+    -- Recurring instance integrity: occurs_at requires recurring_template_id
+    -- Prevents orphan recurring instances (occurs_at set without template)
+    CHECK (occurs_at IS NULL OR recurring_template_id IS NOT NULL)
 );
 
 -- Indexes for common query patterns
