@@ -97,5 +97,5 @@ func main() {
 	fmt.Println("IMPORTANT: Save this key now! It will not be shown again.")
 	fmt.Println("----------------------------------------")
 	fmt.Println("Usage example:")
-	fmt.Printf("  curl -H \"Authorization: Bearer %s\" http://localhost:8081/v1/lists\n", apiKey)
+	fmt.Printf("  curl -H \"Authorization: Bearer %s\" https://monodo.app/api/v1/lists\n", apiKey)
 }
