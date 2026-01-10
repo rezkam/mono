@@ -3,6 +3,12 @@ INSERT INTO api_keys (id, key_type, service, version, short_token, long_secret_h
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 
 -- name: GetAPIKeyByShortToken :one
+-- SECURITY: Intentionally does NOT filter by expires_at to prevent timing attacks.
+-- If we filtered expired keys here, attackers could distinguish between:
+--   - Non-existent keys (no row returned)
+--   - Expired keys (no row returned)
+--   - Valid keys (row returned, slower due to hash comparison)
+-- Expiration is checked in constant-time code (authenticator.go) after fetching.
 SELECT * FROM api_keys
 WHERE short_token = $1 AND is_active = true;
 

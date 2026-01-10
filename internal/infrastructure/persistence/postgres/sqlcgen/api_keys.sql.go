@@ -80,6 +80,13 @@ SELECT id, key_type, service, version, short_token, long_secret_hash, name, is_a
 WHERE short_token = $1 AND is_active = true
 `
 
+// SECURITY: Intentionally does NOT filter by expires_at to prevent timing attacks.
+// If we filtered expired keys here, attackers could distinguish between:
+//   - Non-existent keys (no row returned)
+//   - Expired keys (no row returned)
+//   - Valid keys (row returned, slower due to hash comparison)
+//
+// Expiration is checked in constant-time code (authenticator.go) after fetching.
 func (q *Queries) GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByShortToken, shortToken)
 	var i ApiKey

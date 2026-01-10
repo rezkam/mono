@@ -107,6 +107,12 @@ type Querier interface {
 	//   - page_limit: Maximum number of results to return
 	//   - page_offset: Number of results to skip
 	FindTodoListsWithFilters(ctx context.Context, arg FindTodoListsWithFiltersParams) ([]FindTodoListsWithFiltersRow, error)
+	// SECURITY: Intentionally does NOT filter by expires_at to prevent timing attacks.
+	// If we filtered expired keys here, attackers could distinguish between:
+	//   - Non-existent keys (no row returned)
+	//   - Expired keys (no row returned)
+	//   - Valid keys (row returned, slower due to hash comparison)
+	// Expiration is checked in constant-time code (authenticator.go) after fetching.
 	GetAPIKeyByShortToken(ctx context.Context, shortToken string) (ApiKey, error)
 	GetAllTodoItems(ctx context.Context) ([]TodoItem, error)
 	// Retrieve a specific dead letter job by ID.
