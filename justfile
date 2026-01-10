@@ -395,14 +395,14 @@ docker-up:
 [group('docker-prod')]
 docker-build-up:
     @echo "Rebuilding images and starting services..."
-    docker compose -f docker-compose.prod.yml up -d --build
+    docker compose -f docker-compose.prod.yml --profile tools up -d --build
     @echo "✅ Services rebuilt and started. Use 'just docker-logs' to view logs"
 
 # [PROD] Rebuild images only (without starting)
 [group('docker-prod')]
 docker-rebuild:
     @echo "Rebuilding Docker images..."
-    docker compose -f docker-compose.prod.yml build
+    docker compose -f docker-compose.prod.yml --profile tools build
 
 # [PROD] Stop production services
 [group('docker-prod')]
@@ -480,7 +480,7 @@ docker-clean:
     echo "Press Ctrl+C to cancel, or Enter to continue..."
     read dummy
     echo "Cleaning up production deployment..."
-    docker compose -f docker-compose.prod.yml down -v
+    docker compose -f docker-compose.prod.yml --profile tools down -v
     echo "✅ All containers and volumes removed"
 
 # [PROD] Open shell in server container
