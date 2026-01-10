@@ -35,7 +35,7 @@ func SetupTestServer(t *testing.T) *TestServer {
 	// Load test configuration
 	cfg, err := config.LoadTestConfig()
 	if err != nil {
-		t.Skipf("Skipping HTTP integration test: %v (set MONO_DB_DSN to run)", err)
+		t.Skipf("Skipping HTTP integration test: %v (set MONO_STORAGE_DSN to run)", err)
 	}
 	dsn := cfg.Database.DSN
 
