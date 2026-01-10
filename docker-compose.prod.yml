@@ -66,11 +66,27 @@ services:
     networks:
       - mono-network
 
-  worker:
+  worker-1:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: mono-worker
+    container_name: mono-worker-1
+    environment:
+      MONO_DB_DSN: postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - mono-network
+
+  worker-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: mono-worker-2
     environment:
       MONO_DB_DSN: postgres://${POSTGRES_USER:-mono}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mono_db}?sslmode=disable
     depends_on:

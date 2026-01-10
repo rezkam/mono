@@ -3,6 +3,9 @@ binary_name := "mono-server"
 worker_binary_name := "mono-worker"
 docker_image := "mono-service"
 
+# Production worker instances (add worker-3, worker-4, etc. here)
+workers := "worker-1 worker-2"
+
 # Migration image configuration
 goose_version := "v3.26.0"
 migrate_image := "ghcr.io/rezkam/goose-migrate"
@@ -426,11 +429,11 @@ docker-restart-server:
     @echo "Restarting server..."
     docker compose -f docker-compose.prod.yml up -d server --force-recreate
 
-# [PROD] Restart worker only (fast, skips migration)
+# [PROD] Restart workers only (fast, skips migration)
 [group('docker-prod')]
-docker-restart-worker:
-    @echo "Restarting worker..."
-    docker compose -f docker-compose.prod.yml up -d worker --force-recreate
+docker-restart-workers:
+    @echo "Restarting workers..."
+    docker compose -f docker-compose.prod.yml up -d {{workers}} --force-recreate
 
 # [PROD] View logs
 [group('docker-prod')]
@@ -451,11 +454,11 @@ docker-logs-server:
     @echo "Showing logs for server (Ctrl+C to exit)..."
     docker compose -f docker-compose.prod.yml logs -f server
 
-# [PROD] View worker logs only
+# [PROD] View worker logs only (all workers)
 [group('docker-prod')]
-docker-logs-worker:
-    @echo "Showing logs for worker (Ctrl+C to exit)..."
-    docker compose -f docker-compose.prod.yml logs -f worker
+docker-logs-workers:
+    @echo "Showing logs for workers (Ctrl+C to exit)..."
+    docker compose -f docker-compose.prod.yml logs -f {{workers}}
 
 # [PROD] View postgres logs only
 [group('docker-prod')]
@@ -485,10 +488,10 @@ docker-clean:
 docker-shell-server:
     docker compose -f docker-compose.prod.yml exec server sh
 
-# [PROD] Open shell in worker container
+# [PROD] Open shell in worker container (defaults to worker-1)
 [group('docker-prod')]
-docker-shell-worker:
-    docker compose -f docker-compose.prod.yml exec worker sh
+docker-shell-worker WORKER="worker-1":
+    docker compose -f docker-compose.prod.yml exec {{WORKER}} sh
 
 # [PROD] Open PostgreSQL shell
 [group('docker-prod')]
