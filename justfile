@@ -340,9 +340,9 @@ gen-apikey NAME DAYS="":
         MONO_STORAGE_DSN="{{dev_storage_dsn}}" ./mono-apikey -name "{{NAME}}" -days {{DAYS}}
     fi
 
-# Generate API key using Docker and .env file
-[group('apikey')]
-gen-apikey-docker NAME DAYS="":
+# [PROD] Generate API key using Docker and .env file
+[group('docker-prod')]
+docker-gen-apikey NAME DAYS="":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -z "{{DAYS}}" ]; then
