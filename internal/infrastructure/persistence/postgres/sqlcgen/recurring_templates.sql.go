@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -111,13 +112,17 @@ func (q *Queries) DeactivateRecurringTemplate(ctx context.Context, arg Deactivat
 	return result.RowsAffected(), nil
 }
 
-const deleteRecurringTemplate = `-- name: DeleteRecurringTemplate :execrows
-DELETE FROM recurring_task_templates
-WHERE id = $1
+const deleteFutureRecurringInstances = `-- name: DeleteFutureRecurringInstances :execrows
+DELETE FROM todo_items
+WHERE recurring_template_id = $1
+  AND occurs_at > NOW()
 `
 
-func (q *Queries) DeleteRecurringTemplate(ctx context.Context, id string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteRecurringTemplate, id)
+// Delete generated instances with occurs_at > NOW()
+// Used during template deletion to clean up future scheduled tasks
+// Preserves historical instances (occurs_at <= NOW()) for audit trail
+func (q *Queries) DeleteFutureRecurringInstances(ctx context.Context, templateID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFutureRecurringInstances, templateID)
 	if err != nil {
 		return 0, err
 	}

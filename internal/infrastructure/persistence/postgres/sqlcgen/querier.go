@@ -7,6 +7,7 @@ package sqlcgen
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -57,7 +58,10 @@ type Querier interface {
 	DeleteException(ctx context.Context, arg DeleteExceptionParams) error
 	// Delete future pending items for a template (used before regeneration)
 	DeleteFuturePendingItems(ctx context.Context, arg DeleteFuturePendingItemsParams) (int64, error)
-	DeleteRecurringTemplate(ctx context.Context, id string) (int64, error)
+	// Delete generated instances with occurs_at > NOW()
+	// Used during template deletion to clean up future scheduled tasks
+	// Preserves historical instances (occurs_at <= NOW()) for audit trail
+	DeleteFutureRecurringInstances(ctx context.Context, templateID uuid.NullUUID) (int64, error)
 	// Cleanup old resolved dead letter jobs (housekeeping).
 	// Retention period determined by caller (e.g., 30 days).
 	DeleteResolvedDeadLetterJobs(ctx context.Context, reviewedAt pgtype.Timestamptz) (int64, error)

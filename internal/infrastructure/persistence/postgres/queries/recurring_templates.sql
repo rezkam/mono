@@ -67,9 +67,13 @@ SET is_active = false,
     updated_at = $1
 WHERE id = $2;
 
--- name: DeleteRecurringTemplate :execrows
-DELETE FROM recurring_task_templates
-WHERE id = $1;
+-- name: DeleteFutureRecurringInstances :execrows
+-- Delete generated instances with occurs_at > NOW()
+-- Used during template deletion to clean up future scheduled tasks
+-- Preserves historical instances (occurs_at <= NOW()) for audit trail
+DELETE FROM todo_items
+WHERE recurring_template_id = sqlc.arg(template_id)
+  AND occurs_at > NOW();
 
 -- name: FindStaleTemplatesForReconciliation :many
 -- Find templates needing reconciliation across all lists.

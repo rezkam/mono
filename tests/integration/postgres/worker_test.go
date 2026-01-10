@@ -102,7 +102,10 @@ func TestWorker_CompleteFlow(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Clean up any leftover templates/jobs from previous subtests
+			// Delete in correct order to avoid FK constraint violations
 			_, err := store.Pool().Exec(ctx, "DELETE FROM recurring_generation_jobs")
+			require.NoError(t, err)
+			_, err = store.Pool().Exec(ctx, "DELETE FROM todo_items WHERE recurring_template_id IS NOT NULL")
 			require.NoError(t, err)
 			_, err = store.Pool().Exec(ctx, "DELETE FROM recurring_task_templates")
 			require.NoError(t, err)

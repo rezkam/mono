@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -724,24 +725,43 @@ func (s *Store) UpdateRecurringTemplate(ctx context.Context, params domain.Updat
 	return dbRecurringTemplateToDomain(tmpl)
 }
 
-// DeleteRecurringTemplate deletes a template.
+// DeleteRecurringTemplate soft deletes a template and cleans up future instances atomically.
+// Soft delete strategy:
+// 1. Set is_active = false (stops future generation)
+// 2. Delete future instances (occurs_at > NOW) - clean up pre-generated tasks
+// 3. Keep historical instances (occurs_at <= NOW) - preserve audit trail
+// Both operations execute in a single transaction (all succeed or all fail).
 func (s *Store) DeleteRecurringTemplate(ctx context.Context, id string) error {
 	templateUUID, err := uuid.Parse(id)
 	if err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
 	}
 
-	// Single-query pattern: check rowsAffected to detect non-existent record
-	rowsAffected, err := s.queries.DeleteRecurringTemplate(ctx, templateUUID.String())
-	if err != nil {
-		return fmt.Errorf("failed to delete template: %w", err)
-	}
+	return s.executeInTransaction(ctx, "delete_recurring_template", func(txStore *Store) error {
+		// 1. Deactivate template (soft delete)
+		rowsAffected, err := txStore.queries.DeactivateRecurringTemplate(ctx, sqlcgen.DeactivateRecurringTemplateParams{
+			UpdatedAt: time.Now().UTC(),
+			ID:        templateUUID.String(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to deactivate template: %w", err)
+		}
 
-	if rowsAffected == 0 {
-		return fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
-	}
+		if rowsAffected == 0 {
+			return fmt.Errorf("%w: template %s", domain.ErrTemplateNotFound, id)
+		}
 
-	return nil
+		// 2. Delete future instances (historical instances preserved)
+		_, err = txStore.queries.DeleteFutureRecurringInstances(ctx, uuid.NullUUID{
+			UUID:  templateUUID,
+			Valid: true,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to delete future instances: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // FindRecurringTemplates lists all templates for a list, optionally filtered by active status.
