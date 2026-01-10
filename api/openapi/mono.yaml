@@ -364,6 +364,10 @@ paths:
     get:
       operationId: listRecurringTemplates
       summary: List recurring templates for a list
+      description: |
+        Returns recurring templates in a list.
+        By default, only active templates are returned (inactive templates are excluded).
+        Set active_only=false to include inactive templates.
       tags: [RecurringTemplates]
       parameters:
         - name: list_id
@@ -375,10 +379,12 @@ paths:
             format: uuid
         - name: active_only
           in: query
-          description: Filter for active templates only
+          description: |
+            Filter for active templates only.
+            If not specified, defaults to true (only active templates returned).
+            Set to false to include inactive templates.
           schema:
             type: boolean
-            default: false
       responses:
         '200':
           description: Templates retrieved successfully

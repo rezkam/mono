@@ -281,7 +281,8 @@ func (h *TodoHandler) DeleteRecurringTemplate(w http.ResponseWriter, r *http.Req
 // GET /v1/lists/{list_id}/recurring-templates
 func (h *TodoHandler) ListRecurringTemplates(w http.ResponseWriter, r *http.Request, listID types.UUID, params openapi.ListRecurringTemplatesParams) {
 	// Determine if we should filter by active status
-	activeOnly := false
+	// Default to true - users typically only want to see active templates
+	activeOnly := true
 	if params.ActiveOnly != nil {
 		activeOnly = *params.ActiveOnly
 	}
