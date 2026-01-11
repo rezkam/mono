@@ -92,21 +92,27 @@ WHERE list_id = $1;
 -- name: CountTasksWithFilters :one
 -- Counts total matching items for pagination (used when main query returns empty page).
 -- Uses same WHERE clause as ListTasksWithFilters for consistency.
+-- Includes exception join to match ListTasksWithFilters behavior.
 -- $2: statuses array (empty array skips filter, OR logic within array)
 -- $3: priorities array (empty array skips filter, OR logic within array)
 -- $4: tags array (empty array skips filter, item must have ALL specified tags)
 -- $9: excluded_statuses array (empty array skips filter, excludes matching statuses)
-SELECT COUNT(*) FROM todo_items
+SELECT COUNT(*) FROM todo_items i
+LEFT JOIN recurring_template_exceptions e
+    ON i.recurring_template_id = e.template_id
+    AND i.occurs_at = e.occurs_at
+    AND e.exception_type = 'deleted'  -- Only match deleted exceptions
 WHERE
-    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR list_id = $1) AND
-    (array_length($2::text[], 1) IS NULL OR status = ANY($2::text[])) AND
-    (array_length($9::text[], 1) IS NULL OR status != ALL($9::text[])) AND
-    (array_length($3::text[], 1) IS NULL OR priority = ANY($3::text[])) AND
-    (array_length($4::text[], 1) IS NULL OR tags @> $4::text[]) AND
-    ($5::timestamptz = '0001-01-01 00:00:00+00' OR due_at <= $5) AND
-    ($6::timestamptz = '0001-01-01 00:00:00+00' OR due_at >= $6) AND
-    ($7::timestamptz = '0001-01-01 00:00:00+00' OR updated_at >= $7) AND
-    ($8::timestamptz = '0001-01-01 00:00:00+00' OR created_at >= $8);
+    e.id IS NULL AND  -- Exclude only hard-deleted items (edited/rescheduled pass through)
+    ($1::uuid = '00000000-0000-0000-0000-000000000000' OR i.list_id = $1) AND
+    (array_length($2::text[], 1) IS NULL OR i.status = ANY($2::text[])) AND
+    (array_length($9::text[], 1) IS NULL OR i.status != ALL($9::text[])) AND
+    (array_length($3::text[], 1) IS NULL OR i.priority = ANY($3::text[])) AND
+    (array_length($4::text[], 1) IS NULL OR i.tags @> $4::text[]) AND
+    ($5::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at <= $5) AND
+    ($6::timestamptz = '0001-01-01 00:00:00+00' OR i.due_at >= $6) AND
+    ($7::timestamptz = '0001-01-01 00:00:00+00' OR i.updated_at >= $7) AND
+    ($8::timestamptz = '0001-01-01 00:00:00+00' OR i.created_at >= $8);
 
 -- name: ListTasksWithFilters :many
 -- Optimized for SEARCH/FILTER access pattern: Database-level filtering, sorting, and pagination.
@@ -156,8 +162,9 @@ FROM todo_items i
 LEFT JOIN recurring_template_exceptions e
     ON i.recurring_template_id = e.template_id
     AND i.occurs_at = e.occurs_at
+    AND e.exception_type = 'deleted'  -- Only match deleted exceptions
 WHERE
-    e.id IS NULL AND  -- Exclude items with exceptions
+    e.id IS NULL AND  -- Exclude only hard-deleted items (edited/rescheduled pass through)
     ($1::uuid = '00000000-0000-0000-0000-000000000000' OR i.list_id = $1) AND
     (array_length($2::text[], 1) IS NULL OR i.status = ANY($2::text[])) AND
     (array_length($12::text[], 1) IS NULL OR i.status != ALL($12::text[])) AND

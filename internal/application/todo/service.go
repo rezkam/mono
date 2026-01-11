@@ -387,8 +387,8 @@ func (s *Service) UpdateItem(ctx context.Context, params domain.UpdateItemParams
 }
 
 // DeleteItem deletes a todo item.
-// For recurring items: creates exception and archives item (soft delete).
-// For non-recurring items: hard delete (not implemented yet).
+// For recurring items: creates exception (prevents regeneration) and hard deletes the item.
+// For non-recurring items: hard deletes the item.
 func (s *Service) DeleteItem(ctx context.Context, listID, itemID string) error {
 	// Find item
 	item, err := s.repo.FindItemByID(ctx, itemID)
@@ -403,40 +403,33 @@ func (s *Service) DeleteItem(ctx context.Context, listID, itemID string) error {
 
 	// Check if recurring item
 	if item.RecurringTemplateID != nil && item.OccursAt != nil {
-		// Recurring item - soft delete with exception
+		// Recurring item - create exception + hard delete
 		// Generate exception ID
 		excID, err := uuid.NewV7()
 		if err != nil {
 			return fmt.Errorf("failed to generate exception id: %w", err)
 		}
 
-		// Create exception
+		// Create exception to prevent regeneration
+		// Note: ItemID is nil because the item will be deleted
 		exception := &domain.RecurringTemplateException{
 			ID:            excID.String(),
 			TemplateID:    *item.RecurringTemplateID,
 			OccursAt:      *item.OccursAt,
 			ExceptionType: domain.ExceptionTypeDeleted,
-			ItemID:        &item.ID,
+			ItemID:        nil, // Item will be hard deleted
 			CreatedAt:     time.Now().UTC(),
 		}
 
-		// Use atomic operation to create exception and archive item together
+		// Use atomic operation to create exception and hard delete item
 		return s.repo.Atomic(ctx, func(repo Repository) error {
-			// Create exception first
+			// Create exception first (prevents regeneration)
 			if _, err := repo.CreateException(ctx, exception); err != nil {
 				return err
 			}
 
-			// Archive item (soft delete)
-			archived := domain.TaskStatusArchived
-			updateParams := domain.UpdateItemParams{
-				ItemID:     itemID,
-				ListID:     listID,
-				UpdateMask: []string{"status"},
-				Status:     &archived,
-			}
-			_, err := repo.UpdateItem(ctx, updateParams)
-			return err
+			// Hard delete the item
+			return repo.DeleteItem(ctx, itemID)
 		})
 	}
 

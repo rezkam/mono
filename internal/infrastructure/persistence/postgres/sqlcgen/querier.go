@@ -34,6 +34,7 @@ type Querier interface {
 	CompleteJobWithOwnershipCheck(ctx context.Context, arg CompleteJobWithOwnershipCheckParams) (int64, error)
 	// Counts total matching items for pagination (used when main query returns empty page).
 	// Uses same WHERE clause as ListTasksWithFilters for consistency.
+	// Includes exception join to match ListTasksWithFilters behavior.
 	// $2: statuses array (empty array skips filter, OR logic within array)
 	// $3: priorities array (empty array skips filter, OR logic within array)
 	// $4: tags array (empty array skips filter, item must have ALL specified tags)

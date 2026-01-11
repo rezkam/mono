@@ -15,6 +15,7 @@ type mockDeleteItemRepo struct {
 	findItemFn        func(ctx context.Context, id string) (*domain.TodoItem, error)
 	createExceptionFn func(ctx context.Context, exc *domain.RecurringTemplateException) (*domain.RecurringTemplateException, error)
 	updateItemFn      func(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error)
+	deleteItemFn      func(ctx context.Context, id string) error
 	transactionFn     func(ctx context.Context, fn func(tx Repository) error) error
 }
 
@@ -85,7 +86,10 @@ func (m *mockDeleteItemRepo) FindItems(ctx context.Context, params domain.ListTa
 }
 
 func (m *mockDeleteItemRepo) DeleteItem(ctx context.Context, id string) error {
-	panic("not used")
+	if m.deleteItemFn != nil {
+		return m.deleteItemFn(ctx, id)
+	}
+	panic("DeleteItem not implemented")
 }
 
 func (m *mockDeleteItemRepo) CreateRecurringTemplate(ctx context.Context, template *domain.RecurringTemplate) (*domain.RecurringTemplate, error) {
@@ -108,7 +112,7 @@ func (m *mockDeleteItemRepo) FindRecurringTemplates(ctx context.Context, listID 
 	panic("not used")
 }
 
-func TestDeleteItem_RecurringItem_CreatesException(t *testing.T) {
+func TestDeleteItem_RecurringItem_CreatesExceptionAndHardDeletes(t *testing.T) {
 	templateID := uuid.NewString()
 	occursAt := time.Now().UTC().Truncate(time.Second)
 	itemID := uuid.NewString()
@@ -124,7 +128,7 @@ func TestDeleteItem_RecurringItem_CreatesException(t *testing.T) {
 	}
 
 	var capturedExc *domain.RecurringTemplateException
-	var capturedUpdateParams domain.UpdateItemParams
+	var deletedItemID string
 
 	repo := &mockDeleteItemRepo{
 		findItemFn: func(ctx context.Context, id string) (*domain.TodoItem, error) {
@@ -134,11 +138,9 @@ func TestDeleteItem_RecurringItem_CreatesException(t *testing.T) {
 			capturedExc = exc
 			return exc, nil
 		},
-		updateItemFn: func(ctx context.Context, params domain.UpdateItemParams) (*domain.TodoItem, error) {
-			capturedUpdateParams = params
-			archived := domain.TaskStatusArchived
-			item.Status = archived
-			return item, nil
+		deleteItemFn: func(ctx context.Context, id string) error {
+			deletedItemID = id
+			return nil
 		},
 	}
 
@@ -148,19 +150,15 @@ func TestDeleteItem_RecurringItem_CreatesException(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify exception created
+	// Verify exception created to prevent regeneration
 	require.NotNil(t, capturedExc)
 	assert.Equal(t, templateID, capturedExc.TemplateID)
 	assert.Equal(t, occursAt, capturedExc.OccursAt)
 	assert.Equal(t, domain.ExceptionTypeDeleted, capturedExc.ExceptionType)
-	assert.NotNil(t, capturedExc.ItemID)
-	assert.Equal(t, itemID, *capturedExc.ItemID)
+	assert.Nil(t, capturedExc.ItemID, "ItemID should be nil since item is hard deleted")
 
-	// Verify item archived
-	assert.Equal(t, itemID, capturedUpdateParams.ItemID)
-	assert.Equal(t, listID, capturedUpdateParams.ListID)
-	require.Contains(t, capturedUpdateParams.UpdateMask, "status")
-	assert.Equal(t, domain.TaskStatusArchived, *capturedUpdateParams.Status)
+	// Verify item was hard deleted
+	assert.Equal(t, itemID, deletedItemID, "Item should be hard deleted")
 }
 
 func TestUpdateItem_EditRecurringItem_CreatesException(t *testing.T) {
