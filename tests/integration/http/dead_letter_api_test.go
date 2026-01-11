@@ -45,6 +45,15 @@ func TestDeadLetterAPI(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a dummy job that failed
+	// NOTE: Must first mark existing job as completed to avoid unique constraint,
+	// then insert our test job directly via SQL (bypassing ON CONFLICT handling)
+	_, err = ts.Store.Pool().Exec(ctx, `
+		UPDATE recurring_generation_jobs
+		SET status = 'completed', completed_at = NOW()
+		WHERE template_id = $1 AND status IN ('pending', 'scheduled', 'running')
+	`, createdTemplate.ID)
+	require.NoError(t, err)
+
 	job := &domain.GenerationJob{
 		ID:            uuid.New().String(),
 		TemplateID:    createdTemplate.ID,
@@ -55,8 +64,11 @@ func TestDeadLetterAPI(t *testing.T) {
 		RetryCount:    worker.DefaultRetryConfig().MaxRetries,
 	}
 
-	// Must insert the job first to satisfy FK constraint
-	err = ts.Store.CreateGenerationJob(ctx, job)
+	// Insert job directly via SQL (bypasses ON CONFLICT which would skip if template has active job)
+	_, err = ts.Store.Pool().Exec(ctx, `
+		INSERT INTO recurring_generation_jobs (id, template_id, generate_from, generate_until, scheduled_for, status, retry_count, created_at)
+		VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)
+	`, job.ID, job.TemplateID, job.GenerateFrom, job.GenerateUntil, job.ScheduledFor, job.RetryCount, job.CreatedAt)
 	require.NoError(t, err)
 
 	// Manually claim the job in DB so MoveToDeadLetter accepts it
@@ -136,10 +148,30 @@ func TestDeadLetterAPI(t *testing.T) {
 	})
 
 	t.Run("DiscardDeadLetterJob", func(t *testing.T) {
+		// Create a separate template for this subtest to avoid unique constraint conflict
+		// (RetryDeadLetterJob creates a new pending job for createdTemplate.ID)
+		discardTemplate := &domain.RecurringTemplate{
+			ListID:            list.ID,
+			Title:             "Discard Test Template",
+			RecurrencePattern: dailyPattern,
+			IsActive:          true,
+			RecurrenceConfig:  map[string]any{},
+		}
+		discardTemplate, err := ts.TodoService.CreateRecurringTemplate(ctx, discardTemplate)
+		require.NoError(t, err)
+
+		// Complete any existing job for this template before creating test job
+		_, err = ts.Store.Pool().Exec(ctx, `
+			UPDATE recurring_generation_jobs
+			SET status = 'completed', completed_at = NOW()
+			WHERE template_id = $1 AND status IN ('pending', 'scheduled', 'running')
+		`, discardTemplate.ID)
+		require.NoError(t, err)
+
 		// Create another DL job
 		job2 := &domain.GenerationJob{
 			ID:            uuid.New().String(),
-			TemplateID:    createdTemplate.ID,
+			TemplateID:    discardTemplate.ID,
 			GenerateFrom:  time.Now().UTC(),
 			GenerateUntil: time.Now().UTC().Add(24 * time.Hour),
 			ScheduledFor:  time.Now().UTC(),
@@ -147,17 +179,20 @@ func TestDeadLetterAPI(t *testing.T) {
 			RetryCount:    worker.DefaultRetryConfig().MaxRetries,
 		}
 
-		// Setup job2 in DB so FK constraints pass
-		err = ts.Store.CreateGenerationJob(ctx, job2)
+		// Insert job directly via SQL (bypasses ON CONFLICT which would skip if template has active job)
+		_, err = ts.Store.Pool().Exec(ctx, `
+			INSERT INTO recurring_generation_jobs (id, template_id, generate_from, generate_until, scheduled_for, status, retry_count, created_at)
+			VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)
+		`, job2.ID, job2.TemplateID, job2.GenerateFrom, job2.GenerateUntil, job2.ScheduledFor, job2.RetryCount, job2.CreatedAt)
 		require.NoError(t, err)
 
 		// Manually claim the job in DB so MoveToDeadLetter accepts it
 		workerID := "worker-1"
 		_, err = ts.Store.Pool().Exec(ctx, `
-			UPDATE recurring_generation_jobs 
-			SET status = 'running', 
-				claimed_by = $1, 
-				claimed_at = NOW(), 
+			UPDATE recurring_generation_jobs
+			SET status = 'running',
+				claimed_by = $1,
+				claimed_at = NOW(),
 				available_at = NOW() + INTERVAL '5 minutes'
 			WHERE id = $2
 		`, workerID, job2.ID)

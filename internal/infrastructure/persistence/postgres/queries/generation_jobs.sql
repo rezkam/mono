@@ -17,15 +17,22 @@
 --   T+301s: Worker crashes (doesn't complete or extend)
 --   T+301s: Job becomes claimable again (available_at <= NOW())
 
--- name: InsertGenerationJob :exec
--- Insert a single generation job
+-- name: InsertGenerationJob :one
+-- Insert a single generation job, returning the ID if inserted.
+-- Uses ON CONFLICT to safely handle concurrent scheduling attempts.
+-- Returns NULL if a pending/scheduled/running job already exists for this template.
+-- The partial unique index idx_generation_jobs_unique_active_per_template ensures
+-- only one active job exists per template at any time.
 INSERT INTO recurring_generation_jobs (
     id, template_id, generate_from, generate_until,
     scheduled_for, status, retry_count, created_at
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7, $8
-);
+)
+ON CONFLICT (template_id) WHERE status IN ('pending', 'scheduled', 'running')
+DO NOTHING
+RETURNING id;
 
 -- name: FindGenerationJobByID :one
 -- Retrieve a generation job by ID

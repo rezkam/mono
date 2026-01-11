@@ -59,6 +59,7 @@ var (
 
 	// Job coordination errors
 	ErrJobNotFound        = errors.New("generation job not found")
+	ErrJobAlreadyExists   = errors.New("job already exists for template")
 	ErrJobAlreadyClaimed  = errors.New("job already claimed by another worker")
 	ErrJobNotCancellable  = errors.New("job is not in a cancellable state")
 	ErrDeadLetterNotFound = errors.New("dead letter job not found")

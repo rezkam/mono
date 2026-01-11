@@ -315,11 +315,13 @@ func TestCoordinator_ConcurrentDLQMoves(t *testing.T) {
 	ctx := context.Background()
 
 	// Create 5 jobs at max retries
+	// NOTE: Each job needs its own template due to unique constraint
+	// (only one pending/scheduled/running job allowed per template)
 	numJobs := 5
 	jobIDs := make([]string, numJobs)
-	templateID := createTestTemplate(t, store, ctx)
 
 	for i := range numJobs {
+		templateID := createTestTemplate(t, store, ctx) // Create unique template for each job
 		jobID, err := store.ScheduleGenerationJob(ctx, templateID, time.Time{},
 			time.Now().UTC(), time.Now().UTC().AddDate(0, 0, 7))
 		require.NoError(t, err)
@@ -546,11 +548,13 @@ func TestCoordinator_DLQAtomicity_ConcurrentPanicHandling(t *testing.T) {
 	ctx := context.Background()
 
 	// Create multiple jobs
+	// NOTE: Each job needs its own template due to unique constraint
+	// (only one pending/scheduled/running job allowed per template)
 	numJobs := 3
-	templateID := createTestTemplate(t, store, ctx)
 	jobs := make([]*domain.GenerationJob, numJobs)
 
 	for i := range numJobs {
+		templateID := createTestTemplate(t, store, ctx) // Create unique template for each job
 		_, err := store.ScheduleGenerationJob(ctx, templateID, time.Time{},
 			time.Now().UTC(), time.Now().UTC().AddDate(0, 0, 7))
 		require.NoError(t, err)
@@ -933,12 +937,14 @@ func TestAtomicity_VerifyBothOperationsInSingleTransaction(t *testing.T) {
 	coordinator := postgres.NewPostgresCoordinator(store.Pool())
 
 	// Create multiple jobs at max retries
+	// NOTE: Each job needs its own template due to unique constraint
+	// (only one pending/scheduled/running job allowed per template)
 	numJobs := 10
-	templateID := createTestTemplate(t, store, ctx)
 	jobIDs := make([]string, numJobs)
 	claimedBys := make([]string, numJobs)
 
 	for i := range numJobs {
+		templateID := createTestTemplate(t, store, ctx) // Create unique template for each job
 		jobID, job := createJobAtMaxRetries(t, store, coordinator, ctx, templateID, 3)
 		jobIDs[i] = jobID
 		claimedBys[i] = *job.ClaimedBy

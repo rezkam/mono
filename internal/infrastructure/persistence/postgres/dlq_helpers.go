@@ -48,7 +48,13 @@ func retryDeadLetterJobTx(ctx context.Context, qtx *sqlcgen.Queries, deadLetterI
 		CreatedAt:     time.Now().UTC(),
 	}
 
-	if err := qtx.InsertGenerationJob(ctx, newJob); err != nil {
+	_, err = qtx.InsertGenerationJob(ctx, newJob)
+	if err != nil {
+		// pgx.ErrNoRows means a job already exists - shouldn't happen during retry
+		// but handle it gracefully
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("%w: template %s", domain.ErrJobAlreadyExists, newJob.TemplateID)
+		}
 		return "", fmt.Errorf("failed to insert new job: %w", err)
 	}
 

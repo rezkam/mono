@@ -49,6 +49,10 @@ func (s *Store) UpdateRecurringTemplateGenerationWindow(ctx context.Context, id 
 // CreateGenerationJobWorker creates a new background job for generating recurring tasks.
 // This is the worker-specific implementation that returns the job ID.
 // Note: Will be deprecated in Phase 5 when worker is refactored.
+//
+// Concurrency safety: Uses database-level unique constraint to prevent duplicate
+// active jobs. If a pending/scheduled/running job already exists for this template,
+// returns empty string (no error) - the caller should check for empty ID.
 func (s *Store) CreateGenerationJobWorker(ctx context.Context, templateID string, scheduledFor, from, until time.Time) (string, error) {
 	if _, err := uuid.Parse(templateID); err != nil {
 		return "", fmt.Errorf("%w: %w", domain.ErrInvalidID, err)
@@ -79,11 +83,21 @@ func (s *Store) CreateGenerationJobWorker(ctx context.Context, templateID string
 		CreatedAt:     time.Now().UTC(),
 	}
 
-	if err := s.queries.InsertGenerationJob(ctx, params); err != nil {
+	// InsertGenerationJob uses ON CONFLICT DO NOTHING RETURNING id.
+	// When a pending/scheduled/running job already exists for this template:
+	// - The INSERT is skipped (DO NOTHING)
+	// - No rows are returned, causing pgx.ErrNoRows
+	// This is expected behavior, not an error - return empty string to indicate no job created.
+	returnedID, err := s.queries.InsertGenerationJob(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Job already exists for this template - not an error, just a no-op
+			return "", nil
+		}
 		return "", fmt.Errorf("failed to create generation job: %w", err)
 	}
 
-	return jobID.String(), nil
+	return returnedID, nil
 }
 
 // ScheduleGenerationJob implements worker.Repository.ScheduleGenerationJob.

@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rezkam/mono/internal/domain"
 	"github.com/rezkam/mono/internal/infrastructure/persistence/postgres/sqlcgen"
 )
@@ -160,6 +162,8 @@ func (s *Store) SetGeneratedThrough(ctx context.Context, templateID string, gene
 // === Generation Job Operations ===
 
 // CreateGenerationJob creates a background generation job.
+// Returns nil if job was created, or if a job already exists for this template
+// (idempotent behavior via ON CONFLICT DO NOTHING).
 func (s *Store) CreateGenerationJob(ctx context.Context, job *domain.GenerationJob) error {
 	params := sqlcgen.InsertGenerationJobParams{
 		ID:            job.ID,
@@ -172,5 +176,13 @@ func (s *Store) CreateGenerationJob(ctx context.Context, job *domain.GenerationJ
 		CreatedAt:     job.CreatedAt,
 	}
 
-	return s.queries.InsertGenerationJob(ctx, params)
+	_, err := s.queries.InsertGenerationJob(ctx, params)
+	if err != nil {
+		// pgx.ErrNoRows means ON CONFLICT DO NOTHING triggered - job already exists
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // Idempotent behavior - not an error
+		}
+		return err
+	}
+	return nil
 }

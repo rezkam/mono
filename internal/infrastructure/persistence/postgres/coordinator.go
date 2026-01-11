@@ -38,8 +38,15 @@ func NewPostgresCoordinator(pool *pgxpool.Pool) *PostgresCoordinator {
 
 func (c *PostgresCoordinator) InsertJob(ctx context.Context, job *domain.GenerationJob) error {
 	params := domainJobToInsertParams(job)
-	err := c.queries.InsertGenerationJob(ctx, params)
+	_, err := c.queries.InsertGenerationJob(ctx, params)
 	if err != nil {
+		// pgx.ErrNoRows means ON CONFLICT DO NOTHING triggered - job already exists
+		if errors.Is(err, pgx.ErrNoRows) {
+			slog.InfoContext(ctx, "job already exists for template, skipping",
+				"job_id", job.ID,
+				"template_id", job.TemplateID)
+			return nil // Not an error - idempotent behavior
+		}
 		slog.ErrorContext(ctx, "failed to insert generation job",
 			"job_id", job.ID,
 			"template_id", job.TemplateID,
@@ -62,7 +69,16 @@ func (c *PostgresCoordinator) InsertMany(ctx context.Context, jobs []*domain.Gen
 	qtx := c.queries.WithTx(tx)
 	for i, job := range jobs {
 		params := domainJobToInsertParams(job)
-		if err := qtx.InsertGenerationJob(ctx, params); err != nil {
+		_, err := qtx.InsertGenerationJob(ctx, params)
+		if err != nil {
+			// pgx.ErrNoRows means ON CONFLICT DO NOTHING triggered - skip this job
+			if errors.Is(err, pgx.ErrNoRows) {
+				slog.InfoContext(ctx, "job already exists for template in batch, skipping",
+					"job_id", job.ID,
+					"template_id", job.TemplateID,
+					"batch_position", i)
+				continue // Not an error - idempotent behavior
+			}
 			slog.ErrorContext(ctx, "failed to insert job in batch",
 				"job_id", job.ID,
 				"template_id", job.TemplateID,

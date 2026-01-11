@@ -241,7 +241,9 @@ test-race:
     go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -race
     echo "OK: Unit tests (race)"
 
-# Run a specific test
+# Run a single test by name
+# Usage: just test-one TestName
+#        just test-one TestName ./path/to/package
 [group('test')]
 [no-exit-message]
 test-one RUN PKG="./tests/integration/...":

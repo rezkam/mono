@@ -151,8 +151,12 @@ type Querier interface {
 	//   T+1s:  Worker claims job → status='running', available_at=NOW()+5min
 	//   T+301s: Worker crashes (doesn't complete or extend)
 	//   T+301s: Job becomes claimable again (available_at <= NOW())
-	// Insert a single generation job
-	InsertGenerationJob(ctx context.Context, arg InsertGenerationJobParams) error
+	// Insert a single generation job, returning the ID if inserted.
+	// Uses ON CONFLICT to safely handle concurrent scheduling attempts.
+	// Returns NULL if a pending/scheduled/running job already exists for this template.
+	// The partial unique index idx_generation_jobs_unique_active_per_template ensures
+	// only one active job exists per template at any time.
+	InsertGenerationJob(ctx context.Context, arg InsertGenerationJobParams) (string, error)
 	// Idempotent single insert with ON CONFLICT DO NOTHING
 	// Used in batch operations - duplicates silently ignored based on UNIQUE(recurring_template_id, occurs_at)
 	InsertItemIgnoreConflict(ctx context.Context, arg InsertItemIgnoreConflictParams) error

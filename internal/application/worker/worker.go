@@ -104,10 +104,11 @@ func (w *Worker) RunScheduleOnce(ctx context.Context) error {
 	slog.InfoContext(ctx, "Found templates needing generation", "count", len(templates))
 
 	for _, template := range templates {
-		// Check for existing pending/running job to prevent duplicates
-		// Note: This check + insert is not atomic, so race conditions are possible here.
-		// However, the database unique constraint on pending/running jobs per template will prevent duplicates.
-		// The error returned from ScheduleGenerationJob will indicate a conflict, which we can safely ignore.
+		// Check for existing pending/running job to prevent duplicate work.
+		// This is an optimization to skip templates that already have active jobs.
+		// The database unique constraint (idx_generation_jobs_unique_active_per_template)
+		// guarantees that only one active job exists per template, even under concurrency.
+		// If ScheduleGenerationJob returns empty ID, a job was already scheduled.
 		hasJob, err := w.repo.HasPendingOrRunningJob(ctx, template.ID)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to check for existing job", "template_id", template.ID, "error", err)

@@ -542,55 +542,61 @@ func TestQuery_AllTaskStatusValues(t *testing.T) {
 
 // TestQuery_AllJobStatusValues verifies that job queue queries work with ALL status values.
 // This test catches case sensitivity bugs in job status handling.
+// NOTE: Each job uses a different template because of the unique constraint
+// (idx_generation_jobs_unique_active_per_template) that allows only one
+// pending/scheduled/running job per template.
 func TestQuery_AllJobStatusValues(t *testing.T) {
 	db, cleanup := SetupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Setup list and template (required for job foreign key)
+	// Setup list (required for template foreign key)
 	listID := "550e8400-e29b-41d4-a716-446655440060"
-	templateID := "550e8400-e29b-41d4-a716-446655440061"
 
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO todo_lists (id, title, created_at) VALUES ($1, $2, $3)
 	`, listID, "Job Status Test List", time.Now().UTC())
 	require.NoError(t, err)
 
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO recurring_task_templates (
-			id, list_id, title, recurrence_pattern, recurrence_config,
-			is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, templateID, listID, "Test Template", "daily", `{}`,
-		true, time.Now().UTC(), time.Now().UTC(), time.Now().UTC(), 14, 365)
-	require.NoError(t, err)
-
 	// Create one job for EACH possible status value
-	// All status values MUST be lowercase to match CHECK constraints
+	// Each job uses a DIFFERENT template to avoid unique constraint violation
+	// (only one pending/scheduled/running job allowed per template)
 	now := time.Now().UTC()
 	allJobStatuses := []struct {
-		id     string
-		status string
+		jobID      string
+		templateID string
+		status     string
 	}{
-		{"550e8400-e29b-41d4-a716-446655440062", "pending"},
-		{"550e8400-e29b-41d4-a716-446655440063", "running"},
-		{"550e8400-e29b-41d4-a716-446655440064", "completed"},
-		{"550e8400-e29b-41d4-a716-446655440065", "failed"},
+		{"550e8400-e29b-41d4-a716-446655440062", "550e8400-e29b-41d4-a716-446655440071", "pending"},
+		{"550e8400-e29b-41d4-a716-446655440063", "550e8400-e29b-41d4-a716-446655440072", "running"},
+		{"550e8400-e29b-41d4-a716-446655440064", "550e8400-e29b-41d4-a716-446655440073", "completed"},
+		{"550e8400-e29b-41d4-a716-446655440065", "550e8400-e29b-41d4-a716-446655440074", "failed"},
 	}
 
 	for _, job := range allJobStatuses {
+		// Create template for this job
+		_, err = db.ExecContext(ctx, `
+			INSERT INTO recurring_task_templates (
+				id, list_id, title, recurrence_pattern, recurrence_config,
+				is_active, created_at, updated_at, generated_through, sync_horizon_days, generation_horizon_days
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		`, job.templateID, listID, "Template for "+job.status, "daily", `{}`,
+			true, now, now, now, 14, 365)
+		require.NoError(t, err, "creating template for status %q should succeed", job.status)
+
+		// Create job with this status
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO recurring_generation_jobs (
 				id, template_id, scheduled_for, status,
 				generate_from, generate_until, created_at
 			) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, job.id, templateID, now.Add(-1*time.Hour), job.status,
+		`, job.jobID, job.templateID, now.Add(-1*time.Hour), job.status,
 			now, now.Add(30*24*time.Hour), now)
 		require.NoError(t, err, "inserting job with status %q should succeed", job.status)
 	}
 
-	// Test 1: Count jobs by each status individually
+	// Test 1: Count jobs by each status (across all templates)
 	jobStatusCounts := map[string]int{
 		"pending":   1,
 		"running":   1,
@@ -601,18 +607,17 @@ func TestQuery_AllJobStatusValues(t *testing.T) {
 	for status, expectedCount := range jobStatusCounts {
 		var count int
 		err = db.QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM recurring_generation_jobs WHERE template_id = $1 AND status = $2
-		`, templateID, status).Scan(&count)
+			SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = $1
+		`, status).Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, expectedCount, count, "job status %q should have %d job(s)", status, expectedCount)
 	}
 
-	// Test 2: Pending jobs query (tests idx_generation_jobs_pending partial index)
+	// Test 2: Pending jobs query (tests partial index)
 	var pendingCount int
 	err = db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM recurring_generation_jobs
-		WHERE template_id = $1 AND status = 'pending'
-	`, templateID).Scan(&pendingCount)
+		SELECT COUNT(*) FROM recurring_generation_jobs WHERE status = 'pending'
+	`).Scan(&pendingCount)
 	require.NoError(t, err)
 	assert.Equal(t, 1, pendingCount, "should find 1 pending job")
 
@@ -620,8 +625,8 @@ func TestQuery_AllJobStatusValues(t *testing.T) {
 	var activeJobCount int
 	err = db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
-		WHERE template_id = $1 AND status IN ('pending', 'running')
-	`, templateID).Scan(&activeJobCount)
+		WHERE status IN ('pending', 'running')
+	`).Scan(&activeJobCount)
 	require.NoError(t, err)
 	assert.Equal(t, 2, activeJobCount, "should find 2 active jobs (pending, running)")
 
@@ -629,8 +634,8 @@ func TestQuery_AllJobStatusValues(t *testing.T) {
 	var terminalCount int
 	err = db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM recurring_generation_jobs
-		WHERE template_id = $1 AND status IN ('completed', 'failed')
-	`, templateID).Scan(&terminalCount)
+		WHERE status IN ('completed', 'failed')
+	`).Scan(&terminalCount)
 	require.NoError(t, err)
 	assert.Equal(t, 2, terminalCount, "should find 2 terminal jobs (completed, failed)")
 }

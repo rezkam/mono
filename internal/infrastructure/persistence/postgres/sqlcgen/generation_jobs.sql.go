@@ -215,7 +215,7 @@ func (q *Queries) HasPendingOrRunningJob(ctx context.Context, templateID string)
 	return exists, err
 }
 
-const insertGenerationJob = `-- name: InsertGenerationJob :exec
+const insertGenerationJob = `-- name: InsertGenerationJob :one
 
 INSERT INTO recurring_generation_jobs (
     id, template_id, generate_from, generate_until,
@@ -224,6 +224,9 @@ INSERT INTO recurring_generation_jobs (
     $1, $2, $3, $4,
     $5, $6, $7, $8
 )
+ON CONFLICT (template_id) WHERE status IN ('pending', 'scheduled', 'running')
+DO NOTHING
+RETURNING id
 `
 
 type InsertGenerationJobParams struct {
@@ -257,9 +260,13 @@ type InsertGenerationJobParams struct {
 //	T+301s: Worker crashes (doesn't complete or extend)
 //	T+301s: Job becomes claimable again (available_at <= NOW())
 //
-// Insert a single generation job
-func (q *Queries) InsertGenerationJob(ctx context.Context, arg InsertGenerationJobParams) error {
-	_, err := q.db.Exec(ctx, insertGenerationJob,
+// Insert a single generation job, returning the ID if inserted.
+// Uses ON CONFLICT to safely handle concurrent scheduling attempts.
+// Returns NULL if a pending/scheduled/running job already exists for this template.
+// The partial unique index idx_generation_jobs_unique_active_per_template ensures
+// only one active job exists per template at any time.
+func (q *Queries) InsertGenerationJob(ctx context.Context, arg InsertGenerationJobParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertGenerationJob,
 		arg.ID,
 		arg.TemplateID,
 		arg.GenerateFrom,
@@ -269,7 +276,9 @@ func (q *Queries) InsertGenerationJob(ctx context.Context, arg InsertGenerationJ
 		arg.RetryCount,
 		arg.CreatedAt,
 	)
-	return err
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markJobAsCancelled = `-- name: MarkJobAsCancelled :execrows
