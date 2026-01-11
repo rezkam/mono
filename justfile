@@ -55,6 +55,23 @@ export FORCE_COLOR := "1"
 default:
     @just --list
 
+# Run everything: build, lint, and all tests (minimal output, fail-fast)
+[no-exit-message]
+check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    printf "Building... "; OUTPUT=$(just -q build 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    printf "Linting... "; OUTPUT=$(just -q lint 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    printf "Unit tests... "; OUTPUT=$(go list ./... | grep -v '/tests/' | xargs go test 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    printf "Integration (postgres)... "; OUTPUT=$(just -q test-integration 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    printf "Integration (http)... "; OUTPUT=$(just -q test-integration-http 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    if docker compose -f docker-compose.test.yml exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+        printf "Security tests... "; OUTPUT=$(MONO_STORAGE_DSN="{{test_dsn}}" go test ./tests/security -count=1 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    fi
+    printf "E2E tests... "; OUTPUT=$(just -q test-e2e 2>&1) && echo "OK" || { echo "FAIL"; echo "$OUTPUT"; exit 1; }
+    echo ""
+    echo "OK: All checks passed"
+
 # Display this help message
 help:
     @echo "Usage: just <recipe>"
@@ -128,24 +145,43 @@ fmt:
 fmt-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Checking Go formatting..."
     STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR '*.go' 2>/dev/null || true)
     if [ -z "$STAGED_FILES" ]; then
-        echo "No staged Go files to check"
         exit 0
     fi
     UNFORMATTED=$(echo "$STAGED_FILES" | xargs gofmt -l 2>/dev/null || true)
     if [ -n "$UNFORMATTED" ]; then
-        echo "The following staged files need gofmt (run 'just fmt' or 'gofmt -w'):"
+        echo "FAIL: Formatting errors"
         echo "$UNFORMATTED"
+        echo "Run 'just fmt' to fix."
         exit 1
     fi
+    echo "OK: All staged files formatted"
+
+# Check that ALL Go files are formatted (used by lint and check)
+[no-exit-message]
+fmt-check-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    FILES=$(git ls-files '*.go' 2>/dev/null | while read f; do [ -f "$f" ] && echo "$f"; done)
+    if [ -z "$FILES" ]; then
+        exit 0
+    fi
+    UNFORMATTED=$(echo "$FILES" | xargs gofmt -l 2>/dev/null || true)
+    if [ -n "$UNFORMATTED" ]; then
+        echo "FAIL: Unformatted files:"
+        echo "$UNFORMATTED"
+        echo "Run 'just fmt' to fix."
+        exit 1
+    fi
+    echo "OK: All files formatted"
 
 # Run govulncheck to find vulnerabilities
 security:
-    @echo "Checking for vulnerabilities..."
-    go install golang.org/x/vuln/cmd/govulncheck@latest
-    govulncheck ./...
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go install golang.org/x/vuln/cmd/govulncheck@latest >/dev/null 2>&1
+    OUTPUT=$(govulncheck ./... 2>&1) && echo "OK: No vulnerabilities" || { echo "FAIL: Vulnerabilities found"; echo "$OUTPUT"; exit 1; }
 
 # Build custom timezone linter
 build-timeutc-linter:
@@ -168,16 +204,17 @@ lint-interface-fix: build-nointerface-linter
     go list ./... | grep -v sqlcgen | xargs ./nointerface -fix
     @echo "✅ All interface{} replaced with 'any'"
 
-# Run linters (golangci-lint + custom linters)
+# Run linters (fmt + golangci-lint + custom linters)
+[no-exit-message]
 lint: build-timeutc-linter build-nointerface-linter
-    @echo "Verifying golangci-lint config..."
-    golangci-lint config verify
-    @echo "Running golangci-lint..."
-    golangci-lint run
-    @echo "Running custom timezone linter..."
-    go list ./... | grep -v sqlcgen | xargs ./timeutc
-    @echo "Running custom interface{} linter..."
-    go list ./... | grep -v sqlcgen | xargs ./nointerface
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just fmt-check-all
+    golangci-lint config verify >/dev/null 2>&1
+    OUTPUT=$(golangci-lint run 2>&1) || { echo "FAIL: golangci-lint"; echo "$OUTPUT"; exit 1; }
+    OUTPUT=$(go list ./... | grep -v sqlcgen | xargs ./timeutc 2>&1) || { echo "FAIL: Timezone linter"; echo "$OUTPUT"; exit 1; }
+    OUTPUT=$(go list ./... | grep -v sqlcgen | xargs ./nointerface 2>&1) || { echo "FAIL: Interface linter"; echo "$OUTPUT"; exit 1; }
+    echo "OK: All linters passed"
 
 # Configure git hooks to run automatically
 setup-hooks:
@@ -189,17 +226,24 @@ setup-hooks:
 # =============================================================================
 
 # Run unit tests only (no database required)
+[no-exit-message]
 test:
-    @echo "Running unit tests..."
-    go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -v
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test
+    echo "OK: Unit tests"
 
 # Run unit tests with race detector
+[no-exit-message]
 test-race:
-    @echo "Running unit tests with race detector..."
-    go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -race -v
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -race
+    echo "OK: Unit tests (race)"
 
 # Run a specific test
 [group('test')]
+[no-exit-message]
 test-one RUN PKG="./tests/integration/...":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -209,14 +253,16 @@ test-one RUN PKG="./tests/integration/...":
         just test-integration-up
     fi
     echo "Running test '{{RUN}}' in {{PKG}}..."
-    MONO_STORAGE_DSN="{{test_dsn}}" go test -v -run "{{RUN}}" {{PKG}} -count=1
+    MONO_STORAGE_DSN="{{test_dsn}}" go test -run "{{RUN}}" {{PKG}} -count=1 -v
+    echo "OK: {{RUN}}"
 
 # Run benchmarks (requires MONO_STORAGE_DSN env var)
+[no-exit-message]
 bench:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Running benchmarks..."
-    if [ -z "${MONO_STORAGE_DSN}" ]; then
+    if [ -z "${MONO_STORAGE_DSN:-}" ]; then
         echo "Warning: MONO_STORAGE_DSN not set. Set it to run benchmarks with real database."
         echo "Usage: MONO_STORAGE_DSN='postgres://user:pass@localhost:5432/dbname' just bench"
         echo "Skipping benchmarks..."
@@ -226,29 +272,15 @@ bench:
 
 # Run benchmarks using test database (port 5433, auto-cleanup)
 [group('test')]
+[no-exit-message]
 bench-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "=== Cleaning any existing test database ==="
-    docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
-    echo ""
-    echo "=== Starting fresh test database ==="
-    just test-integration-up
-    echo ""
-    echo "=== Running benchmarks with test database ==="
-    MONO_STORAGE_DSN="{{test_dsn}}" \
-        go test -bench=. -benchmem ./tests/integration/postgres
-    BENCH_RESULT=$?
-    echo ""
-    echo "=== Cleaning up test database ==="
-    just test-integration-clean
-    echo ""
-    if [ $BENCH_RESULT -eq 0 ]; then
-        echo "✅ Benchmarks completed successfully"
-    else
-        echo "❌ Benchmarks failed"
-        exit $BENCH_RESULT
-    fi
+    trap 'just test-integration-clean >/dev/null 2>&1' EXIT
+    docker compose -f docker-compose.test.yml down -v >/dev/null 2>&1 || true
+    just test-integration-up >/dev/null 2>&1
+    MONO_STORAGE_DSN="{{test_dsn}}" go test -bench=. -benchmem ./tests/integration/postgres
+    echo "OK: Benchmarks"
 
 # =============================================================================
 # Profile-Guided Optimization (PGO)
@@ -677,116 +709,87 @@ test-integration-clean:
 
 # Run integration tests (requires MONO_STORAGE_DSN env var)
 [group('test')]
+[no-exit-message]
 [private]
 test-integration-run:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -z "${MONO_STORAGE_DSN}" ]; then
-        echo "Error: MONO_STORAGE_DSN is required. Set it to your PostgreSQL connection string."
+    if [ -z "${MONO_STORAGE_DSN:-}" ]; then
+        echo "Error: MONO_STORAGE_DSN is required."
         exit 1
     fi
-    # -count=1 disables test caching to ensure tests run fresh against real database
-    # -p 1 runs test packages sequentially (not in parallel) to avoid database conflicts
-    go test -v -p 1 ./tests/integration/... -count=1
+    go test -p 1 ./tests/integration/... -count=1
+    echo "OK: Integration tests"
 
 # [TEST DB] Run integration tests (auto-cleanup before/after)
 [group('test')]
+[no-exit-message]
 test-integration:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "=== Cleaning any existing test database ==="
-    docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
-    echo ""
-    echo "=== Starting fresh test database ==="
-    just test-integration-up
-    echo ""
-    echo "=== Running integration tests ==="
-    MONO_STORAGE_DSN="{{test_dsn}}" \
-        just test-integration-run
-    TEST_RESULT=$?
-    echo ""
-    echo "=== Cleaning up test database ==="
-    just test-integration-clean
-    echo ""
-    if [ $TEST_RESULT -eq 0 ]; then
-        echo "✅ Integration tests PASSED"
-    else
-        echo "❌ Integration tests FAILED"
-        exit $TEST_RESULT
-    fi
+    trap 'just test-integration-clean >/dev/null 2>&1' EXIT
+    docker compose -f docker-compose.test.yml down -v >/dev/null 2>&1 || true
+    just test-integration-up >/dev/null 2>&1
+    MONO_STORAGE_DSN="{{test_dsn}}" go test -p 1 ./tests/integration/... -count=1
+    echo "OK: Integration tests"
 
 # [TEST DB] Run HTTP integration tests (auto-cleanup before/after)
 [group('test')]
+[no-exit-message]
 test-integration-http:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "=== Cleaning any existing test database ==="
-    docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
-    echo ""
-    echo "=== Starting fresh test database ==="
-    just test-integration-up
-    echo ""
-    echo "=== Running HTTP integration tests ==="
-    MONO_STORAGE_DSN="{{test_dsn}}" \
-        go test -v ./tests/integration/http -count=1
-    TEST_RESULT=$?
-    echo ""
-    echo "=== Cleaning up test database ==="
-    just test-integration-clean
-    echo ""
-    if [ $TEST_RESULT -eq 0 ]; then
-        echo "✅ HTTP integration tests PASSED"
-    else
-        echo "❌ HTTP integration tests FAILED"
-        exit $TEST_RESULT
-    fi
+    trap 'just test-integration-clean >/dev/null 2>&1' EXIT
+    docker compose -f docker-compose.test.yml down -v >/dev/null 2>&1 || true
+    just test-integration-up >/dev/null 2>&1
+    MONO_STORAGE_DSN="{{test_dsn}}" go test ./tests/integration/http -count=1
+    echo "OK: HTTP integration tests"
 
 # [TEST DB] Run end-to-end tests (auto-cleanup before/after)
 [group('test')]
+[no-exit-message]
 test-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "=== Cleaning any existing test database ==="
-    docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
-    echo ""
-    echo "=== Starting fresh test database ==="
-    just test-integration-up
-    echo ""
-    echo "=== Running e2e tests ==="
-    MONO_STORAGE_DSN="{{test_dsn}}" \
-        go test -v ./tests/e2e -count=1
-    TEST_RESULT=$?
-    echo ""
-    echo "=== Cleaning up test database ==="
-    just test-integration-clean
-    echo ""
-    if [ $TEST_RESULT -eq 0 ]; then
-        echo "✅ E2E tests PASSED"
-    else
-        echo "❌ E2E tests FAILED"
-        exit $TEST_RESULT
-    fi
+    trap 'just test-integration-clean >/dev/null 2>&1' EXIT
+    docker compose -f docker-compose.test.yml down -v >/dev/null 2>&1 || true
+    just test-integration-up >/dev/null 2>&1
+    MONO_STORAGE_DSN="{{test_dsn}}" go test ./tests/e2e -count=1
+    echo "OK: E2E tests"
 
 # Run SQL storage tests (requires running database)
 [group('test')]
+[no-exit-message]
 test-sql:
-    @echo "Running SQL integration tests..."
-    go test -v ./internal/infrastructure/persistence/postgres/...
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go test ./internal/infrastructure/persistence/postgres/...
+    echo "OK: SQL storage tests"
 
-# Run all tests (unit tests + integration tests + e2e tests)
+# Run all tests (unit, race, integration, e2e) - excludes benchmarks
 [group('test')]
+[no-exit-message]
 test-all:
-    @echo "=== Running unit tests ==="
-    go test -v ./internal/recurring/...
-    @echo ""
-    @echo "=== Running integration tests (postgres) ==="
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just test
+    just test-race
     just test-integration
-    @echo ""
-    @echo "=== Running integration tests (http) ==="
     just test-integration-http
-    @echo ""
-    @echo "=== Running e2e tests ==="
     just test-e2e
+    echo ""
+    echo "OK: All tests passed"
+
+# Run all tests including benchmarks (slow, use sparingly)
+[group('test')]
+[no-exit-message]
+test-all-bench:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just test-all
+    just bench-test
+    echo ""
+    echo "OK: All tests and benchmarks passed"
 
 # =============================================================================
 # Test Database Helpers

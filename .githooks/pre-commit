@@ -7,57 +7,90 @@ echo "Running pre-commit checks..."
 STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
 
 if [ -n "$STAGED_GO_FILES" ]; then
-    echo "Validating gofmt on staged files..."
+    # Validate gofmt (quiet on success)
+    UNFORMATTED=""
     for file in $STAGED_GO_FILES; do
         if [ -f "$file" ]; then
-            # Check if file is properly formatted
-            if ! gofmt -l "$file" | grep -q .; then
-                :
-            else
-                echo "File $file is not properly formatted. Run 'just fmt' to fix."
-                exit 1
+            if gofmt -l "$file" | grep -q .; then
+                UNFORMATTED="$UNFORMATTED\n  $file"
             fi
         fi
     done
+    if [ -n "$UNFORMATTED" ]; then
+        echo ""
+        echo "----------------------------------------"
+        echo "FAIL: Formatting errors"
+        echo "----------------------------------------"
+        echo "Unformatted files:$UNFORMATTED"
+        echo ""
+        echo "Run 'just fmt' to fix."
+        echo "----------------------------------------"
+        exit 1
+    fi
 
-    echo "Running golangci-lint on staged files..."
+    # Run golangci-lint (only show output on failure)
     if command -v golangci-lint >/dev/null 2>&1; then
-        golangci-lint config verify
-        # Extract unique package directories from staged files
+        golangci-lint config verify >/dev/null 2>&1
         PACKAGES=$(echo "$STAGED_GO_FILES" | xargs -n1 dirname | sort -u | sed 's|^|./|' | tr '\n' ' ')
         if [ -n "$PACKAGES" ]; then
-            golangci-lint run $PACKAGES
+            LINT_OUTPUT=$(golangci-lint run $PACKAGES 2>&1) || {
+                echo ""
+                echo "----------------------------------------"
+                echo "FAIL: golangci-lint"
+                echo "----------------------------------------"
+                echo "$LINT_OUTPUT"
+                echo "----------------------------------------"
+                exit 1
+            }
         fi
-    else
-        echo "Warning: golangci-lint not found, skipping..."
     fi
 
-    echo "Running timezone linter on staged files..."
-    # Build the linter if it doesn't exist
+    # Build and run timezone linter (quiet on success)
     if [ ! -f "./timeutc" ]; then
-        just build-timeutc-linter
+        just build-timeutc-linter >/dev/null 2>&1
     fi
-    # Run on packages instead of individual files, excluding testdata and generated code
     LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | grep -v sqlcgen | grep -v '^ *$' | tr '\n' ' ')
     if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
-        ./timeutc $LINT_PACKAGES
+        TIMEUTC_OUTPUT=$(./timeutc $LINT_PACKAGES 2>&1) || {
+            echo ""
+            echo "----------------------------------------"
+            echo "FAIL: Timezone linter"
+            echo "----------------------------------------"
+            echo "$TIMEUTC_OUTPUT"
+            echo "----------------------------------------"
+            exit 1
+        }
     fi
 
-    echo "Running interface{} linter on staged files..."
-    # Build the linter if it doesn't exist
+    # Build and run interface{} linter (quiet on success)
     if [ ! -f "./nointerface" ]; then
-        just build-nointerface-linter
+        just build-nointerface-linter >/dev/null 2>&1
     fi
-    # Run on packages instead of individual files, excluding testdata and generated code
     if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
-        ./nointerface $LINT_PACKAGES
+        INTERFACE_OUTPUT=$(./nointerface $LINT_PACKAGES 2>&1) || {
+            echo ""
+            echo "----------------------------------------"
+            echo "FAIL: Interface linter"
+            echo "----------------------------------------"
+            echo "$INTERFACE_OUTPUT"
+            echo "----------------------------------------"
+            exit 1
+        }
     fi
 
-    echo "Running tests..."
-    just test
+    # Run tests (quiet on success)
+    TEST_OUTPUT=$(just test 2>&1) || {
+        echo ""
+        echo "----------------------------------------"
+        echo "FAIL: Unit tests"
+        echo "----------------------------------------"
+        echo "$TEST_OUTPUT"
+        echo "----------------------------------------"
+        exit 1
+    }
 else
     echo "No staged Go files to check."
 fi
 
-echo "All checks passed!"
+echo "OK: All pre-commit checks passed"
 exit 0
