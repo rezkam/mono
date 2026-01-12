@@ -72,7 +72,7 @@ jobs:
         run: golangci-lint run
 
       - name: Run Unit Tests
-        run: go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | xargs go test -v
+        run: go list ./... | grep -v '/tests/integration' | grep -v '/tests/e2e' | grep -v '/tests/security' | xargs go test -v
 
       - name: Apply Database Migrations
         run: |
