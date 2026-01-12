@@ -23,7 +23,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
         echo "----------------------------------------"
         echo "Unformatted files:$UNFORMATTED"
         echo ""
-        echo "Run 'just fmt' to fix."
+        echo "Run 'make fmt' to fix."
         echo "----------------------------------------"
         exit 1
     fi
@@ -47,7 +47,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
 
     # Build and run timezone linter (quiet on success)
     if [ ! -f "./timeutc" ]; then
-        just build-timeutc-linter >/dev/null 2>&1
+        make build-timeutc-linter >/dev/null 2>&1
     fi
     LINT_PACKAGES=$(echo "$PACKAGES" | tr ' ' '\n' | grep -v testdata | grep -v sqlcgen | grep -v '^ *$' | tr '\n' ' ')
     if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
@@ -64,7 +64,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
 
     # Build and run interface{} linter (quiet on success)
     if [ ! -f "./nointerface" ]; then
-        just build-nointerface-linter >/dev/null 2>&1
+        make build-nointerface-linter >/dev/null 2>&1
     fi
     if [ -n "$(echo "$LINT_PACKAGES" | xargs)" ]; then
         INTERFACE_OUTPUT=$(./nointerface $LINT_PACKAGES 2>&1) || {
@@ -79,7 +79,7 @@ if [ -n "$STAGED_GO_FILES" ]; then
     fi
 
     # Run tests (quiet on success)
-    TEST_OUTPUT=$(just test 2>&1) || {
+    TEST_OUTPUT=$(make test 2>&1) || {
         echo ""
         echo "----------------------------------------"
         echo "FAIL: Unit tests"

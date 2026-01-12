@@ -36,7 +36,7 @@ Since Go 1.18, `any` is a predeclared identifier that is an alias for `interface
 The linter is built as part of the project:
 
 ```bash
-just build-nointerface-linter
+make build-nointerface-linter
 ```
 
 ## Usage
@@ -56,7 +56,7 @@ just build-nointerface-linter
 ### Run as part of lint suite
 
 ```bash
-just lint
+make lint
 ```
 
 ## Examples
@@ -144,7 +144,7 @@ The test suite validates:
 
 The linter is integrated into:
 
-1. **Just recipes**: `just lint` runs this linter automatically
+1. **Make targets**: `make lint` runs this linter automatically
 2. **Pre-commit hooks**: Included in `.githooks/pre-commit`
 3. **CI/CD**: Runs automatically in GitHub Actions
 
